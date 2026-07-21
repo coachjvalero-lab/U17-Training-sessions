@@ -30,7 +30,6 @@ export const db = getFirestore(app, "ai-studio-u17trainingsessi-8c691063-da9d-42
 
 // Extend TrainingSession type for database-specific attributes if needed
 export interface CloudTrainingSession extends TrainingSession {
-  type: 'football' | 'fitness';
   updatedAt: number;
 }
 
@@ -39,11 +38,10 @@ const SESSIONS_COLLECTION = 'sessions';
 /**
  * Saves or updates a session in Firestore
  */
-export async function saveSessionToCloud(session: TrainingSession, type: 'football' | 'fitness'): Promise<void> {
+export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<void> {
   const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
   const cloudData: CloudTrainingSession = {
     ...session,
-    type,
     updatedAt: Date.now()
   };
   await setDoc(sessionRef, cloudData, { merge: true });
@@ -58,30 +56,20 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
 }
 
 /**
- * Fetches all sessions of a specific type from Firestore
+ * Real-time listener for ALL sessions (unified)
  */
-export async function getSessionsFromCloud(type: 'football' | 'fitness'): Promise<CloudTrainingSession[]> {
-  const q = query(
-    collection(db, SESSIONS_COLLECTION), 
-    where('type', '==', type),
-    orderBy('updatedAt', 'desc')
-  );
+export function subscribeToSessions(
+  typeOrCallback: ('football' | 'fitness') | ((sessions: CloudTrainingSession[]) => void),
+  maybeCallback?: (sessions: CloudTrainingSession[]) => void
+) {
+  const callback = typeof typeOrCallback === 'function' ? typeOrCallback : maybeCallback;
   
-  const querySnapshot = await getDocs(q);
-  const sessions: CloudTrainingSession[] = [];
-  querySnapshot.forEach((doc) => {
-    sessions.push(doc.data() as CloudTrainingSession);
-  });
-  return sessions;
-}
+  if (!callback) {
+    throw new Error('Callback function must be provided to subscribeToSessions');
+  }
 
-/**
- * Real-time listener for sessions of a specific type
- */
-export function subscribeToSessions(type: 'football' | 'fitness', callback: (sessions: CloudTrainingSession[]) => void) {
   const q = query(
     collection(db, SESSIONS_COLLECTION),
-    where('type', '==', type),
     orderBy('updatedAt', 'desc')
   );
   
@@ -92,6 +80,6 @@ export function subscribeToSessions(type: 'football' | 'fitness', callback: (ses
     });
     callback(sessions);
   }, (error) => {
-    console.error(`Error in session subscription for ${type}:`, error);
+    console.error(`Error in session subscription:`, error);
   });
 }

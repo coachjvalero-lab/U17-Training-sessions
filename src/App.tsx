@@ -27,12 +27,12 @@ import {
 export default function App() {
   const [activeSection, setActiveSection] = useState<'football' | 'fitness'>('football');
 
-  // Load football session from localStorage or use the demo session on first run
-  const [footballSession, setFootballSession] = useState<TrainingSession>(() => {
-    const saved = localStorage.getItem('u17_training_session_football');
-    if (saved) {
+  // Load and merge into a single unified session
+  const [session, setSession] = useState<TrainingSession>(() => {
+    const unifiedSaved = localStorage.getItem('u17_training_session_unified');
+    if (unifiedSaved) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(unifiedSaved);
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
           if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
             parsed.teamName = 'U17 Women Al Ula';
@@ -40,53 +40,42 @@ export default function App() {
           return parsed;
         }
       } catch (e) {
-        console.error('Failed to parse saved football session:', e);
+        console.error('Failed to parse saved unified session:', e);
       }
     }
-    // Fallback to legacy key to keep user data
-    const legacySaved = localStorage.getItem('u17_training_session');
-    if (legacySaved) {
+
+    // Fallback: merge separate football and fitness sessions if they exist
+    let fbSess = getDefaultSession();
+    const fbSaved = localStorage.getItem('u17_training_session_football') || localStorage.getItem('u17_training_session');
+    if (fbSaved) {
       try {
-        const parsed = JSON.parse(legacySaved);
+        const parsed = JSON.parse(fbSaved);
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
-            parsed.teamName = 'U17 Women Al Ula';
-          }
-          return parsed;
+          fbSess = parsed;
         }
       } catch (e) {}
     }
-    return getDefaultSession();
-  });
 
-  // Load fitness session from localStorage or use the demo fitness session on first run
-  const [fitnessSession, setFitnessSession] = useState<TrainingSession>(() => {
-    const saved = localStorage.getItem('u17_training_session_fitness');
-    if (saved) {
+    let fitSess = getDefaultFitnessSession();
+    const fitSaved = localStorage.getItem('u17_training_session_fitness');
+    if (fitSaved) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(fitSaved);
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
-            parsed.teamName = 'U17 Women Al Ula';
-          }
-          return parsed;
+          fitSess = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse saved fitness session:', e);
-      }
+      } catch (e) {}
     }
-    return getDefaultFitnessSession();
+
+    // Merge them into one unified session
+    return {
+      ...fbSess,
+      fitnessWarmUp: fbSess.fitnessWarmUp || fitSess.warmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+      fitnessMainPart: fbSess.fitnessMainPart || fitSess.mainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+      fitnessCoolDown: fbSess.fitnessCoolDown || fitSess.coolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+      fitnessPlayerGroups: fbSess.fitnessPlayerGroups || fitSess.playerGroups || [],
+    };
   });
-
-  const session = activeSection === 'football' ? footballSession : fitnessSession;
-
-  const setSession = (updater: TrainingSession | ((prev: TrainingSession) => TrainingSession)) => {
-    if (activeSection === 'football') {
-      setFootballSession(updater);
-    } else {
-      setFitnessSession(updater);
-    }
-  };
 
   const [isSaving, setIsSaving] = useState(false);
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
@@ -95,34 +84,25 @@ export default function App() {
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
 
-  // Subscribe to real-time updates from Cloud Firestore
+  // Subscribe to ALL unified sessions from Cloud Firestore
   useEffect(() => {
     setIsLoadingCloud(true);
-    const unsubscribe = subscribeToSessions(activeSection, (sessions) => {
+    const unsubscribe = subscribeToSessions((sessions) => {
       setCloudSessions(sessions);
       setIsLoadingCloud(false);
     });
     return () => unsubscribe();
-  }, [activeSection]);
+  }, []);
 
-  // Automatically persist the sessions on change
+  // Automatically persist the unified session on change
   useEffect(() => {
     setIsSaving(true);
-    localStorage.setItem('u17_training_session_football', JSON.stringify(footballSession));
+    localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
     const timer = setTimeout(() => {
       setIsSaving(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [footballSession]);
-
-  useEffect(() => {
-    setIsSaving(true);
-    localStorage.setItem('u17_training_session_fitness', JSON.stringify(fitnessSession));
-    const timer = setTimeout(() => {
-      setIsSaving(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [fitnessSession]);
+  }, [session]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
     setSession(prev => ({
@@ -132,20 +112,46 @@ export default function App() {
   };
 
   const handleUpdateExercises = (blockKey: 'warmUp' | 'mainPart' | 'coolDown', exercises: Exercise[]) => {
-    setSession(prev => ({
-      ...prev,
-      [blockKey]: {
-        ...prev[blockKey],
-        exercises
+    setSession(prev => {
+      if (activeSection === 'football') {
+        return {
+          ...prev,
+          [blockKey]: {
+            ...prev[blockKey],
+            exercises
+          }
+        };
+      } else {
+        const fitnessKey = blockKey === 'warmUp' 
+          ? 'fitnessWarmUp' 
+          : blockKey === 'mainPart' 
+            ? 'fitnessMainPart' 
+            : 'fitnessCoolDown';
+        return {
+          ...prev,
+          [fitnessKey]: {
+            ...(prev[fitnessKey] || { id: `${blockKey}-block-fitness`, title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down', exercises: [] }),
+            exercises
+          }
+        };
       }
-    }));
+    });
   };
 
   const handleUpdateGroups = (playerGroups: PlayerGroup[]) => {
-    setSession(prev => ({
-      ...prev,
-      playerGroups
-    }));
+    setSession(prev => {
+      if (activeSection === 'football') {
+        return {
+          ...prev,
+          playerGroups
+        };
+      } else {
+        return {
+          ...prev,
+          fitnessPlayerGroups: playerGroups
+        };
+      }
+    });
   };
 
   const handleUpdateMaterials = (materialsNeeded: string) => {
@@ -156,25 +162,39 @@ export default function App() {
   };
 
   const handleImportSession = (imported: TrainingSession) => {
-    setSession(imported);
-    // Expand all exercises of imported session
+    // Fill fitness blocks if they are missing from raw JSON import
+    const unifiedImport: TrainingSession = {
+      ...imported,
+      fitnessWarmUp: imported.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+      fitnessMainPart: imported.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+      fitnessCoolDown: imported.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+      fitnessPlayerGroups: imported.fitnessPlayerGroups || [],
+    };
+    
+    setSession(unifiedImport);
+    
+    // Expand exercises
     const expanded: Record<string, boolean> = {};
-    imported.warmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
-    imported.mainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
-    imported.coolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
+    const activeWarmUp = activeSection === 'football' ? unifiedImport.warmUp : unifiedImport.fitnessWarmUp;
+    const activeMainPart = activeSection === 'football' ? unifiedImport.mainPart : unifiedImport.fitnessMainPart;
+    const activeCoolDown = activeSection === 'football' ? unifiedImport.coolDown : unifiedImport.fitnessCoolDown;
+
+    activeWarmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
+    activeMainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
+    activeCoolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
     setExpandedExercises(expanded);
   };
 
   const handleClearSession = () => {
-    if (confirm(`Are you sure you want to clear the entire ${activeSection} session? This will delete all exercises and text.`)) {
+    if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for both football and fitness sections.`)) {
       setSession(getEmptySession());
       setExpandedExercises({});
     }
   };
 
   const handleRestoreDemo = () => {
-    if (confirm(`Are you sure you want to restore the demo ${activeSection} training session? This will overwrite your current work.`)) {
-      setSession(activeSection === 'football' ? getDefaultSession() : getDefaultFitnessSession());
+    if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for both football and fitness sections.`)) {
+      setSession(getDefaultSession());
       setExpandedExercises({});
     }
   };
@@ -182,7 +202,7 @@ export default function App() {
   const handleSaveActiveToCloud = async () => {
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(session, activeSection);
+      await saveSessionToCloud(session);
     } catch (error) {
       console.error('Error saving session to cloud:', error);
       alert('Failed to save session to the cloud. Please check your internet connection.');
@@ -209,12 +229,8 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(newSession, activeSection);
-      if (activeSection === 'football') {
-        setFootballSession(newSession);
-      } else {
-        setFitnessSession(newSession);
-      }
+      await saveSessionToCloud(newSession);
+      setSession(newSession);
     } catch (error) {
       console.error('Error saving copy to cloud:', error);
       alert('Failed to save a new copy to the cloud.');
@@ -241,12 +257,8 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(newSession, activeSection);
-      if (activeSection === 'football') {
-        setFootballSession(newSession);
-      } else {
-        setFitnessSession(newSession);
-      }
+      await saveSessionToCloud(newSession);
+      setSession(newSession);
     } catch (error) {
       console.error('Error creating new session in cloud:', error);
       alert('Failed to create a new session.');
@@ -257,18 +269,28 @@ export default function App() {
 
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
-      const { type, updatedAt, ...baseSession } = loadedSession;
-      if (activeSection === 'football') {
-        setFootballSession(baseSession);
-      } else {
-        setFitnessSession(baseSession);
-      }
+      const { updatedAt, ...baseSession } = loadedSession;
       
-      // Expand all exercises of loaded session
+      // Upgrade fitness fields if missing from loaded old document
+      const unifiedSession: TrainingSession = {
+        ...baseSession,
+        fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+        fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+        fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+        fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+      };
+
+      setSession(unifiedSession);
+      
+      // Expand exercises of loaded session
       const expanded: Record<string, boolean> = {};
-      baseSession.warmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
-      baseSession.mainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
-      baseSession.coolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
+      const activeWarmUp = activeSection === 'football' ? unifiedSession.warmUp : unifiedSession.fitnessWarmUp;
+      const activeMainPart = activeSection === 'football' ? unifiedSession.mainPart : unifiedSession.fitnessMainPart;
+      const activeCoolDown = activeSection === 'football' ? unifiedSession.coolDown : unifiedSession.fitnessCoolDown;
+
+      activeWarmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
+      activeMainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
+      activeCoolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
       setExpandedExercises(expanded);
     }
   };
@@ -295,12 +317,29 @@ export default function App() {
     }));
   };
 
+  // Dynamically map active blocks and exercises based on active tab
+  const activeWarmUp = activeSection === 'football'
+    ? session.warmUp
+    : (session.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] });
+
+  const activeMainPart = activeSection === 'football'
+    ? session.mainPart
+    : (session.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] });
+
+  const activeCoolDown = activeSection === 'football'
+    ? session.coolDown
+    : (session.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] });
+
+  const activePlayerGroups = activeSection === 'football'
+    ? session.playerGroups
+    : (session.fitnessPlayerGroups || []);
+
   // Quick Action: Expand All or Collapse All
   const handleToggleAll = (expand: boolean) => {
     const nextExpanded: Record<string, boolean> = {};
-    session.warmUp.exercises.forEach(e => { nextExpanded[e.id] = expand; });
-    session.mainPart.exercises.forEach(e => { nextExpanded[e.id] = expand; });
-    session.coolDown.exercises.forEach(e => { nextExpanded[e.id] = expand; });
+    activeWarmUp.exercises.forEach(e => { nextExpanded[e.id] = expand; });
+    activeMainPart.exercises.forEach(e => { nextExpanded[e.id] = expand; });
+    activeCoolDown.exercises.forEach(e => { nextExpanded[e.id] = expand; });
     setExpandedExercises(nextExpanded);
   };
 
@@ -551,7 +590,7 @@ export default function App() {
 
           {/* Section: Warm-Up Block */}
           <ExerciseBlock 
-            block={session.warmUp}
+            block={activeWarmUp}
             onChange={(exs) => handleUpdateExercises('warmUp', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
@@ -559,7 +598,7 @@ export default function App() {
 
           {/* Section: Main Part Block */}
           <ExerciseBlock 
-            block={session.mainPart}
+            block={activeMainPart}
             onChange={(exs) => handleUpdateExercises('mainPart', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
@@ -567,7 +606,7 @@ export default function App() {
 
           {/* Section: Cool Down Block */}
           <ExerciseBlock 
-            block={session.coolDown}
+            block={activeCoolDown}
             onChange={(exs) => handleUpdateExercises('coolDown', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}

@@ -90,6 +90,15 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Automatically upgrade/fallback to the official Al Ula SC badge if the logo is empty or is the legacy soccer ball badge
+  const isOldOrEmpty = !session.teamLogo || 
+    session.teamLogo.includes('%230f172a') || 
+    session.teamLogo.includes('%230f5981') || 
+    session.teamLogo.includes('COACH') ||
+    session.teamLogo.includes('default-u17');
+
+  const logoSrc = isOldOrEmpty ? DEFAULT_CLUB_BADGE : session.teamLogo;
+
   return (
     <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-4 print:rounded-none">
       {/* Upper Grid: Badge & Metadata */}
@@ -102,7 +111,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             className="group relative cursor-pointer w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 hover:border-emerald-500 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 hover:bg-slate-100 print:w-20 print:h-20 print:border-none print:bg-transparent"
           >
             <img 
-              src={session.teamLogo || DEFAULT_CLUB_BADGE} 
+              src={logoSrc} 
               alt="Club Badge" 
               className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
               referrerPolicy="no-referrer"

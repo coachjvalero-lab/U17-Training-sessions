@@ -40,4 +40,8 @@ export interface TrainingSession {
   coolDown: TrainingBlock;
   playerGroups: PlayerGroup[];
   materialsNeeded: string; // comma separated or bullet list
+  fitnessWarmUp?: TrainingBlock;
+  fitnessMainPart?: TrainingBlock;
+  fitnessCoolDown?: TrainingBlock;
+  fitnessPlayerGroups?: PlayerGroup[];
 }

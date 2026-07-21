@@ -164,27 +164,8 @@ export const getDefaultSession = (): TrainingSession => {
         }
       ]
     },
-    playerGroups: []
-  };
-};
-
-export const getDefaultFitnessSession = (): TrainingSession => {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  
-  return {
-    id: 'default-u17-fitness-session',
-    teamName: 'U17 Women Al Ula',
-    date: `${yyyy}-${mm}-${dd}`,
-    time: '18:30 - 20:00',
-    sessionNumber: '42',
-    microcycleDay: '-2',
-    mainObjective: 'High Intensity Interval Training (HIIT), change of direction, and core stabilization for athletic injury prevention.',
-    teamLogo: '',
-    materialsNeeded: '24 Agility Cones, 12 Agility Hurdles (low), 6 Resistance Bands, 10 Medicine Balls (3kg), Speed Ladders, Stopwatches.',
-    warmUp: {
+    playerGroups: [],
+    fitnessWarmUp: {
       id: 'warmup-block-fitness',
       title: 'Warm Up',
       exercises: [
@@ -202,7 +183,7 @@ export const getDefaultFitnessSession = (): TrainingSession => {
         }
       ]
     },
-    mainPart: {
+    fitnessMainPart: {
       id: 'main-block-fitness',
       title: 'Main Part',
       exercises: [
@@ -220,7 +201,7 @@ export const getDefaultFitnessSession = (): TrainingSession => {
         }
       ]
     },
-    coolDown: {
+    fitnessCoolDown: {
       id: 'cooldown-block-fitness',
       title: 'Cool Down',
       exercises: [
@@ -238,8 +219,12 @@ export const getDefaultFitnessSession = (): TrainingSession => {
         }
       ]
     },
-    playerGroups: []
+    fitnessPlayerGroups: []
   };
+};
+
+export const getDefaultFitnessSession = (): TrainingSession => {
+  return getDefaultSession(); // Always return the unified default session
 };
 
 export const getEmptySession = (): TrainingSession => {
@@ -273,6 +258,22 @@ export const getEmptySession = (): TrainingSession => {
       title: 'Cool Down',
       exercises: []
     },
-    playerGroups: []
+    playerGroups: [],
+    fitnessWarmUp: {
+      id: 'warmup-block-fitness',
+      title: 'Warm Up',
+      exercises: []
+    },
+    fitnessMainPart: {
+      id: 'main-block-fitness',
+      title: 'Main Part',
+      exercises: []
+    },
+    fitnessCoolDown: {
+      id: 'cooldown-block-fitness',
+      title: 'Cool Down',
+      exercises: []
+    },
+    fitnessPlayerGroups: []
   };
 };
