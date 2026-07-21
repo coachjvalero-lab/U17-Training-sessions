@@ -9,14 +9,60 @@ interface HeaderSectionProps {
 
 // Beautiful default club badge SVG to make it look official right away
 const DEFAULT_CLUB_BADGE = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <circle cx="50" cy="50" r="46" fill="%230f172a" stroke="%230f5981" stroke-width="4" />
-  <path d="M 50 12 C 30 12 18 24 18 45 C 18 70 50 88 50 88 C 50 88 82 70 82 45 C 82 24 70 12 50 12 Z" fill="%231e293b" stroke="white" stroke-width="2" />
-  <!-- Soccer ball pattern -->
-  <circle cx="50" cy="50" r="18" fill="none" stroke="%230f5981" stroke-width="2" />
-  <line x1="50" y1="12" x2="50" y2="88" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
-  <line x1="18" y1="45" x2="82" y2="45" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
-  <text x="50" y="54" fill="white" font-family="sans-serif" font-size="12" font-weight="900" text-anchor="middle">U17</text>
-  <text x="50" y="74" fill="%230f5981" font-family="sans-serif" font-size="7" font-weight="bold" text-anchor="middle">COACH</text>
+  <!-- Left Blue Half -->
+  <path d="M 50 5 C 32 5 15 12 15 45 C 15 72 50 95 50 95 L 50 5 Z" fill="%23244e7c" />
+  <!-- Right Brown Half -->
+  <path d="M 50 5 L 50 95 C 50 95 85 72 85 45 C 85 12 68 5 50 5 Z" fill="%2331231b" />
+  
+  <!-- Outer Gold/Tan Outline -->
+  <path d="M 50 5 C 32 5 15 12 15 45 C 15 72 50 95 50 95 C 50 95 85 72 85 45 C 85 12 68 5 50 5 Z" fill="none" stroke="%23bc9e74" stroke-width="3" />
+  <!-- Inner Border subtle dotted offset -->
+  <path d="M 50 8 C 34 8 18.5 14.5 18.5 45 C 18.5 69.5 50 91.5 50 91.5 C 50 91.5 81.5 69.5 81.5 45 C 81.5 14.5 66 8 50 8 Z" fill="none" stroke="%23bc9e74" stroke-dasharray="1 1" stroke-width="0.5" opacity="0.6" />
+
+  <!-- Typography: ALULA SC -->
+  <text x="50" y="24" fill="%23bc9e74" font-family="system-ui, -apple-system, sans-serif" font-size="8.5" font-weight="900" text-anchor="middle" letter-spacing="0.5">ALULA SC</text>
+  
+  <!-- Typography: Arabic Text (نادي العلا الرياضي) -->
+  <text x="50" y="31" fill="%23bc9e74" font-family="system-ui, -apple-system, sans-serif" font-size="4.5" font-weight="bold" text-anchor="middle">نادي العلا الرياضي</text>
+
+  <!-- Stylized Leopard Head (Gold/Tan) -->
+  <g fill="%23bc9e74">
+    <!-- Ears -->
+    <polygon points="34,48 42,38 46,48 42,52" fill="%23a48358" />
+    <polygon points="36,47 42,40 45,48" fill="%23bc9e74" />
+    
+    <polygon points="66,48 58,38 54,48 58,52" fill="%23a48358" />
+    <polygon points="64,47 58,40 55,48" fill="%23bc9e74" />
+    
+    <!-- Forehead -->
+    <polygon points="43,50 57,50 61,62 39,62" fill="%23bc9e74" />
+    
+    <!-- Cheek left -->
+    <polygon points="39,62 39,72 45,78 47,72 43,62" fill="%23a48358" />
+    <polygon points="41,62 41,70 45,76 43,62" fill="%23bc9e74" />
+    
+    <!-- Cheek right -->
+    <polygon points="61,62 61,72 55,78 53,72 57,62" fill="%23a48358" />
+    <polygon points="59,62 59,70 55,76 57,62" fill="%23bc9e74" />
+    
+    <!-- Muzzle / Nose area -->
+    <polygon points="45,72 55,72 56,78 50,83 44,78" fill="%23bc9e74" />
+    <polygon points="47,72 53,72 50,76" fill="%2331231b" />
+    <polygon points="44,78 50,83 50,78" fill="%23a48358" />
+    <polygon points="56,78 50,83 50,78" fill="%2331231b" />
+
+    <!-- Forehead symbol: Lihyanite Symbol (W and X) inside forehead -->
+    <!-- W-like part -->
+    <path d="M 47,52 L 49,52 L 50,54 L 48,54 Z" fill="%23244e7c" />
+    <path d="M 53,52 L 51,52 L 50,54 L 52,54 Z" fill="%2331231b" />
+    <!-- X-like part -->
+    <path d="M 47,57 L 50,55 L 50,59 L 47,59 Z" fill="%23244e7c" />
+    <path d="M 53,57 L 50,55 L 50,59 L 53,59 Z" fill="%2331231b" />
+    <!-- Horizontal lines -->
+    <line x1="47.5" y1="54.5" x2="52.5" y2="54.5" stroke="%23bc9e74" stroke-width="0.3" />
+    <!-- Vertical line -->
+    <line x1="50" y1="51.5" x2="50" y2="58.5" stroke="%23bc9e74" stroke-width="0.3" />
+  </g>
 </svg>`;
 
 export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange }) => {

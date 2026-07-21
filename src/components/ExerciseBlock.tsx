@@ -15,6 +15,7 @@ interface ExerciseBlockProps {
 const GAME_MOMENTS: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
 
 const TACTICAL_SUB_MOMENTS = [
+  '-',
   'construction',
   'creation',
   'finishing',

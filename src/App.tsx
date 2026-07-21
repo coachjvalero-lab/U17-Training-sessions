@@ -1,61 +1,128 @@
 import React, { useState, useEffect } from 'react';
-import { getDefaultSession, getEmptySession } from './defaultSession';
+import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
 import { ControlPanel } from './components/ControlPanel';
 import { TrainingSession, Exercise, PlayerGroup } from './types';
-import { ShieldCheck, Info, Clipboard } from 'lucide-react';
+import { 
+  saveSessionToCloud, 
+  deleteSessionFromCloud, 
+  subscribeToSessions, 
+  CloudTrainingSession 
+} from './firebase';
+import { 
+  ShieldCheck, 
+  Info, 
+  Clipboard, 
+  Cloud, 
+  CloudUpload, 
+  Trash2, 
+  FolderOpen, 
+  Plus, 
+  RefreshCw, 
+  HelpCircle,
+  Database
+} from 'lucide-react';
 
 export default function App() {
-  // Load session from localStorage or use the demo session on first run
-  const [session, setSession] = useState<TrainingSession>(() => {
-    const saved = localStorage.getItem('u17_training_session');
+  const [activeSection, setActiveSection] = useState<'football' | 'fitness'>('football');
+
+  // Load football session from localStorage or use the demo session on first run
+  const [footballSession, setFootballSession] = useState<TrainingSession>(() => {
+    const saved = localStorage.getItem('u17_training_session_football');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          // Normalize old titles to clean English names
-          if (parsed.warmUp) {
-            if (parsed.warmUp.title === 'Warm-up / Activation Block' || parsed.warmUp.title === 'Warm-up / Calentamiento (Activación)') {
-              parsed.warmUp.title = 'Warm Up';
-            }
-          }
-          if (parsed.mainPart) {
-            if (parsed.mainPart.title === 'Main Block (Tactical Application)' || parsed.mainPart.title === 'Parte Principal (Táctica / Aplicación)') {
-              parsed.mainPart.title = 'Main Part';
-            }
-          }
-          if (parsed.coolDown) {
-            if (parsed.coolDown.title === 'Cool Down / Recovery' || parsed.coolDown.title === 'Cool Down / Vuelta a la Calma') {
-              parsed.coolDown.title = 'Cool Down';
-            }
-          }
-          if (parsed.microcycleDay === 'MD-2') {
-            parsed.microcycleDay = '-2';
-          } else if (parsed.microcycleDay === 'MD-1') {
-            parsed.microcycleDay = '-1';
+          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
+            parsed.teamName = 'U17 Women Al Ula';
           }
           return parsed;
         }
       } catch (e) {
-        console.error('Failed to parse saved session:', e);
+        console.error('Failed to parse saved football session:', e);
       }
+    }
+    // Fallback to legacy key to keep user data
+    const legacySaved = localStorage.getItem('u17_training_session');
+    if (legacySaved) {
+      try {
+        const parsed = JSON.parse(legacySaved);
+        if (parsed && typeof parsed === 'object' && parsed.teamName) {
+          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
+            parsed.teamName = 'U17 Women Al Ula';
+          }
+          return parsed;
+        }
+      } catch (e) {}
     }
     return getDefaultSession();
   });
 
+  // Load fitness session from localStorage or use the demo fitness session on first run
+  const [fitnessSession, setFitnessSession] = useState<TrainingSession>(() => {
+    const saved = localStorage.getItem('u17_training_session_fitness');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && parsed.teamName) {
+          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
+            parsed.teamName = 'U17 Women Al Ula';
+          }
+          return parsed;
+        }
+      } catch (e) {
+        console.error('Failed to parse saved fitness session:', e);
+      }
+    }
+    return getDefaultFitnessSession();
+  });
+
+  const session = activeSection === 'football' ? footballSession : fitnessSession;
+
+  const setSession = (updater: TrainingSession | ((prev: TrainingSession) => TrainingSession)) => {
+    if (activeSection === 'football') {
+      setFootballSession(updater);
+    } else {
+      setFitnessSession(updater);
+    }
+  };
+
   const [isSaving, setIsSaving] = useState(false);
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
 
-  // Automatically persist the session on change
+  const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>([]);
+  const [isLoadingCloud, setIsLoadingCloud] = useState(true);
+  const [isCloudSaving, setIsCloudSaving] = useState(false);
+
+  // Subscribe to real-time updates from Cloud Firestore
+  useEffect(() => {
+    setIsLoadingCloud(true);
+    const unsubscribe = subscribeToSessions(activeSection, (sessions) => {
+      setCloudSessions(sessions);
+      setIsLoadingCloud(false);
+    });
+    return () => unsubscribe();
+  }, [activeSection]);
+
+  // Automatically persist the sessions on change
   useEffect(() => {
     setIsSaving(true);
-    localStorage.setItem('u17_training_session', JSON.stringify(session));
+    localStorage.setItem('u17_training_session_football', JSON.stringify(footballSession));
     const timer = setTimeout(() => {
       setIsSaving(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [session]);
+  }, [footballSession]);
+
+  useEffect(() => {
+    setIsSaving(true);
+    localStorage.setItem('u17_training_session_fitness', JSON.stringify(fitnessSession));
+    const timer = setTimeout(() => {
+      setIsSaving(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [fitnessSession]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
     setSession(prev => ({
@@ -99,16 +166,125 @@ export default function App() {
   };
 
   const handleClearSession = () => {
-    if (confirm('Are you sure you want to clear the entire session? This will delete all exercises and text.')) {
+    if (confirm(`Are you sure you want to clear the entire ${activeSection} session? This will delete all exercises and text.`)) {
       setSession(getEmptySession());
       setExpandedExercises({});
     }
   };
 
   const handleRestoreDemo = () => {
-    if (confirm('Are you sure you want to restore the demo training session? This will overwrite your current work.')) {
-      setSession(getDefaultSession());
+    if (confirm(`Are you sure you want to restore the demo ${activeSection} training session? This will overwrite your current work.`)) {
+      setSession(activeSection === 'football' ? getDefaultSession() : getDefaultFitnessSession());
       setExpandedExercises({});
+    }
+  };
+
+  const handleSaveActiveToCloud = async () => {
+    try {
+      setIsCloudSaving(true);
+      await saveSessionToCloud(session, activeSection);
+    } catch (error) {
+      console.error('Error saving session to cloud:', error);
+      alert('Failed to save session to the cloud. Please check your internet connection.');
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  const handleSaveAsNewToCloud = async () => {
+    const currentNum = parseInt(session.sessionNumber) || 0;
+    const nextNum = String(currentNum + 1);
+    const newNumber = prompt('Enter session number for the new cloud copy:', nextNum);
+    if (newNumber === null) return; // User cancelled
+    
+    const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    const today = new Date().toISOString().split('T')[0];
+
+    const newSession: TrainingSession = {
+      ...session,
+      id: newId,
+      sessionNumber: newNumber,
+      date: today
+    };
+
+    try {
+      setIsCloudSaving(true);
+      await saveSessionToCloud(newSession, activeSection);
+      if (activeSection === 'football') {
+        setFootballSession(newSession);
+      } else {
+        setFitnessSession(newSession);
+      }
+    } catch (error) {
+      console.error('Error saving copy to cloud:', error);
+      alert('Failed to save a new copy to the cloud.');
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  const handleCreateNewCloudSession = async () => {
+    const newNumber = prompt('Enter new session number:', '1');
+    if (newNumber === null) return;
+
+    const empty = getEmptySession();
+    const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    const today = new Date().toISOString().split('T')[0];
+
+    const newSession: TrainingSession = {
+      ...empty,
+      id: newId,
+      sessionNumber: newNumber,
+      date: today,
+      teamName: 'U17 Women Al Ula'
+    };
+
+    try {
+      setIsCloudSaving(true);
+      await saveSessionToCloud(newSession, activeSection);
+      if (activeSection === 'football') {
+        setFootballSession(newSession);
+      } else {
+        setFitnessSession(newSession);
+      }
+    } catch (error) {
+      console.error('Error creating new session in cloud:', error);
+      alert('Failed to create a new session.');
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
+    if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
+      const { type, updatedAt, ...baseSession } = loadedSession;
+      if (activeSection === 'football') {
+        setFootballSession(baseSession);
+      } else {
+        setFitnessSession(baseSession);
+      }
+      
+      // Expand all exercises of loaded session
+      const expanded: Record<string, boolean> = {};
+      baseSession.warmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
+      baseSession.mainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
+      baseSession.coolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
+      setExpandedExercises(expanded);
+    }
+  };
+
+  const handleDeleteCloudSession = async (sessionId: string, sessionNum: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // prevent loading when clicking delete
+    if (confirm(`Are you absolutely sure you want to delete session #${sessionNum} from the cloud database? This cannot be undone.`)) {
+      try {
+        setIsCloudSaving(true);
+        await deleteSessionFromCloud(sessionId);
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        alert('Failed to delete session from the cloud.');
+      } finally {
+        setIsCloudSaving(false);
+      }
     }
   };
 
@@ -143,6 +319,34 @@ export default function App() {
           isSaving={isSaving}
         />
 
+        {/* Section Switcher Tabs - Hidden in Print */}
+        <div className="flex bg-slate-200/60 p-1.5 rounded-2xl max-w-md mx-auto print:hidden shadow-inner border border-slate-300/40 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setActiveSection('football')}
+            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeSection === 'football' 
+                ? 'bg-slate-900 text-emerald-400 shadow-md shadow-slate-900/15' 
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-300/30'
+            }`}
+          >
+            <span>⚽</span>
+            <span>Football (Fútbol)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection('fitness')}
+            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeSection === 'fitness' 
+                ? 'bg-slate-900 text-emerald-400 shadow-md shadow-slate-900/15' 
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-300/30'
+            }`}
+          >
+            <span>⚡</span>
+            <span>Fitness (P. Física)</span>
+          </button>
+        </div>
+
         {/* Dynamic Coach Instruction Banner - Hidden in Print */}
         <div className="bg-emerald-50/40 border border-emerald-500/15 rounded-2xl p-5 flex items-start space-x-4 shadow-sm shadow-emerald-50/50 print:hidden">
           <div className="p-2.5 bg-emerald-500 rounded-xl text-white shrink-0 shadow-md shadow-emerald-500/20">
@@ -169,6 +373,169 @@ export default function App() {
               >
                 Collapse all exercises
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Cloud Database Integration Section - Hidden in Print */}
+        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-xl print:hidden space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div className="flex items-center space-x-3.5">
+              <div className="p-2.5 bg-[#bc9e74]/15 rounded-xl text-[#bc9e74] border border-[#bc9e74]/25 shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-[#bc9e74] flex items-center gap-1.5">
+                  <span>Al Ula SC Cloud Library</span>
+                  <span className="bg-[#bc9e74]/10 text-[#bc9e74] text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-[#bc9e74]/20">
+                    Real-time
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                  Any coach can read, edit, or create training sessions. All data is automatically synchronized for everyone.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCreateNewCloudSession}
+                disabled={isCloudSaving}
+                className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all cursor-pointer border border-slate-700 disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#bc9e74]" />
+                <span>New Session</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Active Session Status & Actions */}
+            <div className="lg:col-span-5 bg-slate-950 p-5 rounded-2xl border border-slate-800/80 flex flex-col justify-between">
+              <div className="space-y-4">
+                <div>
+                  <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">Active Workspace Session</span>
+                  <h4 className="text-base font-black text-white mt-1">
+                    Sesión #{session.sessionNumber || '1'}
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 font-medium">
+                    {session.mainObjective || 'No objective specified.'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500 font-bold uppercase">
+                    <span className="bg-slate-900 px-2 py-1 rounded">Date: {session.date || '-'}</span>
+                    <span className="bg-slate-900 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : '⚡ Fitness'}</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed font-medium">
+                  To save edits back to the cloud, use <strong>Save Changes</strong>. To create a brand new training day from this template, click <strong>Save as New Copy</strong>.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={handleSaveActiveToCloud}
+                  disabled={isCloudSaving}
+                  className="flex items-center justify-center space-x-1.5 bg-[#bc9e74] hover:bg-[#a68962] text-slate-950 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  <span>{isCloudSaving ? 'Saving...' : 'Save Changes'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAsNewToCloud}
+                  disabled={isCloudSaving}
+                  className="flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#bc9e74]" />
+                  <span>Save as Copy</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Cloud Library Session List */}
+            <div className="lg:col-span-7 flex flex-col space-y-3">
+              <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">
+                Saved Sessions ({cloudSessions.length})
+              </span>
+
+              {isLoadingCloud ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#bc9e74]" />
+                  <span className="text-xs mt-2 uppercase font-black tracking-widest">Loading cloud list...</span>
+                </div>
+              ) : cloudSessions.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-10 text-slate-500 bg-slate-950 border border-dashed border-slate-800 rounded-2xl">
+                  <Cloud className="w-8 h-8 text-slate-700 mb-2" />
+                  <p className="text-xs font-bold">No saved cloud sessions found</p>
+                  <p className="text-[10px] text-slate-600 mt-1 max-w-[250px] text-center font-medium">
+                    Click "Save Changes" on the left to upload your first cloud training!
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[295px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                  {cloudSessions.map((cloudSess) => {
+                    const isActive = cloudSess.id === session.id;
+                    return (
+                      <div
+                        key={cloudSess.id}
+                        onClick={() => handleLoadCloudSession(cloudSess)}
+                        className={`group flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left bg-slate-950 hover:bg-slate-900 border ${
+                          isActive 
+                            ? 'border-[#bc9e74] bg-[#bc9e74]/5 shadow-md shadow-[#bc9e74]/5' 
+                            : 'border-slate-800/80 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="space-y-1 max-w-[85%]">
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                              isActive 
+                                ? 'bg-[#bc9e74] text-slate-950' 
+                                : 'bg-slate-900 text-[#bc9e74]'
+                            }`}>
+                              Sess. #{cloudSess.sessionNumber || '1'}
+                            </span>
+                            <span className="text-slate-500 text-[10px] font-bold">{cloudSess.date}</span>
+                            {isActive && (
+                              <span className="text-[9px] font-extrabold text-[#bc9e74] uppercase tracking-wide">
+                                • Active
+                              </span>
+                            )}
+                          </div>
+                          
+                          <h5 className="text-xs font-bold text-white group-hover:text-[#bc9e74] transition-colors truncate">
+                            {cloudSess.mainObjective || 'No objective set.'}
+                          </h5>
+                          
+                          <p className="text-[10px] text-slate-500 truncate font-semibold">
+                            Materials: {cloudSess.materialsNeeded || 'None'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            type="button"
+                            title="Load Session"
+                            className="p-2 text-slate-400 hover:text-[#bc9e74] hover:bg-slate-800 rounded-lg transition-colors"
+                          >
+                            <FolderOpen className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete Session"
+                            onClick={(e) => handleDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
+                            className="p-2 text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

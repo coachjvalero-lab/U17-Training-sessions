@@ -78,7 +78,7 @@ export const getDefaultSession = (): TrainingSession => {
   
   return {
     id: 'default-u17-session',
-    teamName: 'U17 Girls A.D. San Pedro',
+    teamName: 'U17 Women Al Ula',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:30 - 20:00',
     sessionNumber: '42',
@@ -168,6 +168,80 @@ export const getDefaultSession = (): TrainingSession => {
   };
 };
 
+export const getDefaultFitnessSession = (): TrainingSession => {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  
+  return {
+    id: 'default-u17-fitness-session',
+    teamName: 'U17 Women Al Ula',
+    date: `${yyyy}-${mm}-${dd}`,
+    time: '18:30 - 20:00',
+    sessionNumber: '42',
+    microcycleDay: '-2',
+    mainObjective: 'High Intensity Interval Training (HIIT), change of direction, and core stabilization for athletic injury prevention.',
+    teamLogo: '',
+    materialsNeeded: '24 Agility Cones, 12 Agility Hurdles (low), 6 Resistance Bands, 10 Medicine Balls (3kg), Speed Ladders, Stopwatches.',
+    warmUp: {
+      id: 'warmup-block-fitness',
+      title: 'Warm Up',
+      exercises: [
+        {
+          id: 'ex-fitness-warmup-1',
+          name: 'Dynamic Joint Mobility & Core Activation',
+          gameMoment: 'Other',
+          subMoment: 'Neuromuscular preparation',
+          description: 'Joint mobility exercises starting from ankles to neck. Progression to dynamic planks (high to low), bird-dogs, and glute bridges. Concludes with leg swings and light walking lunges to prepare the muscular-skeletal system.',
+          duration: '12 min',
+          dimensions: 'Half Pitch',
+          coachRoles: 'Fitness Coach: Corrects body alignment and posture during planks.\nAssistant Coach: Keeps the group rhythm in sync.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Full Squad in 3 lines of 6 players'
+        }
+      ]
+    },
+    mainPart: {
+      id: 'main-block-fitness',
+      title: 'Main Part',
+      exercises: [
+        {
+          id: 'ex-fitness-main-1',
+          name: 'HIIT Circuit & Agility Ladders',
+          gameMoment: 'Other',
+          subMoment: 'High intensity conditioning',
+          description: '4 stations of high-intensity training:\n1) Agility ladder fast feet + 5m acceleration.\n2) Lateral hurdle jumps + short backpedal.\n3) Medicine ball slams + squat jumps.\n4) Resistance band resisted runs.\nWork time: 30 seconds, rest: 15 seconds. Repeat circuit 3 times.',
+          duration: '25 min',
+          dimensions: 'Penalty Area to Midfield',
+          coachRoles: 'Fitness Coach: Blows whistle for station rotations and monitors exertion levels.\nCoaches: Support stations to motivate players and monitor technical execution.',
+          image: DEFAULT_RONDO_SVG,
+          playerGroups: 'Station 1: Groups 1 & 2\nStation 2: Groups 3 & 4\nStation 3: Group 5\nStation 4: Group 6'
+        }
+      ]
+    },
+    coolDown: {
+      id: 'cooldown-block-fitness',
+      title: 'Cool Down',
+      exercises: [
+        {
+          id: 'ex-fitness-cooldown-1',
+          name: 'Static Muscle Lengthening & Hydration',
+          gameMoment: 'Other',
+          subMoment: 'Physiological recovery',
+          description: 'Static stretching targeting major muscles used (quadriceps, hamstrings, glutes, hip flexors). Deep breathing techniques and hydration. 5-minute debrief on physical load perception (RPE scale).',
+          duration: '10 min',
+          dimensions: 'Center Circle',
+          coachRoles: 'Fitness Coach: Guides the breathing and stretches, collects RPE feedback.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Full Squad in a circle'
+        }
+      ]
+    },
+    playerGroups: []
+  };
+};
+
 export const getEmptySession = (): TrainingSession => {
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -176,7 +250,7 @@ export const getEmptySession = (): TrainingSession => {
   
   return {
     id: 'empty-session-' + Date.now(),
-    teamName: 'U17',
+    teamName: 'U17 Women Al Ula',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:00 - 19:30',
     sessionNumber: '1',
