@@ -39,7 +39,7 @@ const DEFAULT_RONDO_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org
   <!-- Ball -->
   <circle cx="185" cy="85" r="5" fill="white" stroke="black" stroke-width="1" />
   <!-- Text label -->
-  <text x="200" y="25" fill="white" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold">Rondo de Transición 4v2</text>
+  <text x="200" y="25" fill="white" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold">4v2 Transition Rondo</text>
 </svg>`;
 
 const DEFAULT_POSSESSION_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
@@ -67,7 +67,7 @@ const DEFAULT_POSSESSION_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w
   <circle cx="200" cy="255" r="8" fill="%23a855f7" stroke="white" stroke-width="1.5" />
   <circle cx="200" cy="150" r="8" fill="%23a855f7" stroke="white" stroke-width="1.5" />
 
-  <text x="200" y="20" fill="white" font-family="sans-serif" font-size="12" text-anchor="middle" font-weight="bold">6v6 + 3 Comodines</text>
+  <text x="200" y="20" fill="white" font-family="sans-serif" font-size="12" text-anchor="middle" font-weight="bold">6v6 + 3 Jokers</text>
 </svg>`;
 
 export const getDefaultSession = (): TrainingSession => {
@@ -78,106 +78,92 @@ export const getDefaultSession = (): TrainingSession => {
   
   return {
     id: 'default-u17-session',
-    teamName: 'U17 Femenino A.D. San Pedro',
+    teamName: 'U17 Girls A.D. San Pedro',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:30 - 20:00',
     sessionNumber: '42',
-    mainObjective: 'Presión alta colectiva tras pérdida de balón en bloque medio y transiciones rápidas ataque-defensa.',
+    mainObjective: 'High collective press after losing the ball in the middle block and fast transition from attack to defense.',
     teamLogo: '',
-    materialsNeeded: '20 Conos (10 Amarillos, 10 Verdes), 12 Petos (6 Azules, 6 Amarillos), 15 Balones reglamentarios, 2 Porterías móviles adicionales, Cronómetro, Silbato.',
+    materialsNeeded: '20 Cones (10 Yellow, 10 Green), 12 Bibs (6 Blue, 6 Yellow), 15 Regulation Soccer Balls, 2 Portable Mini Goals, Stopwatch, Whistle.',
     warmUp: {
       id: 'warmup-block',
-      title: 'Warm-up / Calentamiento (Activación)',
+      title: 'Warm Up',
       exercises: [
         {
           id: 'ex-warmup-1',
-          name: 'Rondo de Transición 4v2 con Presión Inmediata',
-          gameMoment: 'Transición A-D',
-          subMoment: 'Presión tras pérdida de balón inmediata (evitar pase exterior)',
-          description: 'Se juega un rondo de 4 atacantes contra 2 defensores en un cuadrante de 10x10 metros. Si un defensor roba el balón, debe pasar inmediatamente a un tercer compañero exterior o realizar un pase de seguridad. Los 4 atacantes originales deben realizar una presión ultra-rápida y asfixiante para evitar que el balón salga del cuadrado. Si logran presionar y recuperar en menos de 3 segundos, se mantiene el rondo.',
+          name: '4v2 Transition Rondo with Immediate Press',
+          gameMoment: 'Transition A-D',
+          subMoment: 'Counter-pressing immediately after losing possession (preventing outer pass)',
+          description: 'A 4v2 rondo is played in a 10x10m square. If a defender wins the ball, they must immediately pass it to an outer target or make a safety pass. The 4 original attackers must execute a hyper-fast press to prevent the ball from escaping the square. If they win it back under 3 seconds, possession is maintained.',
           duration: '15 min',
-          dimensions: '10x10 metros',
-          coachRoles: 'Coach A: Monitorea la calidad técnica de los pases. Coach B: Exige máxima intensidad física en los primeros 3 segundos post-pérdida.',
-          image: DEFAULT_RONDO_SVG
+          dimensions: '10x10 meters',
+          coachRoles: 'Coach A: Monitors pass quality and body positioning.\nCoach B: Demands maximum intensity in the first 3 seconds post-turnover.',
+          image: DEFAULT_RONDO_SVG,
+          playerGroups: 'Group A (Blue Bibs): Sophia L., Valeria M., Marta G., Alba R.\nGroup B (Yellow Bibs): Luciana F., Carmen V., Irene S., Andrea O.'
         },
         {
           id: 'ex-warmup-2',
-          name: 'Activación Dinámica y Movilidad Articular',
-          gameMoment: 'Otro',
-          subMoment: 'Preparación neuromuscular',
-          description: 'Carrera continua suave en hileras coordinadas por silbato. Progresión a movimientos laterales, saltos de cabeza simulados, skip bajo/alto, talones atrás, y aceleraciones cortas (de 5 a 10 metros) para preparar las articulaciones. Finaliza con estiramientos activos dinámicos.',
+          name: 'Dynamic Warm-up & Joint Mobility',
+          gameMoment: 'Other',
+          subMoment: 'Neuromuscular preparation',
+          description: 'Light continuous jogging in coordinated lines triggered by whistle signals. Progression to side shuffles, high knees, butt kicks, arm swings, and short accelerations (5 to 10 meters) to prepare joints. Concludes with active dynamic stretching.',
           duration: '10 min',
-          dimensions: '20x15 metros',
-          coachRoles: 'Preparador Físico: Lidera el ritmo e indica el tipo de ejercicio biomecánico.',
-          image: DEFAULT_TACTICAL_SVG
+          dimensions: '20x15 meters',
+          coachRoles: 'Fitness Coach: Leads the group rhythm and guides biomechanical exercises.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Full Squad (18 Players in two parallel lines)'
         }
       ]
     },
     mainPart: {
       id: 'main-block',
-      title: 'Parte Principal (Táctica / Aplicación)',
+      title: 'Main Part',
       exercises: [
         {
           id: 'ex-main-1',
-          name: 'Juego de Posición 6v6 + 3 Comodines (Pivote, Interior y Central)',
-          gameMoment: 'Ataque',
-          subMoment: 'Circulación limpia, fijar defensores y alternar amplitud',
-          description: 'Mantener la posesión del esférico mediante superioridad numérica artificial dada por los comodines (morados). Los 3 comodines juegan siempre con el equipo poseedor. Al alcanzar 8 pases consecutivos de un lado a otro del espacio, el equipo atacante puede buscar meter gol en cualquiera de las 4 mini-porterías situadas en las esquinas. Si el equipo defensor intercepta el balón, se convierte automáticamente en atacante y los comodines se unen a ellos.',
+          name: '6v6 + 3 Jokers Positional Game',
+          gameMoment: 'Attack',
+          subMoment: 'Clean circulation, drawing in defenders & switching play',
+          description: 'Maintain possession using artificial numerical superiority provided by the jokers (purple). The 3 jokers always play with the team in possession. Upon completing 8 consecutive passes, the attacking team can shoot into any of the 4 mini-goals in the corners. If the defending team intercepts, they become attackers and the jokers immediately join them.',
           duration: '25 min',
-          dimensions: '40x30 metros',
-          coachRoles: 'Coach A: Silbato para infracciones, reponer balones rápido en los laterales. Coach B: Corrige el posicionamiento corporal de perfil de las centrocampistas.',
-          image: DEFAULT_POSSESSION_SVG
+          dimensions: '40x30 meters',
+          coachRoles: 'Coach A: Referees the game, feeds balls from the sides for high tempo.\nCoach B: Directs the defensive line on compact spacing and horizontal shifting.',
+          image: DEFAULT_POSSESSION_SVG,
+          playerGroups: 'Blue Team: Sophia, Valeria, Marta, Alba, Daniela, Julia\nYellow Team: Luciana, Carmen, Irene, Andrea, Elena, Sara\nJokers (Purple): Noa, Maria, Claudia'
         },
         {
           id: 'ex-main-2',
-          name: 'Partido de Aplicación Táctica Colectiva',
-          gameMoment: 'Transición D-A',
-          subMoment: 'Contraataque vertical e incorporación de carrileras',
-          description: 'Se disputa un encuentro de fútbol 8v8 (7 jugadoras de campo y 1 portera) en campo reducido de área a área. Regla táctica especial: todo gol que se convierta en los primeros 10 segundos tras haber robado el balón en campo contrario valdrá por TRIPLE. Esto incentiva las transiciones verticales inmediatas y el desmarque de ruptura de las delanteras.',
+          name: 'Tactical Application Match (8v8)',
+          gameMoment: 'Transition D-A',
+          subMoment: 'Vertical counter-attacks & fullbacks overlapping',
+          description: 'An 8v8 game (7 outfield players + 1 goalkeeper) on a reduced pitch from penalty box to penalty box. Special tactical rule: any goal scored within 10 seconds of winning the ball in the opponent\'s half counts as TRIPLE. This incentivizes immediate vertical transition and forward runs.',
           duration: '30 min',
-          dimensions: 'Campo reducido (área a área)',
-          coachRoles: 'Coach A: Observa la transición del equipo azul. Coach B: Da instrucciones tácticas en vivo al equipo amarillo sobre repliegue de emergencia.',
-          image: DEFAULT_TACTICAL_SVG
+          dimensions: 'Box-to-box reduced pitch',
+          coachRoles: 'Coach A: Observes and evaluates Blue team\'s offensive transition speed.\nCoach B: Instructs Yellow team on emergency central block organization.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Blue Outfield: Valeria, Marta, Alba, Daniela, Julia, Noelia, Luciana + Sophia (GK)\nYellow Outfield: Carmen, Irene, Andrea, Elena, Sara, Paula, Noa + Maria (GK)'
         }
       ]
     },
     coolDown: {
       id: 'cooldown-block',
-      title: 'Cool Down / Vuelta a la Calma',
+      title: 'Cool Down',
       exercises: [
         {
           id: 'ex-cooldown-1',
-          name: 'Trote Regenerativo y Estiramientos Estáticos Auto-asistidos',
-          gameMoment: 'Otro',
-          subMoment: 'Recuperación fisiológica',
-          description: 'Carrera lenta y decreciente alrededor del círculo central durante 3 minutos. Seguidamente, se realiza un círculo de estiramientos de los principales grupos musculares (isquiotibiales, cuádriceps, gemelos). Aprovechar el momento para hidratación profunda.',
+          name: 'Regenerative Jogging & Static Stretching',
+          gameMoment: 'Other',
+          subMoment: 'Physiological recovery',
+          description: 'Slow, light jogging around the center circle for 3 minutes. Followed by a circle of static stretching targeting key muscle groups (hamstrings, quadriceps, calves) and deep hydration.',
           duration: '10 min',
-          dimensions: 'Círculo Central',
-          coachRoles: 'Staff completo: Charla breve de retroalimentación de 5 minutos analizando el cumplimiento de los objetivos de la sesión y felicitando el esfuerzo del grupo.',
-          image: DEFAULT_TACTICAL_SVG
+          dimensions: 'Center Circle',
+          coachRoles: 'Coaching Staff: Conducts a 5-minute feedback talk, reviewing objectives achieved and praising the team\'s effort.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Full Squad gathered in a circle'
         }
       ]
     },
-    playerGroups: [
-      {
-        id: 'group-1',
-        groupNumber: 1,
-        bibColor: '#22c55e', // Emerald
-        players: 'Sofía L. (GK), Valeria M., Marta G., Alba R., Daniela P., Julia S., Noelia T.'
-      },
-      {
-        id: 'group-2',
-        groupNumber: 2,
-        bibColor: '#3b82f6', // Blue
-        players: 'Lucía F., Carmen V., Irene S., Andrea O., Elena M., Sara C., Paula G.'
-      },
-      {
-        id: 'group-3',
-        groupNumber: 3,
-        bibColor: '#eab308', // Yellow
-        players: 'Noa J., María B., Claudia R., Paula M., Carla D., Jimena G., Adriana P.'
-      }
-    ]
+    playerGroups: []
   };
 };
 
@@ -198,17 +184,17 @@ export const getEmptySession = (): TrainingSession => {
     materialsNeeded: '',
     warmUp: {
       id: 'warmup-block',
-      title: 'Warm-up / Calentamiento (Activación)',
+      title: 'Warm Up',
       exercises: []
     },
     mainPart: {
       id: 'main-block',
-      title: 'Parte Principal (Táctica / Aplicación)',
+      title: 'Main Part',
       exercises: []
     },
     coolDown: {
       id: 'cooldown-block',
-      title: 'Cool Down / Vuelta a la Calma',
+      title: 'Cool Down',
       exercises: []
     },
     playerGroups: []

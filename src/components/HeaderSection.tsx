@@ -27,7 +27,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
     if (file) {
       // Validate size (limit to 2MB for base64 storage efficiency)
       if (file.size > 2 * 1024 * 1024) {
-        alert('La imagen es demasiado grande. Elige una menor a 2MB.');
+        alert('The image is too large. Please select one smaller than 2MB.');
         return;
       }
       const reader = new FileReader();
@@ -65,7 +65,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             {/* Hover Overlay - Hidden in print */}
             <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-xs font-semibold rounded-2xl print:hidden">
               <Upload className="w-5 h-5 mb-1 text-emerald-400" />
-              <span>Cambiar Logo</span>
+              <span>Change Logo</span>
             </div>
 
             {/* Remove button - Hidden in print */}
@@ -74,7 +74,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
                 type="button"
                 onClick={removeLogo}
                 className="absolute top-1.5 right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg p-1 shadow-lg transition-colors print:hidden z-10"
-                title="Quitar Logo"
+                title="Remove Logo"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -87,7 +87,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             accept="image/*" 
             className="hidden" 
           />
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5 print:hidden">Escudo del Club</span>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5 print:hidden">Club Badge</span>
         </div>
 
         {/* Column 2: Main Info Fields (Span 9) */}
@@ -95,14 +95,14 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
           {/* Team Name Title */}
           <div>
             <label className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 block mb-1 print:hidden">
-              Nombre del Equipo o Club
+              Team or Club Name
             </label>
             <input
               id="header-team-name"
               type="text"
               value={session.teamName}
               onChange={(e) => onChange({ teamName: e.target.value })}
-              placeholder="A.D. San Pedro U17"
+              placeholder="e.g., A.D. San Pedro U17"
               className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-xl print:font-bold print:pb-0 print:text-black"
             />
           </div>
@@ -113,7 +113,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
               <Calendar className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Día</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Date</label>
                 <input
                   id="header-date"
                   type="date"
@@ -128,7 +128,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
               <Clock className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Hora / Bloque</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Time / Slot</label>
                 <input
                   id="header-time"
                   type="text"
@@ -144,13 +144,13 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
               <Trophy className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Nº Sesión</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Session No.</label>
                 <input
                   id="header-session-number"
                   type="text"
                   value={session.sessionNumber}
                   onChange={(e) => onChange({ sessionNumber: e.target.value })}
-                  placeholder="Sesión 1"
+                  placeholder="Session 1"
                   className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-black print:text-sm"
                 />
               </div>
@@ -159,26 +159,52 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
         </div>
       </div>
 
-      {/* Main Objective Section (Stretched across full width) */}
+      {/* Side-by-Side Grid: Main Objective & Materials Section */}
       <div className="mt-6 pt-6 border-t border-slate-100 print:mt-3 print:pt-3 print:border-slate-300">
-        <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-transparent print:border-none print:p-0">
-          <div className="bg-emerald-500 p-1.5 rounded-lg text-white mt-0.5 print:hidden shrink-0 shadow-sm shadow-emerald-500/20">
-            <Target className="w-4 h-4" />
-          </div>
-          <div className="w-full">
-            <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-black print:text-xs">
-              <Target className="w-3.5 h-3.5 hidden print:inline mr-1" />
-              <span>Objetivo Principal de la Sesión</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
+          
+          {/* Primary Session Objective */}
+          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-transparent print:border-none print:p-0">
+            <div className="bg-emerald-500 p-1.5 rounded-lg text-white mt-0.5 print:hidden shrink-0 shadow-sm shadow-emerald-500/20">
+              <Target className="w-4 h-4" />
             </div>
-            <textarea
-              id="header-objective"
-              value={session.mainObjective}
-              onChange={(e) => onChange({ mainObjective: e.target.value })}
-              rows={2}
-              placeholder="Describa el foco técnico, táctico o físico principal de este entrenamiento..."
-              className="w-full bg-transparent text-slate-700 font-semibold text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-black"
-            />
+            <div className="w-full">
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-black print:text-xs">
+                <Target className="w-3.5 h-3.5 hidden print:inline mr-1" />
+                <span>Primary Session Objective</span>
+              </div>
+              <textarea
+                id="header-objective"
+                value={session.mainObjective}
+                onChange={(e) => onChange({ mainObjective: e.target.value })}
+                rows={3}
+                placeholder="Describe the technical, tactical, or physical focus of this training session..."
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-black print:text-xs"
+              />
+            </div>
           </div>
+
+          {/* Required Equipment & Materials */}
+          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-transparent print:border-none print:p-0">
+            <div className="bg-emerald-500 p-1.5 rounded-lg text-white mt-0.5 print:hidden shrink-0 shadow-sm shadow-emerald-500/20">
+              <Shield className="w-4 h-4" />
+            </div>
+            <div className="w-full">
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-black print:text-xs">
+                <Shield className="w-3.5 h-3.5 hidden print:inline mr-1" />
+                <span>Required Equipment & Materials</span>
+              </div>
+              <textarea
+                id="header-materials"
+                value={session.materialsNeeded || ''}
+                onChange={(e) => onChange({ materialsNeeded: e.target.value })}
+                rows={3}
+                placeholder="e.g., 20 Cones (10 Yellow), 12 Bibs (6 Green, 6 Blue), 15 Balls, 2 Portable Goals..."
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-black print:text-xs"
+              />
+            </div>
+          </div>
+
         </div>
       </div>
     </header>

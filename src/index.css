@@ -34,29 +34,50 @@ body {
   scrollbar-width: none;
 }
 
-/* CSS Page printing optimizations for A4 */
+/* CSS Page printing optimizations for A4 - Extremely Compact for single page */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm 12mm 10mm 12mm;
+    margin: 4mm 6mm 4mm 6mm;
   }
   
   html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
-    font-size: 11pt !important;
-    line-height: 1.3 !important;
+    font-size: 9pt !important;
+    line-height: 1.15 !important;
+    font-family: "Inter", sans-serif !important;
   }
 
-  /* Force page breaks where needed */
-  .print-page-break {
-    page-break-before: always;
-    break-before: page;
+  /* Force elements to be tight on print */
+  header, section, main, footer {
+    padding: 8px !important;
+    margin-top: 4px !important;
+    margin-bottom: 4px !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
   }
 
-  .print-no-break {
-    page-break-inside: avoid;
-    break-inside: avoid;
+  /* Ensure we don't insert page breaks inside cards */
+  .print-no-break, .border-slate-200, .rounded-2xl {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Compact form of diagrams */
+  .relative.aspect-\[4\/3\] {
+    aspect-ratio: 16/9 !important;
+    max-height: 110px !important;
+    border-radius: 6px !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  /* Compact text areas */
+  textarea {
+    min-height: auto !important;
+    height: auto !important;
+    line-height: 1.2 !important;
   }
 
   /* Input and textarea aesthetics in print */
@@ -68,6 +89,12 @@ body {
     resize: none !important;
     color: #000000 !important;
     font-weight: 500 !important;
+    font-size: 8.5pt !important;
+  }
+
+  /* Specific bold input headers */
+  input[type="text"] {
+    font-weight: 700 !important;
   }
 
   /* Custom print text colors */
@@ -90,7 +117,38 @@ body {
   .print-border-slate-300 {
     border-color: #cbd5e1 !important;
   }
+
+  /* Reduce spaces */
+  .gap-5, .gap-6, .gap-3\.5 {
+    gap: 6px !important;
+  }
   
+  .space-y-4, .space-y-5, .space-y-6, .space-y-8, .space-y-3\.5 {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .space-y-5 > :not([hidden]) ~ :not([hidden]),
+  .space-y-6 > :not([hidden]) ~ :not([hidden]),
+  .space-y-8 > :not([hidden]) ~ :not([hidden]),
+  .space-y-3\.5 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0 !important;
+    margin-top: 4px !important;
+    margin-bottom: 0px !important;
+  }
+
+  /* Shrink footer signatures */
+  footer {
+    margin-top: 8px !important;
+    padding: 6px !important;
+    border-top: 1px solid #cbd5e1 !important;
+  }
+
+  footer p {
+    font-size: 8pt !important;
+  }
+
   /* Ensure backgrounds render on print */
   * {
     -webkit-print-color-adjust: exact !important;

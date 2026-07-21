@@ -12,7 +12,7 @@ interface ExerciseBlockProps {
   toggleExpand: (id: string) => void;
 }
 
-const GAME_MOMENTS: GameMoment[] = ['Ataque', 'Defensa', 'Transición A-D', 'Transición D-A', 'Balón Parado', 'Otro'];
+const GAME_MOMENTS: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
 
 // Standard soccer template graphics to load instantly
 const FIELD_TEMPLATES = {
@@ -32,14 +32,15 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   const addExercise = () => {
     const newEx: Exercise = {
       id: 'ex-' + Date.now(),
-      name: 'Nuevo Ejercicio',
-      gameMoment: 'Otro',
+      name: 'New Exercise',
+      gameMoment: 'Other',
       subMoment: '',
       description: '',
       duration: '15 min',
       dimensions: '30x20m',
-      coachRoles: 'Coach A: Árbitro, Coach B: Instrucciones',
-      image: FIELD_TEMPLATES.field
+      coachRoles: 'Coach A: Referee, Coach B: Direct Feedback',
+      image: FIELD_TEMPLATES.field,
+      playerGroups: ''
     };
     onChange([...block.exercises, newEx]);
     toggleExpand(newEx.id); // Expand new exercise on creation
@@ -47,7 +48,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
   const deleteExercise = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('¿Estás seguro de eliminar este ejercicio?')) {
+    if (confirm('Are you sure you want to delete this exercise?')) {
       onChange(block.exercises.filter(ex => ex.id !== id));
     }
   };
@@ -77,7 +78,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   // Image upload handling
   const processFile = (file: File, exId: string) => {
     if (file.size > 1.5 * 1024 * 1024) {
-      alert('La imagen del ejercicio es muy grande. Elige una menor a 1.5MB.');
+      alert('The exercise image is too large. Please select an image smaller than 1.5MB.');
       return;
     }
     const reader = new FileReader();
@@ -111,11 +112,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
   const getMomentBadgeStyles = (moment: GameMoment) => {
     switch (moment) {
-      case 'Ataque': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Defensa': return 'bg-rose-50 text-rose-700 border-rose-200';
-      case 'Transición A-D': return 'bg-orange-50 text-orange-700 border-orange-200';
-      case 'Transición D-A': return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Balón Parado': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'Attack': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'Defense': return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'Transition A-D': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'Transition D-A': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'Set Pieces': return 'bg-purple-50 text-purple-700 border-purple-200';
       default: return 'bg-slate-50 text-slate-700 border-slate-200';
     }
   };
@@ -134,7 +135,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
           className="flex items-center space-x-1.5 text-[11px] bg-slate-900 hover:bg-emerald-600 text-white font-extrabold tracking-wider uppercase py-2 px-4 rounded-xl transition-all cursor-pointer shadow-sm active:scale-98 print:hidden"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Añadir Ejercicio</span>
+          <span>Add Exercise</span>
         </button>
       </div>
 
@@ -142,13 +143,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       {block.exercises.length === 0 && (
         <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-2xl print:hidden bg-slate-50/50">
           <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-slate-500 text-xs font-semibold">No hay ejercicios en este bloque táctico.</p>
+          <p className="text-slate-500 text-xs font-semibold">No exercises in this tactical block.</p>
           <button
             type="button"
             onClick={addExercise}
             className="text-xs text-emerald-600 hover:text-emerald-700 font-extrabold uppercase tracking-wide mt-2 hover:underline"
           >
-            Crear el primer ejercicio +
+            Create first exercise +
           </button>
         </div>
       )}
@@ -180,7 +181,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     onClick={(e) => e.stopPropagation()} // don't toggle
                     onChange={(e) => updateExercise(ex.id, { name: e.target.value })}
                     className="font-display font-bold text-slate-900 bg-transparent border-b border-transparent focus:border-slate-300 focus:outline-none focus:bg-white px-2 py-0.5 rounded text-sm sm:text-base print:text-sm print:text-black print:font-bold print:p-0"
-                    placeholder="Título del ejercicio"
+                    placeholder="Exercise Title"
                   />
                 </div>
 
@@ -198,7 +199,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       disabled={idx === 0}
                       onClick={(e) => moveExercise(idx, 'up', e)}
                       className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 rounded-lg hover:bg-slate-200/60 transition-colors"
-                      title="Subir"
+                      title="Move Up"
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
                     </button>
@@ -207,7 +208,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       disabled={idx === block.exercises.length - 1}
                       onClick={(e) => moveExercise(idx, 'down', e)}
                       className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 rounded-lg hover:bg-slate-200/60 transition-colors"
-                      title="Bajar"
+                      title="Move Down"
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
@@ -215,7 +216,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       type="button"
                       onClick={(e) => deleteExercise(ex.id, e)}
                       className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="Eliminar Ejercicio"
+                      title="Delete Exercise"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -239,7 +240,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   {/* Left col: Image / tactical drawer (Span 4) */}
                   <div className="md:col-span-4 space-y-2.5 print:col-span-4">
                     <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block print:hidden">
-                      Gráfico táctico / Diagrama
+                      Tactical Diagram / Pitch
                     </label>
 
                     {/* Drag & Drop Area */}
@@ -264,7 +265,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           {/* Image overlay to change (Hidden in print) */}
                           <div className="absolute inset-0 bg-slate-950/70 opacity-0 hover:opacity-100 flex items-center justify-center space-x-2 transition-opacity print:hidden">
                             <label className="bg-white hover:bg-emerald-50 text-slate-900 text-[10px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-xl cursor-pointer shadow-lg">
-                              Subir Nuevo
+                              Upload New
                               <input 
                                 type="file" 
                                 accept="image/*" 
@@ -277,7 +278,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                               onClick={() => updateExercise(ex.id, { image: '' })}
                               className="bg-rose-600 text-white hover:bg-rose-700 text-[10px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-xl shadow-lg"
                             >
-                              Borrar
+                              Clear
                             </button>
                           </div>
                         </>
@@ -285,13 +286,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         <div className="text-center p-4 print:hidden">
                           <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                           <p className="text-[10px] font-bold text-slate-500 leading-tight">
-                            Arrastra imagen aquí
+                            Drag image here
                           </p>
                           <p className="text-[9px] text-slate-400 mb-2.5">
-                            o haz clic para explorar
+                            or click to browse
                           </p>
                           <label className="bg-slate-900 hover:bg-emerald-600 text-white text-[9px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-xl cursor-pointer shadow inline-block">
-                            Elegir archivo
+                            Browse file
                             <input 
                               type="file" 
                               accept="image/*" 
@@ -305,7 +306,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       {/* Fallback image placeholder in print if they literally loaded nothing */}
                       {!ex.image && (
                         <div className="hidden print:flex items-center justify-center text-[10px] text-slate-400">
-                          (Sin gráfico cargado)
+                          (No diagram uploaded)
                         </div>
                       )}
                     </div>
@@ -314,21 +315,21 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     <div className="flex flex-wrap items-center gap-1.5 print:hidden">
                       <span className="text-[9px] font-extrabold text-slate-400 flex items-center uppercase tracking-wide">
                         <Sparkles className="w-2.5 h-2.5 mr-0.5 text-emerald-500" />
-                        Pizarras:
+                        Templates:
                       </span>
                       <button
                         type="button"
                         onClick={() => updateExercise(ex.id, { image: FIELD_TEMPLATES.field })}
                         className="text-[9px] bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-slate-500 border border-slate-200/80 transition-colors"
                       >
-                        Campo Entero
+                        Full Pitch
                       </button>
                       <button
                         type="button"
                         onClick={() => updateExercise(ex.id, { image: FIELD_TEMPLATES.halfField })}
                         className="text-[9px] bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-slate-500 border border-slate-200/80 transition-colors"
                       >
-                        Medio Campo
+                        Half Pitch
                       </button>
                       <button
                         type="button"
@@ -347,7 +348,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 print:grid-cols-2 print:gap-2">
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
-                          Momento del juego
+                          Game Moment
                         </label>
                         <select
                           value={ex.gameMoment}
@@ -362,13 +363,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
-                          Sub-momento táctico
+                          Tactical Sub-moment
                         </label>
                         <input
                           type="text"
                           value={ex.subMoment}
                           onChange={(e) => updateExercise(ex.id, { subMoment: e.target.value })}
-                          placeholder="P. ej: Repliegue, Contraataque"
+                          placeholder="e.g., Counter-pressing, Low block"
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
                         />
                       </div>
@@ -379,13 +380,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
                           <Clock className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Duración
+                          Duration
                         </label>
                         <input
                           type="text"
                           value={ex.duration}
                           onChange={(e) => updateExercise(ex.id, { duration: e.target.value })}
-                          placeholder="P. ej: 15 min"
+                          placeholder="e.g., 15 mins"
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
                         />
                       </div>
@@ -393,13 +394,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
                           <Maximize2 className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Espacio / Dim.
+                          Pitch Size
                         </label>
                         <input
                           type="text"
                           value={ex.dimensions}
                           onChange={(e) => updateExercise(ex.id, { dimensions: e.target.value })}
-                          placeholder="P. ej: 30x20 metros"
+                          placeholder="e.g., 40x30m"
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
                         />
                       </div>
@@ -407,14 +408,14 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
                           <ShieldAlert className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Roles del Staff
+                          Staff Roles
                         </label>
-                        <input
-                          type="text"
+                        <textarea
                           value={ex.coachRoles}
                           onChange={(e) => updateExercise(ex.id, { coachRoles: e.target.value })}
-                          placeholder="Coach A: Feed, Coach B: Balón"
-                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
+                          rows={2}
+                          placeholder="Coach A: Referee, Coach B: Feedback"
+                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all resize-y print:resize-none print:p-0 print:border-none"
                         />
                       </div>
                     </div>
@@ -422,14 +423,28 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     {/* Detailed Description */}
                     <div>
                       <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
-                        Descripción detallada y Reglas de provocación
+                        Detailed Instructions & Rules of Provocation
                       </label>
                       <textarea
                         value={ex.description}
                         onChange={(e) => updateExercise(ex.id, { description: e.target.value })}
                         rows={4}
-                        placeholder="Escribe el desarrollo táctico, distribución de jugadoras, reglas o comodines para forzar el comportamiento buscado..."
+                        placeholder="Describe the tactical flow, rules, constraints, or jokers to trigger the desired behavior..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:resize-none print:p-0 print:border-none print:leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Player Groups (Moved inside each exercise block) */}
+                    <div>
+                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
+                        Player Groups & Assignments
+                      </label>
+                      <textarea
+                        value={ex.playerGroups || ''}
+                        onChange={(e) => updateExercise(ex.id, { playerGroups: e.target.value })}
+                        rows={2}
+                        placeholder="e.g., Group A (Blue): Sophia, Valeria, Marta. Group B (Yellow): Carmen, Irene, Andrea."
+                        className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:resize-none print:p-0 print:border-none print:leading-relaxed"
                       />
                     </div>
                   </div>

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { getDefaultSession, getEmptySession } from './defaultSession';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
-import { GroupsSection } from './components/GroupsSection';
 import { ControlPanel } from './components/ControlPanel';
 import { TrainingSession, Exercise, PlayerGroup } from './types';
 import { ShieldCheck, Info, Clipboard } from 'lucide-react';
@@ -15,6 +14,22 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
+          // Normalize old titles to clean English names
+          if (parsed.warmUp) {
+            if (parsed.warmUp.title === 'Warm-up / Activation Block' || parsed.warmUp.title === 'Warm-up / Calentamiento (Activación)') {
+              parsed.warmUp.title = 'Warm Up';
+            }
+          }
+          if (parsed.mainPart) {
+            if (parsed.mainPart.title === 'Main Block (Tactical Application)' || parsed.mainPart.title === 'Parte Principal (Táctica / Aplicación)') {
+              parsed.mainPart.title = 'Main Part';
+            }
+          }
+          if (parsed.coolDown) {
+            if (parsed.coolDown.title === 'Cool Down / Recovery' || parsed.coolDown.title === 'Cool Down / Vuelta a la Calma') {
+              parsed.coolDown.title = 'Cool Down';
+            }
+          }
           return parsed;
         }
       } catch (e) {
@@ -79,14 +94,14 @@ export default function App() {
   };
 
   const handleClearSession = () => {
-    if (confirm('¿Estás seguro de que quieres limpiar toda la hoja? Se borrarán todos los ejercicios y textos.')) {
+    if (confirm('Are you sure you want to clear the entire session? This will delete all exercises and text.')) {
       setSession(getEmptySession());
       setExpandedExercises({});
     }
   };
 
   const handleRestoreDemo = () => {
-    if (confirm('¿Quieres restaurar la sesión de entrenamiento demo con datos de ejemplo? Esto reemplazará tu entreno actual.')) {
+    if (confirm('Are you sure you want to restore the demo training session? This will overwrite your current work.')) {
       setSession(getDefaultSession());
       setExpandedExercises({});
     }
@@ -129,9 +144,9 @@ export default function App() {
             <Info className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-xs font-display font-black tracking-wider uppercase text-emerald-800">Diseñador Profesional de Sesiones U17</h3>
+            <h3 className="text-xs font-display font-black tracking-wider uppercase text-emerald-800">Professional U17 Session Designer</h3>
             <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
-              Completa los datos de la sesión, añade gráficos interactivos o arrastra tus propias pizarras tácticas. Al terminar, usa el botón <strong className="text-emerald-700 font-bold">Imprimir / PDF</strong> para obtener una hoja perfectamente paginada para llevar al campo o compartir en formato digital.
+              Fill in the session details, select tactical diagrams or upload your own diagrams. When finished, use the <strong className="text-emerald-700 font-bold">Print / PDF</strong> action to generate a compact, beautifully styled sheet to bring to the pitch or share digitally.
             </p>
             <div className="mt-3 flex items-center space-x-3">
               <button
@@ -139,7 +154,7 @@ export default function App() {
                 onClick={() => handleToggleAll(true)}
                 className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 hover:text-emerald-800 cursor-pointer"
               >
-                Expandir todos los ejercicios
+                Expand all exercises
               </button>
               <span className="text-slate-300 text-[10px]">|</span>
               <button
@@ -147,7 +162,7 @@ export default function App() {
                 onClick={() => handleToggleAll(false)}
                 className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 hover:text-emerald-800 cursor-pointer"
               >
-                Colapsar todos los ejercicios
+                Collapse all exercises
               </button>
             </div>
           </div>
@@ -186,27 +201,20 @@ export default function App() {
             toggleExpand={toggleExpand}
           />
 
-          {/* Section: Groups & Materials */}
-          <GroupsSection 
-            session={session}
-            onChangeGroups={handleUpdateGroups}
-            onChangeMaterials={handleUpdateMaterials}
-          />
-
         </main>
 
         {/* Print-Only Professional Document Footer */}
         <footer className="hidden print:grid grid-cols-2 gap-8 mt-12 pt-8 border-t-2 border-slate-200">
           <div>
             <div className="border-b border-slate-300 h-10 w-full mb-1"></div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Firma Entrenador Principal</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Head Coach Signature</p>
           </div>
           <div>
             <div className="border-b border-slate-300 h-10 w-full mb-1"></div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Firma Ayudante / Staff Técnico</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Assistant Coach Signature</p>
           </div>
           <div className="col-span-2 text-center text-[9px] text-slate-400 mt-4">
-            Sesión de Entrenamiento creada con <span className="font-semibold text-slate-600">U17 Training Sessions Planner</span>. Autorizado para uso deportivo del staff técnico del club.
+            Training Session created with <span className="font-semibold text-slate-600">U17 Training Sessions Planner</span>. Authorized for official club coaching staff use.
           </div>
         </footer>
 
