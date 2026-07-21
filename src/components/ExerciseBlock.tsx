@@ -247,7 +247,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
               {/* Exercise Card Titlebar */}
               <div 
                 onClick={() => toggleExpand(ex.id)}
-                className="bg-slate-50/80 px-4 py-3.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 cursor-pointer select-none hover:bg-slate-100/70 print:bg-slate-100 print:border-slate-300 print:py-1.5 print:px-3"
+                className={`bg-slate-50/80 px-4 py-3.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 cursor-pointer select-none hover:bg-slate-100/70 print:bg-slate-100 print:border-slate-300 print:py-1.5 print:px-3 ${!ex.image ? 'print:border-b-0' : ''}`}
               >
                 <div className="flex items-center space-x-3 flex-1 min-w-0 mr-4">
                   {/* Order indicator */}
@@ -267,6 +267,22 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
                 {/* Badges and actions */}
                 <div className="flex items-center space-x-2.5 shrink-0">
+                  {/* Editable Duration field inside the header */}
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center space-x-1.5 bg-slate-100/85 border border-slate-200/80 px-2 py-1 rounded-xl focus-within:border-emerald-500/50 focus-within:bg-white transition-all print:bg-transparent print:border-none print:p-0 shrink-0"
+                    title="Duration"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-slate-400 print:text-black shrink-0" />
+                    <input
+                      type="text"
+                      value={ex.duration}
+                      onChange={(e) => updateExercise(ex.id, { duration: e.target.value })}
+                      placeholder="15 min"
+                      className="w-14 bg-transparent text-xs font-extrabold text-slate-700 focus:outline-none text-center print:text-black print:text-xs"
+                    />
+                  </div>
+
                   {/* Moment badge */}
                   <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md border ${getMomentBadgeStyles(ex.gameMoment)} print:text-black print:bg-transparent print:border-black/20`}>
                     {ex.gameMoment}
@@ -315,7 +331,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
               {/* Collapsible Content */}
               {isExpanded && (
-                <div className="p-4 md:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 print:grid-cols-12 print:gap-3 print:p-3 bg-white">
+                <div className={`p-4 md:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 print:grid-cols-12 print:gap-3 print:p-3 bg-white ${!ex.image ? 'print:hidden' : ''}`}>
                   
                   {/* Left col: Image / tactical drawer (Span 4) */}
                   <div className="md:col-span-4 space-y-2.5 print:col-span-4">
@@ -515,35 +531,19 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       </div>
                     </div>
 
-                    {/* Metadata: Duration / Space */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 print:grid-cols-2 print:gap-1.5">
-                      <div>
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
-                          <Clock className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Duration
-                        </label>
-                        <input
-                          type="text"
-                          value={ex.duration}
-                          onChange={(e) => updateExercise(ex.id, { duration: e.target.value })}
-                          placeholder="e.g., 15 mins"
-                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
-                          <Maximize2 className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Pitch Size
-                        </label>
-                        <input
-                          type="text"
-                          value={ex.dimensions}
-                          onChange={(e) => updateExercise(ex.id, { dimensions: e.target.value })}
-                          placeholder="e.g., 40x30m"
-                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
-                        />
-                      </div>
+                    {/* Metadata: Pitch Size */}
+                    <div>
+                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
+                        <Maximize2 className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
+                        Pitch Size
+                      </label>
+                      <input
+                        type="text"
+                        value={ex.dimensions}
+                        onChange={(e) => updateExercise(ex.id, { dimensions: e.target.value })}
+                        placeholder="e.g., 40x30m"
+                        className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
+                      />
                     </div>
 
                     {/* Detailed Description */}
