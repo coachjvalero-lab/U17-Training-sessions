@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Calendar, Clock, Trophy, Target, Shield, Upload, X } from 'lucide-react';
+import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity } from 'lucide-react';
 import { TrainingSession } from '../types';
 
 interface HeaderSectionProps {
@@ -108,7 +108,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 print:grid-cols-3 print:gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
             {/* Fecha */}
             <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
               <Calendar className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
@@ -153,6 +153,28 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
                   placeholder="Session 1"
                   className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-black print:text-sm"
                 />
+              </div>
+            </div>
+
+            {/* Microcilo Day */}
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
+              <Activity className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
+              <div className="w-full">
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Microcycle Day</label>
+                <select
+                  id="header-microcycle-day"
+                  value={session.microcycleDay || ''}
+                  onChange={(e) => onChange({ microcycleDay: e.target.value })}
+                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer print:text-black print:text-sm print:font-bold"
+                >
+                  <option value="">Select Day</option>
+                  <option value="-4">-4</option>
+                  <option value="-3">-3</option>
+                  <option value="-2">-2</option>
+                  <option value="-1">-1</option>
+                  <option value="+1">+1</option>
+                  <option value="+2">+2</option>
+                </select>
               </div>
             </div>
           </div>

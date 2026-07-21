@@ -30,6 +30,11 @@ export default function App() {
               parsed.coolDown.title = 'Cool Down';
             }
           }
+          if (parsed.microcycleDay === 'MD-2') {
+            parsed.microcycleDay = '-2';
+          } else if (parsed.microcycleDay === 'MD-1') {
+            parsed.microcycleDay = '-1';
+          }
           return parsed;
         }
       } catch (e) {

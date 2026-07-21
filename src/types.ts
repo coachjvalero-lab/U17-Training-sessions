@@ -32,6 +32,7 @@ export interface TrainingSession {
   date: string;
   time: string;
   sessionNumber: string;
+  microcycleDay: string; // e.g., "MD-3" or "Tuesday"
   mainObjective: string;
   teamLogo?: string; // base64
   warmUp: TrainingBlock;

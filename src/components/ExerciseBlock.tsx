@@ -14,6 +14,61 @@ interface ExerciseBlockProps {
 
 const GAME_MOMENTS: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
 
+const TACTICAL_SUB_MOMENTS = [
+  'construction',
+  'creation',
+  'finishing',
+  'loss',
+  'defensive recovery',
+  'counterattack defense',
+  'defending construction',
+  'defending creation',
+  'defending finishing',
+  'regain',
+  'counterattack',
+  'ball possession valuation'
+];
+
+const COACH_NAMES = ['Wilian', 'Marta', 'Joao', 'Javi', 'Shouq', 'Mariana'];
+
+interface CoachRoleEntry {
+  name: string;
+  role: string;
+}
+
+const parseCoachRolesList = (coachRolesStr: string): CoachRoleEntry[] => {
+  if (!coachRolesStr || coachRolesStr.trim() === '') {
+    return [];
+  }
+  
+  // Try splitting by semicolon first, fallback to newlines
+  let items: string[] = [];
+  if (coachRolesStr.includes(';')) {
+    items = coachRolesStr.split(';');
+  } else if (coachRolesStr.includes('\n')) {
+    items = coachRolesStr.split('\n');
+  } else {
+    items = [coachRolesStr];
+  }
+  
+  return items.map(item => {
+    const colonIndex = item.indexOf(':');
+    if (colonIndex === -1) {
+      return { name: COACH_NAMES[0], role: item.trim() };
+    }
+    const name = item.substring(0, colonIndex).trim();
+    const role = item.substring(colonIndex + 1).trim();
+    return { name, role };
+  }).filter(entry => entry.name !== '');
+};
+
+const serializeCoachRolesList = (entries: CoachRoleEntry[]): string => {
+  return entries
+    .filter(entry => entry.name.trim() !== '')
+    .map(entry => `${entry.name.trim()}: ${entry.role.trim()}`)
+    .join('; ');
+};
+
 // Standard soccer template graphics to load instantly
 const FIELD_TEMPLATES = {
   field: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%"><rect width="400" height="300" fill="%2315803d" /><rect x="10" y="10" width="380" height="280" fill="none" stroke="white" stroke-width="2" /><line x1="200" y1="10" x2="200" y2="290" stroke="white" stroke-width="2" /><circle cx="200" cy="150" r="40" fill="none" stroke="white" stroke-width="2" /><circle cx="200" cy="150" r="3" fill="white" /><rect x="10" y="70" width="50" height="160" fill="none" stroke="white" stroke-width="2" /><rect x="10" y="110" width="15" height="80" fill="none" stroke="white" stroke-width="2" /><rect x="340" y="70" width="50" height="160" fill="none" stroke="white" stroke-width="2" /><rect x="375" y="110" width="15" height="80" fill="none" stroke="white" stroke-width="2" /></svg>`,
@@ -29,17 +84,42 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
 
+  const handleCoachRoleChange = (exId: string, index: number, field: 'name' | 'role', val: string, currentCoachRolesStr: string) => {
+    const roles = parseCoachRolesList(currentCoachRolesStr);
+    if (roles[index]) {
+      roles[index] = { ...roles[index], [field]: val };
+      const serialized = serializeCoachRolesList(roles);
+      updateExercise(exId, { coachRoles: serialized });
+    }
+  };
+
+  const handleAddCoachRole = (exId: string, currentCoachRolesStr: string) => {
+    const roles = parseCoachRolesList(currentCoachRolesStr);
+    const assignedNames = roles.map(r => r.name);
+    const availableName = COACH_NAMES.find(name => !assignedNames.includes(name)) || COACH_NAMES[0];
+    roles.push({ name: availableName, role: '' });
+    const serialized = serializeCoachRolesList(roles);
+    updateExercise(exId, { coachRoles: serialized });
+  };
+
+  const handleRemoveCoachRole = (exId: string, index: number, currentCoachRolesStr: string) => {
+    const roles = parseCoachRolesList(currentCoachRolesStr);
+    roles.splice(index, 1);
+    const serialized = serializeCoachRolesList(roles);
+    updateExercise(exId, { coachRoles: serialized });
+  };
+
   const addExercise = () => {
     const newEx: Exercise = {
       id: 'ex-' + Date.now(),
       name: 'New Exercise',
       gameMoment: 'Other',
-      subMoment: '',
+      subMoment: 'construction',
       description: '',
       duration: '15 min',
       dimensions: '30x20m',
-      coachRoles: 'Coach A: Referee, Coach B: Direct Feedback',
-      image: FIELD_TEMPLATES.field,
+      coachRoles: '',
+      image: '',
       playerGroups: ''
     };
     onChange([...block.exercises, newEx]);
@@ -169,7 +249,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 onClick={() => toggleExpand(ex.id)}
                 className="bg-slate-50/80 px-4 py-3.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 cursor-pointer select-none hover:bg-slate-100/70 print:bg-slate-100 print:border-slate-300 print:py-1.5 print:px-3"
               >
-                <div className="flex items-center space-x-3 max-w-[70%]">
+                <div className="flex items-center space-x-3 flex-1 min-w-0 mr-4">
                   {/* Order indicator */}
                   <span className="w-6 h-6 flex items-center justify-center rounded-lg bg-slate-900 text-[11px] font-display font-black text-emerald-400 print:bg-slate-300 print:text-black shrink-0">
                     {idx + 1}
@@ -180,7 +260,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     value={ex.name}
                     onClick={(e) => e.stopPropagation()} // don't toggle
                     onChange={(e) => updateExercise(ex.id, { name: e.target.value })}
-                    className="font-display font-bold text-slate-900 bg-transparent border-b border-transparent focus:border-slate-300 focus:outline-none focus:bg-white px-2 py-0.5 rounded text-sm sm:text-base print:text-sm print:text-black print:font-bold print:p-0"
+                    className="w-full flex-1 min-w-0 font-display font-bold text-slate-900 bg-transparent border-b border-transparent focus:border-slate-300 focus:outline-none focus:bg-white px-2 py-0.5 rounded text-sm sm:text-base print:text-sm print:text-black print:font-bold print:p-0"
                     placeholder="Exercise Title"
                   />
                 </div>
@@ -311,33 +391,91 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       )}
                     </div>
 
-                    {/* Pre-made tactical templates button picker (Hidden in print) */}
-                    <div className="flex flex-wrap items-center gap-1.5 print:hidden">
-                      <span className="text-[9px] font-extrabold text-slate-400 flex items-center uppercase tracking-wide">
-                        <Sparkles className="w-2.5 h-2.5 mr-0.5 text-emerald-500" />
-                        Templates:
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateExercise(ex.id, { image: FIELD_TEMPLATES.field })}
-                        className="text-[9px] bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-slate-500 border border-slate-200/80 transition-colors"
-                      >
-                        Full Pitch
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateExercise(ex.id, { image: FIELD_TEMPLATES.halfField })}
-                        className="text-[9px] bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-slate-500 border border-slate-200/80 transition-colors"
-                      >
-                        Half Pitch
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateExercise(ex.id, { image: FIELD_TEMPLATES.rondo })}
-                        className="text-[9px] bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 font-bold uppercase tracking-wider px-2 py-1 rounded-lg text-slate-500 border border-slate-200/80 transition-colors"
-                      >
-                        Rondo
-                      </button>
+                    {/* Coaching Roles section underneath the diagram (as requested by user) */}
+                    <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-2.5 print:bg-transparent print:border-none print:p-0">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5 mb-1 print:border-none">
+                        <div className="flex items-center space-x-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5 text-slate-500 print:text-black shrink-0" />
+                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest print:text-black">
+                            Coaches' Roles
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Columns Headers */}
+                      {parseCoachRolesList(ex.coachRoles || '').length > 0 && (
+                        <div className="grid grid-cols-12 gap-2 px-2 text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">
+                          <div className="col-span-4">Coach</div>
+                          <div className="col-span-8">Role</div>
+                        </div>
+                      )}
+
+                      {/* Interactive list for editing on screen */}
+                      <div className="space-y-2 print:hidden">
+                        {parseCoachRolesList(ex.coachRoles || '').map((roleEntry, index) => (
+                          <div key={index} className="grid grid-cols-12 gap-2 items-center bg-white/60 border border-slate-100 p-2 rounded-xl shadow-sm transition-all hover:bg-white hover:border-slate-200">
+                            <div className="col-span-4 min-w-0">
+                              <select
+                                value={roleEntry.name}
+                                onChange={(e) => handleCoachRoleChange(ex.id, index, 'name', e.target.value, ex.coachRoles || '')}
+                                className="w-full text-xs font-bold bg-slate-50 border border-slate-200/80 px-1.5 py-1 rounded-lg focus:outline-none focus:border-emerald-500 cursor-pointer overflow-hidden text-ellipsis"
+                              >
+                                {!COACH_NAMES.includes(roleEntry.name) && (
+                                  <option value={roleEntry.name}>{roleEntry.name}</option>
+                                )}
+                                {COACH_NAMES.map(name => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="col-span-8 flex items-center space-x-1.5 min-w-0">
+                              <input
+                                type="text"
+                                value={roleEntry.role}
+                                onChange={(e) => handleCoachRoleChange(ex.id, index, 'role', e.target.value, ex.coachRoles || '')}
+                                placeholder="Role / responsibilities..."
+                                className="w-full text-xs font-semibold bg-transparent border-b border-slate-200/60 focus:border-emerald-500 focus:outline-none px-1 py-1 min-w-0"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCoachRole(ex.id, index, ex.coachRoles || '')}
+                                className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors shrink-0"
+                                title="Delete coach role"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {parseCoachRolesList(ex.coachRoles || '').length === 0 && (
+                          <div className="text-center py-4 bg-white/40 border border-dashed border-slate-200 rounded-xl">
+                            <p className="text-[10px] font-bold text-slate-400">No coaches' roles assigned yet</p>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddCoachRole(ex.id, ex.coachRoles || '')}
+                          className="w-full flex items-center justify-center space-x-1 py-2 border border-dashed border-slate-300 hover:border-emerald-500/50 hover:bg-emerald-50/30 rounded-xl text-[10px] font-bold text-slate-500 hover:text-emerald-600 transition-all uppercase tracking-wider"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Coach Role</span>
+                        </button>
+                      </div>
+
+                      {/* Display list for print view */}
+                      <div className="hidden print:block space-y-1">
+                        {parseCoachRolesList(ex.coachRoles || '').map((roleEntry, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 text-xs text-slate-800 py-0.5 border-b border-slate-100/50">
+                            <div className="col-span-4 font-bold">{roleEntry.name}</div>
+                            <div className="col-span-8 font-semibold text-slate-600">{roleEntry.role || '—'}</div>
+                          </div>
+                        ))}
+                        {parseCoachRolesList(ex.coachRoles || '').length === 0 && (
+                          <div className="text-xs italic text-slate-400">No coaches' roles assigned</div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -365,18 +503,20 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
                           Tactical Sub-moment
                         </label>
-                        <input
-                          type="text"
+                        <select
                           value={ex.subMoment}
                           onChange={(e) => updateExercise(ex.id, { subMoment: e.target.value })}
-                          placeholder="e.g., Counter-pressing, Low block"
-                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
-                        />
+                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none print:font-bold"
+                        >
+                          {TACTICAL_SUB_MOMENTS.map(sub => (
+                            <option key={sub} value={sub}>{sub}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
-                    {/* Metadata: Duration / Space / Coach Roles */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 print:grid-cols-3 print:gap-1.5">
+                    {/* Metadata: Duration / Space */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 print:grid-cols-2 print:gap-1.5">
                       <div>
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
                           <Clock className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
@@ -402,20 +542,6 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           onChange={(e) => updateExercise(ex.id, { dimensions: e.target.value })}
                           placeholder="e.g., 40x30m"
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-0 print:border-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black flex items-center">
-                          <ShieldAlert className="w-3.5 h-3.5 mr-1 text-slate-400 print:hidden" />
-                          Staff Roles
-                        </label>
-                        <textarea
-                          value={ex.coachRoles}
-                          onChange={(e) => updateExercise(ex.id, { coachRoles: e.target.value })}
-                          rows={2}
-                          placeholder="Coach A: Referee, Coach B: Feedback"
-                          className="w-full text-xs font-bold bg-white border border-slate-200 px-3 py-1 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all resize-y print:resize-none print:p-0 print:border-none"
                         />
                       </div>
                     </div>
