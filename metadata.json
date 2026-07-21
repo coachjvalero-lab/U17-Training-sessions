@@ -1,0 +1,6 @@
+{
+  "name": "U17 Training Sessions",
+  "description": "Profesional training session planner for sports coaching staff with PDF printing, local persistence, and JSON sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
