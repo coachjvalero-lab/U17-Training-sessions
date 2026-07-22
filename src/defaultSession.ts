@@ -172,7 +172,35 @@ export const getDefaultSession = (): TrainingSession => {
         }
       ]
     },
-    playerGroups: [],
+    squadRoster: [
+      'Rimah', 'Rital', 'Lara', 'Batul', 'Sadeem', 'Alba', 
+      'Ghala', 'Auda', 'Lateen', 'Hedaya', 'Ghazal', 'Remas', 
+      'Mayar', 'Maya', 'Asma', 'Rasil', 'Rema', 'Sara', 
+      'Khulud', 'Ransy', 'Jalila', 'Ratil'
+    ],
+    playerGroups: [
+      {
+        id: 'group-default-1',
+        groupNumber: 1,
+        bibColor: '#2563eb',
+        name: 'Grupo 1 (Peto Azul)',
+        players: 'Rimah, Rital, Lara, Batul, Sadeem, Alba, Ghala, Auda'
+      },
+      {
+        id: 'group-default-2',
+        groupNumber: 2,
+        bibColor: '#eab308',
+        name: 'Grupo 2 (Peto Amarillo)',
+        players: 'Lateen, Hedaya, Ghazal, Remas, Mayar, Maya, Asma'
+      },
+      {
+        id: 'group-default-3',
+        groupNumber: 3,
+        bibColor: '#ef4444',
+        name: 'Grupo 3 (Peto Rojo)',
+        players: 'Rasil, Rema, Sara, Khulud, Ransy, Jalila, Ratil'
+      }
+    ],
     fitnessWarmUp: {
       id: 'warmup-block-fitness',
       title: 'Warm Up',

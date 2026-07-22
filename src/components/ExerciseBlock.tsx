@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
-  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2
+  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2, Users
 } from 'lucide-react';
-import { Exercise, GameMoment, TrainingBlock } from '../types';
+import { Exercise, GameMoment, TrainingBlock, PlayerGroup } from '../types';
 import { processUploadedImageFile } from '../utils/heic';
 import { SmartImage } from './SmartImage';
 
@@ -12,6 +12,7 @@ interface ExerciseBlockProps {
   onChange: (updatedExercises: Exercise[]) => void;
   expandedExercises: Record<string, boolean>;
   toggleExpand: (id: string) => void;
+  sessionGroups?: PlayerGroup[];
 }
 
 const GAME_MOMENTS: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
@@ -86,10 +87,22 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   block, 
   onChange, 
   expandedExercises, 
-  toggleExpand 
+  toggleExpand,
+  sessionGroups
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+
+  const handleCopySessionGroups = (exId: string) => {
+    if (!sessionGroups || sessionGroups.length === 0) return;
+    const formatted = sessionGroups
+      .map(g => {
+        const pList = g.players ? g.players.split(',').map(p => p.trim()).filter(Boolean).join(', ') : 'Sin jugadoras';
+        return `${g.name || `Grupo ${g.groupNumber}`}: ${pList}`;
+      })
+      .join('\n');
+    updateExercise(exId, { playerGroups: formatted });
+  };
 
   const handleCoachRoleChange = (exId: string, index: number, field: 'name' | 'role', val: string, currentCoachRolesStr: string) => {
     const roles = parseCoachRolesList(currentCoachRolesStr);
@@ -594,14 +607,27 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
                     {/* Player Groups (Moved inside each exercise block) */}
                     <div>
-                      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-black">
-                        Player Groups & Assignments
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block print:text-black">
+                          Player Groups & Assignments
+                        </label>
+                        {sessionGroups && sessionGroups.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopySessionGroups(ex.id)}
+                            className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg transition-all flex items-center space-x-1 print:hidden"
+                            title="Copiar los grupos de jugadoras configurados en la sesión"
+                          >
+                            <Users className="w-3 h-3" />
+                            <span>Aplicar Grupos de la Sesión</span>
+                          </button>
+                        )}
+                      </div>
                       <textarea
                         value={ex.playerGroups || ''}
                         onChange={(e) => updateExercise(ex.id, { playerGroups: e.target.value })}
                         rows={2}
-                        placeholder="e.g., Group A (Blue): Sophia, Valeria, Marta. Group B (Yellow): Carmen, Irene, Andrea."
+                        placeholder="e.g., Grupo 1 (Peto Azul): Rimah, Rital, Lara... Grupo 2 (Peto Amarillo): Batul, Sadeem..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:resize-none print:p-0 print:border-none print:leading-relaxed"
                       />
                     </div>

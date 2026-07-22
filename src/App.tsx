@@ -3,6 +3,7 @@ import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
+import { PlayerGroupsSection } from './components/PlayerGroupsSection';
 import { ControlPanel } from './components/ControlPanel';
 import { TrainingSession, Exercise, PlayerGroup } from './types';
 import { 
@@ -348,6 +349,13 @@ export default function App() {
         };
       }
     });
+  };
+
+  const handleUpdateRoster = (squadRoster: string[]) => {
+    setSession(prev => ({
+      ...prev,
+      squadRoster
+    }));
   };
 
   const handleUpdateMaterials = (materialsNeeded: string) => {
@@ -1021,12 +1029,21 @@ export default function App() {
             onChange={handleUpdateSession}
           />
 
+          {/* Section: Player Groups Manager */}
+          <PlayerGroupsSection
+            groups={activePlayerGroups}
+            squadRoster={session.squadRoster}
+            onChangeGroups={handleUpdateGroups}
+            onChangeRoster={handleUpdateRoster}
+          />
+
           {/* Section: Warm-Up Block */}
           <ExerciseBlock 
             block={activeWarmUp}
             onChange={(exs) => handleUpdateExercises('warmUp', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
+            sessionGroups={activePlayerGroups}
           />
 
           {/* Section: Main Part Block */}
@@ -1035,6 +1052,7 @@ export default function App() {
             onChange={(exs) => handleUpdateExercises('mainPart', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
+            sessionGroups={activePlayerGroups}
           />
 
           {/* Section: Cool Down Block */}
@@ -1043,6 +1061,7 @@ export default function App() {
             onChange={(exs) => handleUpdateExercises('coolDown', exs)}
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
+            sessionGroups={activePlayerGroups}
           />
 
           {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}

@@ -24,8 +24,9 @@ export interface TrainingBlock {
 export interface PlayerGroup {
   id: string;
   groupNumber: number;
-  bibColor: string; // HEX color or color class
+  bibColor: string; // HEX color or color class e.g. #2563eb
   players: string; // comma separated or text list
+  name?: string; // e.g., "Peto Azul", "Grupo A"
 }
 
 export interface TrainingSession {
@@ -37,6 +38,7 @@ export interface TrainingSession {
   microcycleDay: string; // e.g., "MD-3" or "Tuesday"
   mainObjective: string;
   teamLogo?: string; // base64
+  squadRoster?: string[]; // Custom list of squad players
   warmUp: TrainingBlock;
   mainPart: TrainingBlock;
   coolDown: TrainingBlock;
