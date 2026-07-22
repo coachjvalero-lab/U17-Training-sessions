@@ -267,16 +267,38 @@ export default function App() {
     setExpandedExercises(expanded);
   };
 
+  const getActiveLogo = () => {
+    let savedLogo = '';
+    try {
+      savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
+    } catch (e) {}
+
+    if (session && session.teamLogo && !session.teamLogo.includes('%230f172a') && !session.teamLogo.includes('COACH')) {
+      return session.teamLogo;
+    }
+    return savedLogo;
+  };
+
   const handleClearSession = () => {
     if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for both football and fitness sections.`)) {
-      setSession(getEmptySession());
+      const activeLogo = getActiveLogo();
+      const empty = getEmptySession();
+      setSession({
+        ...empty,
+        teamLogo: activeLogo
+      });
       setExpandedExercises({});
     }
   };
 
   const handleRestoreDemo = () => {
     if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for both football and fitness sections.`)) {
-      setSession(getDefaultSession());
+      const activeLogo = getActiveLogo();
+      const demo = getDefaultSession();
+      setSession({
+        ...demo,
+        teamLogo: activeLogo
+      });
       setExpandedExercises({});
     }
   };
@@ -301,12 +323,14 @@ export default function App() {
     
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
+    const activeLogo = getActiveLogo();
 
     const newSession: TrainingSession = {
       ...session,
       id: newId,
       sessionNumber: newNumber,
-      date: today
+      date: today,
+      teamLogo: activeLogo || session.teamLogo
     };
 
     try {
@@ -325,6 +349,7 @@ export default function App() {
     const newNumber = prompt('Enter new session number:', '1');
     if (newNumber === null) return;
 
+    const activeLogo = getActiveLogo();
     const empty = getEmptySession();
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
@@ -334,7 +359,8 @@ export default function App() {
       id: newId,
       sessionNumber: newNumber,
       date: today,
-      teamName: 'U17 Women Al Ula'
+      teamName: 'U17 Women Al Ula',
+      teamLogo: activeLogo
     };
 
     try {

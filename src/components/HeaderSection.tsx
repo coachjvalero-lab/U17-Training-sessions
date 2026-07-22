@@ -78,7 +78,11 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        onChange({ teamLogo: reader.result as string });
+        const logoData = reader.result as string;
+        try {
+          localStorage.setItem('u17_uploaded_team_logo', logoData);
+        } catch (e) {}
+        onChange({ teamLogo: logoData });
       };
       reader.readAsDataURL(file);
     }
@@ -86,18 +90,31 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
 
   const removeLogo = (e: React.MouseEvent) => {
     e.stopPropagation();
+    try {
+      localStorage.removeItem('u17_uploaded_team_logo');
+    } catch (e) {}
     onChange({ teamLogo: '' });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Automatically upgrade/fallback to the official Al Ula SC badge if the logo is empty or is the legacy soccer ball badge
-  const isOldOrEmpty = !session.teamLogo || 
-    session.teamLogo.includes('%230f172a') || 
-    session.teamLogo.includes('%230f5981') || 
-    session.teamLogo.includes('COACH') ||
-    session.teamLogo.includes('default-u17');
+  const savedLogo = (() => {
+    try {
+      return localStorage.getItem('u17_uploaded_team_logo') || '';
+    } catch (e) {
+      return '';
+    }
+  })();
 
-  const logoSrc = isOldOrEmpty ? DEFAULT_CLUB_BADGE : session.teamLogo;
+  const currentLogo = session.teamLogo || savedLogo;
+
+  // Automatically upgrade/fallback to the official Al Ula SC badge if the logo is empty or is the legacy soccer ball badge
+  const isOldOrEmpty = !currentLogo || 
+    currentLogo.includes('%230f172a') || 
+    currentLogo.includes('%230f5981') || 
+    currentLogo.includes('COACH') ||
+    currentLogo.includes('default-u17');
+
+  const logoSrc = isOldOrEmpty ? DEFAULT_CLUB_BADGE : currentLogo;
 
   return (
     <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-4 print:rounded-none">

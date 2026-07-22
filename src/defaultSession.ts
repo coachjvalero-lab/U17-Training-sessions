@@ -76,6 +76,11 @@ export const getDefaultSession = (): TrainingSession => {
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   
+  let savedLogo = '';
+  try {
+    savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
+  } catch (e) {}
+
   return {
     id: 'default-u17-session',
     teamName: 'U17 Women Al Ula',
@@ -84,7 +89,7 @@ export const getDefaultSession = (): TrainingSession => {
     sessionNumber: '42',
     microcycleDay: '-2',
     mainObjective: 'High collective press after losing the ball in the middle block and fast transition from attack to defense.',
-    teamLogo: '',
+    teamLogo: savedLogo,
     materialsNeeded: '20 Cones (10 Yellow, 10 Green), 12 Bibs (6 Blue, 6 Yellow), 15 Regulation Soccer Balls, 2 Portable Mini Goals, Stopwatch, Whistle.',
     warmUp: {
       id: 'warmup-block',
@@ -233,6 +238,11 @@ export const getEmptySession = (): TrainingSession => {
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   
+  let savedLogo = '';
+  try {
+    savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
+  } catch (e) {}
+
   return {
     id: 'empty-session-' + Date.now(),
     teamName: 'U17 Women Al Ula',
@@ -241,7 +251,7 @@ export const getEmptySession = (): TrainingSession => {
     sessionNumber: '1',
     microcycleDay: '-1',
     mainObjective: '',
-    teamLogo: '',
+    teamLogo: savedLogo,
     materialsNeeded: '',
     warmUp: {
       id: 'warmup-block',
