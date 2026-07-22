@@ -34,28 +34,62 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([u8arr], { type: mime });
 }
 
-export async function convertHeicBlobToJpegDataUrl(blob: Blob): Promise<string> {
+/**
+ * Attempts native browser canvas conversion (e.g. Safari / macOS / iOS)
+ */
+async function convertViaCanvas(blob: Blob): Promise<string> {
   try {
-    const result = await heic2any({
-      blob,
+    if (typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0);
+        return canvas.toDataURL('image/jpeg', 0.85);
+      }
+    }
+  } catch {
+    // Native canvas conversion not supported for this blob format
+  }
+  return '';
+}
+
+export async function convertHeicBlobToJpegDataUrl(blob: Blob): Promise<string> {
+  // 1. Try native browser conversion first (instant on Safari/iOS)
+  const canvasResult = await convertViaCanvas(blob);
+  if (canvasResult) {
+    return canvasResult;
+  }
+
+  // 2. Try heic2any WASM library with normalized blob & multiple: false
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const normalizedBlob = new Blob([arrayBuffer], { type: 'image/heic' });
+
+    const result = await (heic2any as any)({
+      blob: normalizedBlob,
       toType: 'image/jpeg',
       quality: 0.85,
+      multiple: false,
     });
+
     const jpegBlob = Array.isArray(result) ? result[0] : result;
-    return new Promise<string>((resolve, reject) => {
+    return await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
           resolve(reader.result);
         } else {
-          reject(new Error('Failed to read converted image as Data URL'));
+          resolve('');
         }
       };
-      reader.onerror = () => reject(reader.error);
+      reader.onerror = () => resolve('');
       reader.readAsDataURL(jpegBlob);
     });
-  } catch (err) {
-    console.warn('HEIC conversion warning (falling back to standard reader):', err);
+  } catch {
+    // 3. Fallback to reading standard data URL silently without throwing warnings
     return new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -75,9 +109,11 @@ export async function processUploadedImageFile(file: File): Promise<string> {
   if (isHeicFile(file)) {
     try {
       const converted = await convertHeicBlobToJpegDataUrl(file);
-      if (converted) return converted;
+      if (converted && !converted.startsWith('data:image/heic')) {
+        return converted;
+      }
     } catch {
-      // Fallback to standard reader below
+      // Fallback below
     }
   }
 
@@ -104,8 +140,8 @@ export async function convertHeicDataUrlToJpeg(dataUrl: string): Promise<string>
     const blob = dataUrlToBlob(dataUrl);
     const converted = await convertHeicBlobToJpegDataUrl(blob);
     return converted || dataUrl;
-  } catch (err) {
-    console.warn('Could not parse HEIC data URL, returning original:', err);
+  } catch {
     return dataUrl;
   }
 }
+
