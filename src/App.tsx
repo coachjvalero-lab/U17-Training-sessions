@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
@@ -21,7 +21,10 @@ import {
   Plus, 
   RefreshCw, 
   HelpCircle,
-  Database
+  Database,
+  Share2,
+  Check,
+  Link
 } from 'lucide-react';
 
 export default function App() {
@@ -83,25 +86,104 @@ export default function App() {
   const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>([]);
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Subscribe to ALL unified sessions from Cloud Firestore
+  // Refs to avoid infinite re-save loops between cloud and local state
+  const isRemoteUpdateRef = useRef(false);
+  const hasInitialCloudLoadedRef = useRef(false);
+
+  // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load
   useEffect(() => {
     setIsLoadingCloud(true);
     const unsubscribe = subscribeToSessions((sessions) => {
       setCloudSessions(sessions);
       setIsLoadingCloud(false);
+
+      if (sessions.length > 0) {
+        // Read URL query parameters to see if a specific session ID was shared
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetId = urlParams.get('session');
+
+        let sessionToLoad = targetId 
+          ? sessions.find(s => s.id === targetId) 
+          : undefined;
+
+        // If no target ID or not found in URL, pick the most recently updated session
+        if (!sessionToLoad && !hasInitialCloudLoadedRef.current) {
+          sessionToLoad = sessions[0];
+        }
+
+        if (sessionToLoad) {
+          const localSavedAt = localStorage.getItem('u17_training_session_updatedAt');
+          const localSavedTime = localSavedAt ? Number(localSavedAt) : 0;
+          const cloudTime = sessionToLoad.updatedAt || 0;
+
+          // Load on initial startup OR if URL specified a session ID OR if cloud data is newer
+          if (!hasInitialCloudLoadedRef.current || targetId || cloudTime > localSavedTime) {
+            hasInitialCloudLoadedRef.current = true;
+            
+            const { updatedAt, ...baseSession } = sessionToLoad;
+            const unifiedSession: TrainingSession = {
+              ...baseSession,
+              fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+              fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+              fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+              fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+            };
+
+            isRemoteUpdateRef.current = true;
+            setSession(unifiedSession);
+          }
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
 
-  // Automatically persist the unified session on change
+  // Automatically persist the unified session locally and auto-sync to Cloud Firestore
   useEffect(() => {
     setIsSaving(true);
+    const now = Date.now();
+    
     localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
-    const timer = setTimeout(() => {
+    localStorage.setItem('u17_training_session_updatedAt', String(now));
+
+    // Update URL parameter without reloading page so sharing current URL works out of the box
+    if (session.id && window.history.replaceState) {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('session') !== session.id) {
+        url.searchParams.set('session', session.id);
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+
+    const localTimer = setTimeout(() => {
       setIsSaving(false);
     }, 400);
-    return () => clearTimeout(timer);
+
+    // If change was received from remote Cloud Firestore snapshot, don't re-trigger save
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
+      return () => clearTimeout(localTimer);
+    }
+
+    // Debounced Cloud Sync (Auto-save to Firestore)
+    setIsCloudSaving(true);
+    const cloudTimer = setTimeout(() => {
+      saveSessionToCloud(session)
+        .then(() => {
+          setIsCloudSaving(false);
+        })
+        .catch((err) => {
+          console.error('Auto-save to Cloud failed:', err);
+          setIsCloudSaving(false);
+        });
+    }, 1000);
+
+    return () => {
+      clearTimeout(localTimer);
+      clearTimeout(cloudTimer);
+    };
   }, [session]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
@@ -310,6 +392,17 @@ export default function App() {
     }
   };
 
+  const handleCopyShareLink = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('session', session.id);
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }).catch(() => {
+      alert('Enlace de la sesión: ' + url.toString());
+    });
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedExercises(prev => ({
       ...prev,
@@ -454,7 +547,16 @@ export default function App() {
             <div className="lg:col-span-5 bg-slate-950 p-5 rounded-2xl border border-slate-800/80 flex flex-col justify-between">
               <div className="space-y-4">
                 <div>
-                  <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">Active Workspace Session</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">Active Workspace Session</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      isCloudSaving 
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    }`}>
+                      {isCloudSaving ? '⚡ Guardando...' : '✓ Sincronizado'}
+                    </span>
+                  </div>
                   <h4 className="text-base font-black text-white mt-1">
                     Sesión #{session.sessionNumber || '1'}
                   </h4>
@@ -467,8 +569,27 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed font-medium">
-                  To save edits back to the cloud, use <strong>Save Changes</strong>. To create a brand new training day from this template, click <strong>Save as New Copy</strong>.
+                <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed font-medium space-y-2">
+                  <p>
+                    <strong>Sincronización automática:</strong> Todos los cambios que realizas se guardan automáticamente en la nube en tiempo real.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-900/30"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-200" />
+                        <span>¡Enlace copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-4 h-4" />
+                        <span>Copiar Enlace para Compartir</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
