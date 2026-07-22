@@ -769,20 +769,20 @@ export default function App() {
         </div>
 
         {/* Cloud Database Integration Section - Hidden in Print */}
-        <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-xl print:hidden space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="bg-gradient-to-br from-[#0f5981] via-[#16638f] to-[#1d6fa2] text-white rounded-3xl p-6 border border-[#5ea4c5]/35 shadow-xl print:hidden space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/15">
             <div className="flex items-center space-x-3.5">
-              <div className="p-2.5 bg-[#bc9e74]/15 rounded-xl text-[#bc9e74] border border-[#bc9e74]/25 shrink-0">
-                <Database className="w-5 h-5" />
+              <div className="p-2.5 bg-white/10 rounded-xl text-[#ede9e6] border border-white/20 shrink-0">
+                <Database className="w-5 h-5 text-[#a79078]" />
               </div>
               <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-[#bc9e74] flex items-center gap-1.5">
+                <h3 className="text-sm font-black uppercase tracking-wider text-white flex items-center gap-1.5">
                   <span>Al Ula SC Cloud Library</span>
-                  <span className="bg-[#bc9e74]/10 text-[#bc9e74] text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-[#bc9e74]/20">
+                  <span className="bg-[#a79078]/25 text-[#f4efe8] text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-[#a79078]/40">
                     Real-time
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                <p className="text-xs text-sky-100/80 mt-0.5 font-medium">
                   Any coach can read, edit, or create training sessions. All data is automatically synchronized for everyone.
                 </p>
               </div>
@@ -793,9 +793,9 @@ export default function App() {
                 type="button"
                 onClick={handleCreateNewCloudSession}
                 disabled={isCloudSaving}
-                className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all cursor-pointer border border-slate-700 disabled:opacity-50"
+                className="flex items-center space-x-1.5 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all cursor-pointer border border-[#5ea4c5]/30 disabled:opacity-50 shadow-sm"
               >
-                <Plus className="w-3.5 h-3.5 text-[#bc9e74]" />
+                <Plus className="w-3.5 h-3.5 text-[#a79078]" />
                 <span>New Session</span>
               </button>
             </div>
@@ -803,15 +803,15 @@ export default function App() {
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Active Session Status & Actions */}
-            <div className="lg:col-span-5 bg-slate-950 p-5 rounded-2xl border border-slate-800/80 flex flex-col justify-between">
+            <div className="lg:col-span-5 bg-[#002142]/85 p-5 rounded-2xl border border-[#5ea4c5]/25 flex flex-col justify-between shadow-inner">
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">Active Workspace Session</span>
+                    <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">Active Workspace Session</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       isCloudSaving 
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' 
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        ? 'bg-amber-500/20 text-amber-200 border-amber-400/30' 
+                        : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
                     }`}>
                       {isCloudSaving ? '⚡ Guardando...' : '✓ Sincronizado'}
                     </span>
@@ -819,23 +819,23 @@ export default function App() {
                   <h4 className="text-base font-black text-white mt-1">
                     Sesión #{session.sessionNumber || '1'}
                   </h4>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 font-medium">
+                  <p className="text-xs text-sky-100/80 mt-1 line-clamp-2 font-medium">
                     {session.mainObjective || 'No objective specified.'}
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500 font-bold uppercase">
-                    <span className="bg-slate-900 px-2 py-1 rounded">Date: {session.date || '-'}</span>
-                    <span className="bg-slate-900 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : activeSection === 'fitness' ? '⚡ Fitness' : '🧤 GK Training'}</span>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-sky-200/90 font-bold uppercase">
+                    <span className="bg-[#0f5981]/60 border border-sky-400/20 px-2 py-1 rounded">Date: {session.date || '-'}</span>
+                    <span className="bg-[#0f5981]/60 border border-sky-400/20 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : activeSection === 'fitness' ? '⚡ Fitness' : '🧤 GK Training'}</span>
                   </div>
                 </div>
 
-                <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed font-medium space-y-2">
+                <div className="bg-[#0f5981]/40 p-3.5 rounded-xl border border-sky-400/20 text-[11px] text-sky-100 leading-relaxed font-medium space-y-2">
                   <p>
                     <strong>Sincronización automática:</strong> Todos los cambios que realizas se guardan automáticamente en la nube en tiempo real.
                   </p>
                   <button
                     type="button"
                     onClick={handleCopyShareLink}
-                    className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-900/30"
+                    className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-950/40"
                   >
                     {copiedLink ? (
                       <>
@@ -857,7 +857,7 @@ export default function App() {
                   type="button"
                   onClick={handleSaveActiveToCloud}
                   disabled={isCloudSaving}
-                  className="flex items-center justify-center space-x-1.5 bg-[#bc9e74] hover:bg-[#a68962] text-slate-950 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                  className="flex items-center justify-center space-x-1.5 bg-[#a79078] hover:bg-[#967f67] text-slate-950 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
                 >
                   <CloudUpload className="w-3.5 h-3.5" />
                   <span>{isCloudSaving ? 'Saving...' : 'Save Changes'}</span>
@@ -866,9 +866,9 @@ export default function App() {
                   type="button"
                   onClick={handleSaveAsNewToCloud}
                   disabled={isCloudSaving}
-                  className="flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                  className="flex items-center justify-center space-x-1.5 bg-[#002142] hover:bg-[#002e5c] text-white border border-[#5ea4c5]/30 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#bc9e74]" />
+                  <Plus className="w-3.5 h-3.5 text-[#a79078]" />
                   <span>Save as Copy</span>
                 </button>
               </div>
@@ -876,20 +876,20 @@ export default function App() {
 
             {/* Cloud Library Session List */}
             <div className="lg:col-span-7 flex flex-col space-y-3">
-              <span className="text-[10px] font-bold text-[#bc9e74] uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">
                 Saved Sessions ({cloudSessions.length})
               </span>
 
               {isLoadingCloud ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-500">
-                  <RefreshCw className="w-6 h-6 animate-spin text-[#bc9e74]" />
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-sky-200/70">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#a79078]" />
                   <span className="text-xs mt-2 uppercase font-black tracking-widest">Loading cloud list...</span>
                 </div>
               ) : cloudSessions.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-10 text-slate-500 bg-slate-950 border border-dashed border-slate-800 rounded-2xl">
-                  <Cloud className="w-8 h-8 text-slate-700 mb-2" />
-                  <p className="text-xs font-bold">No saved cloud sessions found</p>
-                  <p className="text-[10px] text-slate-600 mt-1 max-w-[250px] text-center font-medium">
+                <div className="flex-1 flex flex-col items-center justify-center py-10 text-sky-200/70 bg-[#002142]/85 border border-dashed border-[#5ea4c5]/30 rounded-2xl">
+                  <Cloud className="w-8 h-8 text-sky-300/50 mb-2" />
+                  <p className="text-xs font-bold text-white">No saved cloud sessions found</p>
+                  <p className="text-[10px] text-sky-200/60 mt-1 max-w-[250px] text-center font-medium">
                     Click "Save Changes" on the left to upload your first cloud training!
                   </p>
                 </div>
@@ -901,34 +901,34 @@ export default function App() {
                       <div
                         key={cloudSess.id}
                         onClick={() => handleLoadCloudSession(cloudSess)}
-                        className={`group flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left bg-slate-950 hover:bg-slate-900 border ${
+                        className={`group flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left ${
                           isActive 
-                            ? 'border-[#bc9e74] bg-[#bc9e74]/5 shadow-md shadow-[#bc9e74]/5' 
-                            : 'border-slate-800/80 hover:border-slate-700'
+                            ? 'border-[#a79078] bg-[#002142] shadow-md shadow-[#002142]/50 border-2' 
+                            : 'bg-[#002142]/65 hover:bg-[#002142] border border-[#5ea4c5]/20 hover:border-[#5ea4c5]/40'
                         }`}
                       >
                         <div className="space-y-1 max-w-[85%]">
                           <div className="flex items-center space-x-2">
                             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
                               isActive 
-                                ? 'bg-[#bc9e74] text-slate-950' 
-                                : 'bg-slate-900 text-[#bc9e74]'
+                                ? 'bg-[#a79078] text-slate-950' 
+                                : 'bg-[#0f5981] text-sky-100 border border-sky-400/20'
                             }`}>
                               Sess. #{cloudSess.sessionNumber || '1'}
                             </span>
-                            <span className="text-slate-500 text-[10px] font-bold">{cloudSess.date}</span>
+                            <span className="text-sky-200/70 text-[10px] font-bold">{cloudSess.date}</span>
                             {isActive && (
-                              <span className="text-[9px] font-extrabold text-[#bc9e74] uppercase tracking-wide">
+                              <span className="text-[9px] font-extrabold text-[#a79078] uppercase tracking-wide">
                                 • Active
                               </span>
                             )}
                           </div>
                           
-                          <h5 className="text-xs font-bold text-white group-hover:text-[#bc9e74] transition-colors truncate">
+                          <h5 className="text-xs font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
                             {cloudSess.mainObjective || 'No objective set.'}
                           </h5>
                           
-                          <p className="text-[10px] text-slate-500 truncate font-semibold">
+                          <p className="text-[10px] text-sky-200/70 truncate font-semibold">
                             Materials: {cloudSess.materialsNeeded || 'None'}
                           </p>
                         </div>
@@ -937,7 +937,7 @@ export default function App() {
                           <button
                             type="button"
                             title="Load Session"
-                            className="p-2 text-slate-400 hover:text-[#bc9e74] hover:bg-slate-800 rounded-lg transition-colors"
+                            className="p-2 text-sky-200/80 hover:text-[#a79078] hover:bg-white/10 rounded-lg transition-colors"
                           >
                             <FolderOpen className="w-4 h-4" />
                           </button>
@@ -945,7 +945,7 @@ export default function App() {
                             type="button"
                             title="Delete Session"
                             onClick={(e) => handleDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
-                            className="p-2 text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                            className="p-2 text-sky-300/60 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

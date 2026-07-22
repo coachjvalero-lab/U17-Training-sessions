@@ -1,7 +1,7 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { 
-  Printer, Download, Upload, Trash2, RefreshCw, 
-  CheckCircle2, Sparkles, Activity
+  Printer, Trash2, 
+  Sparkles
 } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
@@ -16,60 +16,10 @@ interface ControlPanelProps {
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
   session,
-  onImportSession,
   onClearSession,
   onRestoreDemo,
   isSaving
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Export Session to JSON
-  const handleExportJSON = () => {
-    try {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(session, null, 2));
-      const downloadAnchor = document.createElement('a');
-      
-      const cleanTeamName = session.teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const dateStr = session.date || 'no-date';
-      
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `session-${cleanTeamName}-${dateStr}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    } catch (error) {
-      console.error('Error exporting session:', error);
-      alert('There was an error exporting the session.');
-    }
-  };
-
-  // Import Session from JSON
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const parsed = JSON.parse(event.target?.result as string);
-          
-          // Simple structural validation
-          if (parsed && typeof parsed === 'object' && parsed.teamName) {
-            onImportSession(parsed);
-            alert('Session imported successfully!');
-          } else {
-            alert('Invalid JSON file. Make sure it is a valid exported session.');
-          }
-        } catch (error) {
-          console.error('Error parsing session file:', error);
-          alert('Error reading file. Make sure it has a valid JSON structure.');
-        }
-      };
-      reader.readAsText(file);
-    }
-    // Reset file input so same file can be loaded again if needed
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   // Trigger system print window
   const handlePrint = () => {
     window.print();
@@ -127,35 +77,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             <Printer className="w-4 h-4" />
             <span>Print / PDF</span>
           </button>
-
-          {/* Export JSON */}
-          <button
-            type="button"
-            onClick={handleExportJSON}
-            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 font-bold text-xs uppercase tracking-wider py-2.5 px-3.5 rounded-xl transition-all cursor-pointer border border-slate-700/80"
-            title="Export session file for sharing"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export JSON</span>
-          </button>
-
-          {/* Import JSON */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 font-bold text-xs uppercase tracking-wider py-2.5 px-3.5 rounded-xl transition-all cursor-pointer border border-slate-700/80"
-            title="Import a session file (.json)"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Import JSON</span>
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportJSON}
-            accept=".json"
-            className="hidden"
-          />
 
           {/* Restore Demo */}
           <button
