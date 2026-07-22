@@ -11,6 +11,8 @@ export interface Exercise {
   coachRoles: string; // e.g., "Coach A: Referee, Coach B: Feedback"
   image?: string; // base64 image or placeholder
   playerGroups?: string; // Player groups assignment for this exercise
+  hideGraphics?: boolean; // Hide tactical diagram graphics box
+  isFitness?: boolean; // Indicates exercise belongs to Fitness tab
 }
 
 export interface TrainingBlock {

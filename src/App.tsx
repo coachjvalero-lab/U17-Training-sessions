@@ -255,13 +255,50 @@ export default function App() {
   const handleUpdateExercises = (blockKey: 'warmUp' | 'mainPart' | 'coolDown', exercises: Exercise[]) => {
     setSession(prev => {
       if (activeSection === 'football') {
-        return {
-          ...prev,
-          [blockKey]: {
-            ...prev[blockKey],
-            exercises
-          }
-        };
+        if (blockKey === 'warmUp') {
+          const footballWarmUpExs = exercises.filter(ex => !ex.isFitness);
+          const updatedFitnessExs = exercises.filter(ex => ex.isFitness);
+
+          const fitnessWarmUpIds = new Set((prev.fitnessWarmUp?.exercises || []).map(e => e.id));
+          const fitnessMainPartIds = new Set((prev.fitnessMainPart?.exercises || []).map(e => e.id));
+          const fitnessCoolDownIds = new Set((prev.fitnessCoolDown?.exercises || []).map(e => e.id));
+
+          const newFitWarmUp = updatedFitnessExs.filter(e => fitnessWarmUpIds.has(e.id));
+          const newFitMain = updatedFitnessExs.filter(e => fitnessMainPartIds.has(e.id));
+          const newFitCool = updatedFitnessExs.filter(e => fitnessCoolDownIds.has(e.id));
+
+          const unknownFitExs = updatedFitnessExs.filter(e => 
+            !fitnessWarmUpIds.has(e.id) && !fitnessMainPartIds.has(e.id) && !fitnessCoolDownIds.has(e.id)
+          );
+
+          return {
+            ...prev,
+            warmUp: {
+              ...prev.warmUp,
+              exercises: footballWarmUpExs
+            },
+            fitnessWarmUp: {
+              ...(prev.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] }),
+              exercises: [...newFitWarmUp, ...unknownFitExs]
+            },
+            fitnessMainPart: {
+              ...(prev.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] }),
+              exercises: newFitMain
+            },
+            fitnessCoolDown: {
+              ...(prev.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] }),
+              exercises: newFitCool
+            }
+          };
+        } else {
+          return {
+            ...prev,
+            [blockKey]: {
+              ...prev[blockKey],
+              exercises
+            }
+          };
+        }
       } else if (activeSection === 'fitness') {
         const fitnessKey = blockKey === 'warmUp' 
           ? 'fitnessWarmUp' 
@@ -650,8 +687,24 @@ export default function App() {
   };
 
   // Dynamically map active blocks and exercises based on active tab
+  const fitnessExercises = [
+    ...(session.fitnessWarmUp?.exercises || []),
+    ...(session.fitnessMainPart?.exercises || []),
+    ...(session.fitnessCoolDown?.exercises || [])
+  ].map(ex => ({
+    ...ex,
+    isFitness: true,
+    hideGraphics: true
+  }));
+
   const activeWarmUp = activeSection === 'football'
-    ? session.warmUp
+    ? {
+        ...session.warmUp,
+        exercises: [
+          ...session.warmUp.exercises,
+          ...fitnessExercises
+        ]
+      }
     : activeSection === 'fitness'
     ? (session.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] })
     : (session.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] });
