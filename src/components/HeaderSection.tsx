@@ -1,7 +1,9 @@
-import React, { useRef } from 'react';
-import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity, Loader2 } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { processUploadedImageFile } from '../utils/heic';
+import { SmartImage } from './SmartImage';
 
 interface HeaderSectionProps {
   session: TrainingSession;
@@ -11,24 +13,28 @@ interface HeaderSectionProps {
 
 export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate size (limit to 2MB for base64 storage efficiency)
-      if (file.size > 2 * 1024 * 1024) {
-        alert('The image is too large. Please select one smaller than 2MB.');
+      if (file.size > 10 * 1024 * 1024) {
+        alert('The image is too large. Please select one smaller than 10MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const logoData = reader.result as string;
+      setIsUploadingLogo(true);
+      try {
+        const logoData = await processUploadedImageFile(file);
         try {
           localStorage.setItem('u17_uploaded_team_logo', logoData);
         } catch (e) {}
         onChange({ teamLogo: logoData });
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Failed to process logo image:', err);
+        alert('Error processing image. If this is a HEIC photo, please try again or select a JPG/PNG.');
+      } finally {
+        setIsUploadingLogo(false);
+      }
     }
   };
 
@@ -77,12 +83,19 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             onClick={() => fileInputRef.current?.click()}
             className="group relative cursor-pointer w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 hover:border-emerald-500 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 hover:bg-slate-100 print:w-20 print:h-20 print:border-none print:bg-transparent"
           >
-            <img 
-              src={logoSrc} 
-              alt="Club Badge" 
-              className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-              referrerPolicy="no-referrer"
-            />
+            {isUploadingLogo ? (
+              <div className="flex flex-col items-center justify-center p-2 text-emerald-600 text-xs font-semibold">
+                <Loader2 className="w-6 h-6 animate-spin mb-1 text-emerald-500" />
+                <span className="text-[10px]">Uploading...</span>
+              </div>
+            ) : (
+              <SmartImage 
+                src={logoSrc} 
+                alt="Club Badge" 
+                className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                onConverted={(convertedJpeg) => onChange({ teamLogo: convertedJpeg })}
+              />
+            )}
             
             {/* Hover Overlay - Hidden in print */}
             <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-xs font-semibold rounded-2xl print:hidden">
@@ -106,7 +119,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
             type="file" 
             ref={fileInputRef} 
             onChange={handleLogoUpload} 
-            accept="image/*" 
+            accept="image/*,.heic,.heif,image/heic,image/heif" 
             className="hidden" 
           />
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5 print:hidden">Club Badge</span>

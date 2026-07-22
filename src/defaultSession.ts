@@ -84,7 +84,7 @@ export const getDefaultSession = (): TrainingSession => {
   } catch (e) {}
 
   return {
-    id: 'default-u17-session',
+    id: 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
     teamName: 'U17 Women Al Ula',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:30 - 20:00',
@@ -227,7 +227,62 @@ export const getDefaultSession = (): TrainingSession => {
         }
       ]
     },
-    fitnessPlayerGroups: []
+    fitnessPlayerGroups: [],
+    gkWarmUp: {
+      id: 'warmup-block-gk',
+      title: 'Warm Up',
+      exercises: [
+        {
+          id: 'ex-gk-warmup-1',
+          name: 'Handling Mechanics & Footwork Drills',
+          gameMoment: 'Other',
+          subMoment: 'Technical Preparation',
+          description: 'Fast footwork around cone sets followed by catching volley serves at low and medium heights. Focus on hand positioning (W-shape), soft landings, and rapid recovery footwork.',
+          duration: '15 min',
+          dimensions: '6-yard box',
+          coachRoles: 'GK Coach: Serves volley passes and provides technical correction on hand positioning.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Goalkeepers'
+        }
+      ]
+    },
+    gkMainPart: {
+      id: 'main-block-gk',
+      title: 'Main Part',
+      exercises: [
+        {
+          id: 'ex-gk-main-1',
+          name: 'Shot Stopping & Reaction Diving',
+          gameMoment: 'Defense',
+          subMoment: 'Shot stopping & positioning',
+          description: '1v1 reactions, low-dive saves against central strikes, and aerial cross claims from wide areas. Transition immediately into rapid distribution to outfield players after making the save.',
+          duration: '25 min',
+          dimensions: 'Penalty Area',
+          coachRoles: 'GK Coach: Shoots from edge of box and feeds aerial cross deliveries.',
+          image: DEFAULT_RONDO_SVG,
+          playerGroups: 'Goalkeepers'
+        }
+      ]
+    },
+    gkCoolDown: {
+      id: 'cooldown-block-gk',
+      title: 'Cool Down',
+      exercises: [
+        {
+          id: 'ex-gk-cooldown-1',
+          name: 'Upper Body Stretching & Shoulder Mobility',
+          gameMoment: 'Other',
+          subMoment: 'Recovery',
+          description: 'Band resistance mobility for shoulders, chest, and hip flexors. Light throwing/catching cool-down.',
+          duration: '10 min',
+          dimensions: 'Goal Line',
+          coachRoles: 'GK Coach: Guides shoulder and wrist mobility routine.',
+          image: DEFAULT_TACTICAL_SVG,
+          playerGroups: 'Goalkeepers'
+        }
+      ]
+    },
+    gkPlayerGroups: []
   };
 };
 
@@ -289,6 +344,22 @@ export const getEmptySession = (): TrainingSession => {
       title: 'Cool Down',
       exercises: []
     },
-    fitnessPlayerGroups: []
+    fitnessPlayerGroups: [],
+    gkWarmUp: {
+      id: 'warmup-block-gk',
+      title: 'Warm Up',
+      exercises: []
+    },
+    gkMainPart: {
+      id: 'main-block-gk',
+      title: 'Main Part',
+      exercises: []
+    },
+    gkCoolDown: {
+      id: 'cooldown-block-gk',
+      title: 'Cool Down',
+      exercises: []
+    },
+    gkPlayerGroups: []
   };
 };

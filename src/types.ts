@@ -45,4 +45,8 @@ export interface TrainingSession {
   fitnessMainPart?: TrainingBlock;
   fitnessCoolDown?: TrainingBlock;
   fitnessPlayerGroups?: PlayerGroup[];
+  gkWarmUp?: TrainingBlock;
+  gkMainPart?: TrainingBlock;
+  gkCoolDown?: TrainingBlock;
+  gkPlayerGroups?: PlayerGroup[];
 }

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
-  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle
+  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingBlock } from '../types';
+import { processUploadedImageFile } from '../utils/heic';
+import { SmartImage } from './SmartImage';
 
 interface ExerciseBlockProps {
   block: TrainingBlock;
@@ -87,6 +89,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   toggleExpand 
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
+  const [uploadingExId, setUploadingExId] = useState<string | null>(null);
 
   const handleCoachRoleChange = (exId: string, index: number, field: 'name' | 'role', val: string, currentCoachRolesStr: string) => {
     const roles = parseCoachRolesList(currentCoachRolesStr);
@@ -160,16 +163,21 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   };
 
   // Image upload handling
-  const processFile = (file: File, exId: string) => {
-    if (file.size > 1.5 * 1024 * 1024) {
-      alert('The exercise image is too large. Please select an image smaller than 1.5MB.');
+  const processFile = async (file: File, exId: string) => {
+    if (file.size > 10 * 1024 * 1024) {
+      alert('The exercise image is too large. Please select an image smaller than 10MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      updateExercise(exId, { image: reader.result as string });
-    };
-    reader.readAsDataURL(file);
+    setUploadingExId(exId);
+    try {
+      const dataUrl = await processUploadedImageFile(file);
+      updateExercise(exId, { image: dataUrl });
+    } catch (err) {
+      console.error('Failed to process image file:', err);
+      alert('Error processing image file. If this is a HEIC file, please try again or select a JPG/PNG.');
+    } finally {
+      setUploadingExId(null);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, exId: string) => {
@@ -353,13 +361,18 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           ? 'border-emerald-500 bg-emerald-50/50 scale-102 shadow-md' 
                           : 'border-slate-200 hover:border-slate-300'}`}
                     >
-                      {ex.image ? (
+                      {uploadingExId === ex.id ? (
+                        <div className="flex flex-col items-center justify-center p-4 text-emerald-600 text-xs font-bold">
+                          <Loader2 className="w-8 h-8 animate-spin mb-2 text-emerald-500" />
+                          <span>Processing & Converting image...</span>
+                        </div>
+                      ) : ex.image ? (
                         <>
-                          <img 
+                          <SmartImage 
                             src={ex.image} 
                             alt="Tactical diagram" 
                             className="w-full h-full object-contain"
-                            referrerPolicy="no-referrer"
+                            onConverted={(convertedJpeg) => updateExercise(ex.id, { image: convertedJpeg })}
                           />
                           
                           {/* Image overlay to change (Hidden in print) */}
@@ -368,7 +381,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                               Upload New
                               <input 
                                 type="file" 
-                                accept="image/*" 
+                                accept="image/*,.heic,.heif,image/heic,image/heif" 
                                 className="hidden" 
                                 onChange={(e) => handleFileChange(e, ex.id)} 
                               />
@@ -386,7 +399,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         <div className="text-center p-4 print:hidden">
                           <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                           <p className="text-[10px] font-bold text-slate-500 leading-tight">
-                            Drag image here
+                            Drag image here (JPG, PNG, HEIC)
                           </p>
                           <p className="text-[9px] text-slate-400 mb-2.5">
                             or click to browse
@@ -395,7 +408,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                             Browse file
                             <input 
                               type="file" 
-                              accept="image/*" 
+                              accept="image/*,.heic,.heif,image/heic,image/heif" 
                               className="hidden" 
                               onChange={(e) => handleFileChange(e, ex.id)} 
                             />

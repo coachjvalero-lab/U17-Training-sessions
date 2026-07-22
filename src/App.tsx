@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState<'football' | 'fitness'>('football');
+  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk'>('football');
 
   // Load and merge into a single unified session
   const [session, setSession] = useState<TrainingSession>(() => {
@@ -45,7 +45,14 @@ export default function App() {
           if (parsed.sessionNumber === '42') {
             parsed.sessionNumber = '001';
           }
-          return parsed;
+          const defaultTemplate = getDefaultSession();
+          return {
+            ...parsed,
+            gkWarmUp: parsed.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+            gkMainPart: parsed.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+            gkCoolDown: parsed.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+            gkPlayerGroups: parsed.gkPlayerGroups || [],
+          };
         }
       } catch (e) {
         console.error('Failed to parse saved unified session:', e);
@@ -75,6 +82,8 @@ export default function App() {
       } catch (e) {}
     }
 
+    const defaultTemplate = getDefaultSession();
+
     // Merge them into one unified session
     return {
       ...fbSess,
@@ -82,6 +91,10 @@ export default function App() {
       fitnessMainPart: fbSess.fitnessMainPart || fitSess.mainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
       fitnessCoolDown: fbSess.fitnessCoolDown || fitSess.coolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
       fitnessPlayerGroups: fbSess.fitnessPlayerGroups || fitSess.playerGroups || [],
+      gkWarmUp: fbSess.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+      gkMainPart: fbSess.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+      gkCoolDown: fbSess.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+      gkPlayerGroups: fbSess.gkPlayerGroups || [],
     };
   });
 
@@ -137,12 +150,18 @@ export default function App() {
               baseSession.sessionNumber = '001';
             }
 
+            const defaultTemplate = getDefaultSession();
+
             const unifiedSession: TrainingSession = {
               ...baseSession,
               fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
               fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
               fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
               fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+              gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+              gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+              gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+              gkPlayerGroups: baseSession.gkPlayerGroups || [],
             };
 
             isRemoteUpdateRef.current = true;
@@ -155,8 +174,14 @@ export default function App() {
                 window.history.replaceState({}, '', url.toString());
               }
             }
+          } else {
+            hasInitialCloudLoadedRef.current = true;
           }
+        } else {
+          hasInitialCloudLoadedRef.current = true;
         }
+      } else {
+        hasInitialCloudLoadedRef.current = true;
       }
     });
     return () => unsubscribe();
@@ -183,7 +208,12 @@ export default function App() {
       setIsSaving(false);
     }, 400);
 
-    // If change was received from remote Cloud Firestore snapshot, don't re-trigger save
+    // Prevent cloud auto-save before initial cloud load finishes
+    if (!hasInitialCloudLoadedRef.current) {
+      return () => clearTimeout(localTimer);
+    }
+
+    // If change was received from remote Cloud Firestore snapshot or session deletion/switch, don't re-trigger save
     if (isRemoteUpdateRef.current) {
       isRemoteUpdateRef.current = false;
       return () => clearTimeout(localTimer);
@@ -232,7 +262,7 @@ export default function App() {
             exercises
           }
         };
-      } else {
+      } else if (activeSection === 'fitness') {
         const fitnessKey = blockKey === 'warmUp' 
           ? 'fitnessWarmUp' 
           : blockKey === 'mainPart' 
@@ -242,6 +272,19 @@ export default function App() {
           ...prev,
           [fitnessKey]: {
             ...(prev[fitnessKey] || { id: `${blockKey}-block-fitness`, title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down', exercises: [] }),
+            exercises
+          }
+        };
+      } else {
+        const gkKey = blockKey === 'warmUp' 
+          ? 'gkWarmUp' 
+          : blockKey === 'mainPart' 
+            ? 'gkMainPart' 
+            : 'gkCoolDown';
+        return {
+          ...prev,
+          [gkKey]: {
+            ...(prev[gkKey] || { id: `${blockKey}-block-gk`, title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down', exercises: [] }),
             exercises
           }
         };
@@ -256,10 +299,15 @@ export default function App() {
           ...prev,
           playerGroups
         };
-      } else {
+      } else if (activeSection === 'fitness') {
         return {
           ...prev,
           fitnessPlayerGroups: playerGroups
+        };
+      } else {
+        return {
+          ...prev,
+          gkPlayerGroups: playerGroups
         };
       }
     });
@@ -273,26 +321,43 @@ export default function App() {
   };
 
   const handleImportSession = (imported: TrainingSession) => {
-    // Fill fitness blocks if they are missing from raw JSON import
+    // Fill fitness and GK blocks if they are missing from raw JSON import
+    const defaultTemplate = getDefaultSession();
     const unifiedImport: TrainingSession = {
       ...imported,
       fitnessWarmUp: imported.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
       fitnessMainPart: imported.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
       fitnessCoolDown: imported.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
       fitnessPlayerGroups: imported.fitnessPlayerGroups || [],
+      gkWarmUp: imported.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+      gkMainPart: imported.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+      gkCoolDown: imported.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+      gkPlayerGroups: imported.gkPlayerGroups || [],
     };
     
     setSession(unifiedImport);
     
     // Expand exercises
     const expanded: Record<string, boolean> = {};
-    const activeWarmUp = activeSection === 'football' ? unifiedImport.warmUp : unifiedImport.fitnessWarmUp;
-    const activeMainPart = activeSection === 'football' ? unifiedImport.mainPart : unifiedImport.fitnessMainPart;
-    const activeCoolDown = activeSection === 'football' ? unifiedImport.coolDown : unifiedImport.fitnessCoolDown;
+    const activeWarmUp = activeSection === 'football' 
+      ? unifiedImport.warmUp 
+      : activeSection === 'fitness'
+      ? unifiedImport.fitnessWarmUp
+      : unifiedImport.gkWarmUp;
+    const activeMainPart = activeSection === 'football' 
+      ? unifiedImport.mainPart 
+      : activeSection === 'fitness'
+      ? unifiedImport.fitnessMainPart
+      : unifiedImport.gkMainPart;
+    const activeCoolDown = activeSection === 'football' 
+      ? unifiedImport.coolDown 
+      : activeSection === 'fitness'
+      ? unifiedImport.fitnessCoolDown
+      : unifiedImport.gkCoolDown;
 
-    activeWarmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
-    activeMainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
-    activeCoolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
+    activeWarmUp?.exercises.forEach(ex => { expanded[ex.id] = true; });
+    activeMainPart?.exercises.forEach(ex => { expanded[ex.id] = true; });
+    activeCoolDown?.exercises.forEach(ex => { expanded[ex.id] = true; });
     setExpandedExercises(expanded);
   };
 
@@ -314,7 +379,7 @@ export default function App() {
   };
 
   const handleClearSession = () => {
-    if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for both football and fitness sections.`)) {
+    if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for all section tabs.`)) {
       const activeLogo = getActiveLogo();
       const empty = getEmptySession();
       setSession({
@@ -326,7 +391,7 @@ export default function App() {
   };
 
   const handleRestoreDemo = () => {
-    if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for both football and fitness sections.`)) {
+    if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for all section tabs.`)) {
       const activeLogo = getActiveLogo();
       const demo = getDefaultSession();
       setSession({
@@ -422,8 +487,9 @@ export default function App() {
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
       const { updatedAt, ...baseSession } = loadedSession;
+      const defaultTemplate = getDefaultSession();
       
-      // Upgrade fitness fields if missing from loaded old document
+      // Upgrade fitness and GK fields if missing from loaded old document
       const unifiedSession: TrainingSession = {
         ...baseSession,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
@@ -431,6 +497,10 @@ export default function App() {
         fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
         fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
         fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+        gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+        gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+        gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+        gkPlayerGroups: baseSession.gkPlayerGroups || [],
       };
 
       if (unifiedSession.id && window.history.replaceState) {
@@ -443,13 +513,25 @@ export default function App() {
       
       // Expand exercises of loaded session
       const expanded: Record<string, boolean> = {};
-      const activeWarmUp = activeSection === 'football' ? unifiedSession.warmUp : unifiedSession.fitnessWarmUp;
-      const activeMainPart = activeSection === 'football' ? unifiedSession.mainPart : unifiedSession.fitnessMainPart;
-      const activeCoolDown = activeSection === 'football' ? unifiedSession.coolDown : unifiedSession.fitnessCoolDown;
+      const activeWarmUp = activeSection === 'football' 
+        ? unifiedSession.warmUp 
+        : activeSection === 'fitness'
+        ? unifiedSession.fitnessWarmUp
+        : unifiedSession.gkWarmUp;
+      const activeMainPart = activeSection === 'football' 
+        ? unifiedSession.mainPart 
+        : activeSection === 'fitness'
+        ? unifiedSession.fitnessMainPart
+        : unifiedSession.gkMainPart;
+      const activeCoolDown = activeSection === 'football' 
+        ? unifiedSession.coolDown 
+        : activeSection === 'fitness'
+        ? unifiedSession.fitnessCoolDown
+        : unifiedSession.gkCoolDown;
 
-      activeWarmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
-      activeMainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
-      activeCoolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
+      activeWarmUp?.exercises.forEach(ex => { expanded[ex.id] = true; });
+      activeMainPart?.exercises.forEach(ex => { expanded[ex.id] = true; });
+      activeCoolDown?.exercises.forEach(ex => { expanded[ex.id] = true; });
       setExpandedExercises(expanded);
     }
   };
@@ -460,6 +542,62 @@ export default function App() {
       try {
         setIsCloudSaving(true);
         await deleteSessionFromCloud(sessionId);
+
+        // If the deleted session is currently active in React state:
+        if (session.id === sessionId) {
+          const remaining = cloudSessions.filter(s => s.id !== sessionId);
+          if (remaining.length > 0) {
+            const nextSession = remaining[0];
+            const { updatedAt, ...baseSession } = nextSession;
+            const defaultTemplate = getDefaultSession();
+            
+            const unifiedSession: TrainingSession = {
+              ...baseSession,
+              teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
+              fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+              fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+              fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+              fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+              gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+              gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+              gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+              gkPlayerGroups: baseSession.gkPlayerGroups || [],
+            };
+
+            isRemoteUpdateRef.current = true;
+            setSession(unifiedSession);
+
+            if (unifiedSession.id && window.history.replaceState) {
+              const url = new URL(window.location.href);
+              url.searchParams.set('session', unifiedSession.id);
+              window.history.replaceState({}, '', url.toString());
+            }
+          } else {
+            // No sessions left in cloud, create a fresh session
+            const empty = getEmptySession();
+            const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+            const today = new Date().toISOString().split('T')[0];
+            const activeLogo = getActiveLogo();
+
+            const newSession: TrainingSession = {
+              ...empty,
+              id: newId,
+              sessionNumber: '001',
+              date: today,
+              teamName: 'U17 Women Al Ula',
+              teamLogo: activeLogo
+            };
+
+            isRemoteUpdateRef.current = true;
+            setSession(newSession);
+
+            if (window.history.replaceState) {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('session');
+              window.history.replaceState({}, '', url.toString());
+            }
+          }
+        }
       } catch (error) {
         console.error('Error deleting session:', error);
         alert('Failed to delete session from the cloud.');
@@ -514,19 +652,27 @@ export default function App() {
   // Dynamically map active blocks and exercises based on active tab
   const activeWarmUp = activeSection === 'football'
     ? session.warmUp
-    : (session.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] });
+    : activeSection === 'fitness'
+    ? (session.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] })
+    : (session.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] });
 
   const activeMainPart = activeSection === 'football'
     ? session.mainPart
-    : (session.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] });
+    : activeSection === 'fitness'
+    ? (session.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] })
+    : (session.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] });
 
   const activeCoolDown = activeSection === 'football'
     ? session.coolDown
-    : (session.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] });
+    : activeSection === 'fitness'
+    ? (session.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] })
+    : (session.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] });
 
   const activePlayerGroups = activeSection === 'football'
     ? session.playerGroups
-    : (session.fitnessPlayerGroups || []);
+    : activeSection === 'fitness'
+    ? (session.fitnessPlayerGroups || [])
+    : (session.gkPlayerGroups || []);
 
   // Quick Action: Expand All or Collapse All
   const handleToggleAll = (expand: boolean) => {
@@ -553,30 +699,42 @@ export default function App() {
         />
 
         {/* Section Switcher Tabs - Hidden in Print */}
-        <div className="flex bg-[#ede9e6] p-1.5 rounded-2xl max-w-md mx-auto print:hidden shadow-inner border border-[#a79078]/30 gap-1.5">
+        <div className="flex bg-[#ede9e6] p-1.5 rounded-2xl max-w-lg mx-auto print:hidden shadow-inner border border-[#a79078]/30 gap-1.5">
           <button
             type="button"
             onClick={() => setActiveSection('football')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               activeSection === 'football' 
                 ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
                 : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
             }`}
           >
             <span>⚽</span>
-            <span>Football (Fútbol)</span>
+            <span>Football</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveSection('fitness')}
-            className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               activeSection === 'fitness' 
                 ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
                 : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
             }`}
           >
             <span>⚡</span>
-            <span>Fitness (P. Física)</span>
+            <span>Fitness</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection('gk')}
+            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              activeSection === 'gk' 
+                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
+                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
+            }`}
+          >
+            <span>🧤</span>
+            <span>GK Training</span>
           </button>
         </div>
 
@@ -666,7 +824,7 @@ export default function App() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500 font-bold uppercase">
                     <span className="bg-slate-900 px-2 py-1 rounded">Date: {session.date || '-'}</span>
-                    <span className="bg-slate-900 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : '⚡ Fitness'}</span>
+                    <span className="bg-slate-900 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : activeSection === 'fitness' ? '⚡ Fitness' : '🧤 GK Training'}</span>
                   </div>
                 </div>
 
