@@ -51,6 +51,13 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
 
   const currentLogo = session.teamLogo || savedLogo;
 
+  // Auto-fill session.teamLogo if missing so it gets saved to Firestore for shared links
+  React.useEffect(() => {
+    if (!session.teamLogo && savedLogo && savedLogo !== OFFICIAL_ALULA_LOGO_DATA_URL) {
+      onChange({ teamLogo: savedLogo });
+    }
+  }, [session.teamLogo, savedLogo, onChange]);
+
   // Ensure logo ALWAYS falls back to the official Al Ula SC shield logo
   const isOldOrInvalid = !currentLogo || 
     currentLogo.includes('%230f172a') || 
@@ -189,6 +196,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
                   <option value="-1">-1</option>
                   <option value="+1">+1</option>
                   <option value="+2">+2</option>
+                  <option value="Non competitive">Non competitive</option>
                 </select>
               </div>
             </div>

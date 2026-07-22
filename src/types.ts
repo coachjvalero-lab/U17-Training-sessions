@@ -40,6 +40,7 @@ export interface TrainingSession {
   coolDown: TrainingBlock;
   playerGroups: PlayerGroup[];
   materialsNeeded: string; // comma separated or bullet list
+  observations?: string; // Private coach notes (screen only, hidden on PDF print)
   fitnessWarmUp?: TrainingBlock;
   fitnessMainPart?: TrainingBlock;
   fitnessCoolDown?: TrainingBlock;

@@ -25,7 +25,8 @@ import {
   Database,
   Share2,
   Check,
-  Link
+  Link,
+  FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -40,6 +41,9 @@ export default function App() {
         if (parsed && typeof parsed === 'object' && parsed.teamName) {
           if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
             parsed.teamName = 'U17 Women Al Ula';
+          }
+          if (parsed.sessionNumber === '42') {
+            parsed.sessionNumber = '001';
           }
           return parsed;
         }
@@ -124,6 +128,15 @@ export default function App() {
             hasInitialCloudLoadedRef.current = true;
             
             const { updatedAt, ...baseSession } = sessionToLoad;
+
+            // Normalize old team names if needed
+            if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
+              baseSession.teamName = 'U17 Women Al Ula';
+            }
+            if (baseSession.sessionNumber === '42') {
+              baseSession.sessionNumber = '001';
+            }
+
             const unifiedSession: TrainingSession = {
               ...baseSession,
               fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
@@ -134,6 +147,14 @@ export default function App() {
 
             isRemoteUpdateRef.current = true;
             setSession(unifiedSession);
+
+            if (unifiedSession.id && window.history.replaceState) {
+              const url = new URL(window.location.href);
+              if (url.searchParams.get('session') !== unifiedSession.id) {
+                url.searchParams.set('session', unifiedSession.id);
+                window.history.replaceState({}, '', url.toString());
+              }
+            }
           }
         }
       }
@@ -171,7 +192,14 @@ export default function App() {
     // Debounced Cloud Sync (Auto-save to Firestore)
     setIsCloudSaving(true);
     const cloudTimer = setTimeout(() => {
-      saveSessionToCloud(session)
+      const activeLogo = getActiveLogo();
+      const sessionToSave: TrainingSession = {
+        ...session,
+        teamLogo: session.teamLogo || activeLogo,
+        teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
+      };
+
+      saveSessionToCloud(sessionToSave)
         .then(() => {
           setIsCloudSaving(false);
         })
@@ -179,7 +207,7 @@ export default function App() {
           console.error('Auto-save to Cloud failed:', err);
           setIsCloudSaving(false);
         });
-    }, 1000);
+    }, 400);
 
     return () => {
       clearTimeout(localTimer);
@@ -312,7 +340,16 @@ export default function App() {
   const handleSaveActiveToCloud = async () => {
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(session);
+      const activeLogo = getActiveLogo();
+      const sessionToSave: TrainingSession = {
+        ...session,
+        teamLogo: session.teamLogo || activeLogo,
+        teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
+      };
+
+      await saveSessionToCloud(sessionToSave);
+      setSession(sessionToSave);
+      alert('¡Todos los cambios se han guardado con éxito en la nube!');
     } catch (error) {
       console.error('Error saving session to cloud:', error);
       alert('Failed to save session to the cloud. Please check your internet connection.');
@@ -336,6 +373,7 @@ export default function App() {
       id: newId,
       sessionNumber: newNumber,
       date: today,
+      teamName: 'U17 Women Al Ula',
       teamLogo: activeLogo || session.teamLogo
     };
 
@@ -388,11 +426,18 @@ export default function App() {
       // Upgrade fitness fields if missing from loaded old document
       const unifiedSession: TrainingSession = {
         ...baseSession,
+        teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
         fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
         fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
         fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
         fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
       };
+
+      if (unifiedSession.id && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('session', unifiedSession.id);
+        window.history.replaceState({}, '', url.toString());
+      }
 
       setSession(unifiedSession);
       
@@ -424,15 +469,39 @@ export default function App() {
     }
   };
 
-  const handleCopyShareLink = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('session', session.id);
-    navigator.clipboard.writeText(url.toString()).then(() => {
+  const handleCopyShareLink = async () => {
+    try {
+      setIsCloudSaving(true);
+      const activeLogo = getActiveLogo();
+      const sessionToSave: TrainingSession = {
+        ...session,
+        teamLogo: session.teamLogo || activeLogo,
+        teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
+      };
+
+      // 1. Force instant Cloud Firestore save so current state is 100% saved before sharing
+      await saveSessionToCloud(sessionToSave);
+      setSession(sessionToSave);
+
+      // 2. Build sharing URL with target session ID
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', sessionToSave.id);
+
+      if (window.history.replaceState) {
+        window.history.replaceState({}, '', url.toString());
+      }
+
+      await navigator.clipboard.writeText(url.toString());
       setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
-    }).catch(() => {
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch (error) {
+      console.error('Error copying share link:', error);
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', session.id);
       alert('Enlace de la sesión: ' + url.toString());
-    });
+    } finally {
+      setIsCloudSaving(false);
+    }
   };
 
   const toggleExpand = (id: string) => {
@@ -764,6 +833,36 @@ export default function App() {
             expandedExercises={expandedExercises}
             toggleExpand={toggleExpand}
           />
+
+          {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+                    Session Observations & Notes / Observaciones
+                  </h2>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Private coaching staff notes (Screen view only — hidden when printing PDF)
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
+                Screen Only / Solo Pantalla
+              </span>
+            </div>
+
+            <textarea
+              value={session.observations || ''}
+              onChange={(e) => handleUpdateSession({ observations: e.target.value })}
+              rows={4}
+              placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
+              className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
+            />
+          </section>
 
         </main>
 

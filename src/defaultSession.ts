@@ -88,11 +88,12 @@ export const getDefaultSession = (): TrainingSession => {
     teamName: 'U17 Women Al Ula',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:30 - 20:00',
-    sessionNumber: '42',
+    sessionNumber: '001',
     microcycleDay: '-2',
     mainObjective: 'High collective press after losing the ball in the middle block and fast transition from attack to defense.',
     teamLogo: savedLogo,
     materialsNeeded: '20 Cones (10 Yellow, 10 Green), 12 Bibs (6 Blue, 6 Yellow), 15 Regulation Soccer Balls, 2 Portable Mini Goals, Stopwatch, Whistle.',
+    observations: 'Good intensity during high-pressing drills. Note: Player #8 experienced slight ankle discomfort during 2nd interval.',
     warmUp: {
       id: 'warmup-block',
       title: 'Warm Up',
@@ -256,6 +257,7 @@ export const getEmptySession = (): TrainingSession => {
     mainObjective: '',
     teamLogo: savedLogo,
     materialsNeeded: '',
+    observations: '',
     warmUp: {
       id: 'warmup-block',
       title: 'Warm Up',

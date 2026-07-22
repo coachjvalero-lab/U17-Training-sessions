@@ -55,10 +55,13 @@ const parseCoachRolesList = (coachRolesStr: string): CoachRoleEntry[] => {
   return items.map(item => {
     const colonIndex = item.indexOf(':');
     if (colonIndex === -1) {
-      return { name: COACH_NAMES[0], role: item.trim() };
+      let role = item;
+      if (role.startsWith(' ')) role = role.substring(1);
+      return { name: COACH_NAMES[0], role };
     }
     const name = item.substring(0, colonIndex).trim();
-    const role = item.substring(colonIndex + 1).trim();
+    let role = item.substring(colonIndex + 1);
+    if (role.startsWith(' ')) role = role.substring(1);
     return { name, role };
   }).filter(entry => entry.name !== '');
 };
@@ -66,7 +69,7 @@ const parseCoachRolesList = (coachRolesStr: string): CoachRoleEntry[] => {
 const serializeCoachRolesList = (entries: CoachRoleEntry[]): string => {
   return entries
     .filter(entry => entry.name.trim() !== '')
-    .map(entry => `${entry.name.trim()}: ${entry.role.trim()}`)
+    .map(entry => `${entry.name.trim()}: ${entry.role}`)
     .join('; ');
 };
 
