@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
+import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
 import { ControlPanel } from './components/ControlPanel';
@@ -273,10 +274,15 @@ export default function App() {
       savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
     } catch (e) {}
 
-    if (session && session.teamLogo && !session.teamLogo.includes('%230f172a') && !session.teamLogo.includes('COACH')) {
+    if (savedLogo) {
+      return savedLogo;
+    }
+
+    if (session && session.teamLogo && !session.teamLogo.includes('%230f172a') && !session.teamLogo.includes('COACH') && !session.teamLogo.includes('default-u17')) {
       return session.teamLogo;
     }
-    return savedLogo;
+
+    return OFFICIAL_ALULA_LOGO_DATA_URL;
   };
 
   const handleClearSession = () => {
@@ -478,14 +484,14 @@ export default function App() {
         />
 
         {/* Section Switcher Tabs - Hidden in Print */}
-        <div className="flex bg-slate-200/60 p-1.5 rounded-2xl max-w-md mx-auto print:hidden shadow-inner border border-slate-300/40 gap-1.5">
+        <div className="flex bg-[#ede9e6] p-1.5 rounded-2xl max-w-md mx-auto print:hidden shadow-inner border border-[#a79078]/30 gap-1.5">
           <button
             type="button"
             onClick={() => setActiveSection('football')}
             className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               activeSection === 'football' 
-                ? 'bg-slate-900 text-emerald-400 shadow-md shadow-slate-900/15' 
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-300/30'
+                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
+                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
             }`}
           >
             <span>⚽</span>
@@ -496,8 +502,8 @@ export default function App() {
             onClick={() => setActiveSection('fitness')}
             className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               activeSection === 'fitness' 
-                ? 'bg-slate-900 text-emerald-400 shadow-md shadow-slate-900/15' 
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-300/30'
+                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
+                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
             }`}
           >
             <span>⚡</span>

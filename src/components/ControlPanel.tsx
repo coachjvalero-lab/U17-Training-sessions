@@ -4,6 +4,7 @@ import {
   CheckCircle2, Sparkles, Activity
 } from 'lucide-react';
 import { TrainingSession } from '../types';
+import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 
 interface ControlPanelProps {
   session: TrainingSession;
@@ -81,14 +82,19 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         {/* Brand & Autosave indicator */}
         <div className="flex items-center justify-between lg:justify-start space-x-3 shrink-0">
           <div className="flex items-center space-x-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center font-display font-extrabold text-white shadow-md shadow-emerald-500/20">
-              <Activity className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-slate-950 border border-amber-800/40 flex items-center justify-center p-1 shadow-md shadow-slate-950/50">
+              <img 
+                src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+                alt="Al Ula SC" 
+                className="w-full h-full object-contain" 
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h1 className="text-sm font-display font-black tracking-wider leading-none uppercase text-white">
-                U17 Sessions
+                Al Ula SC U17
               </h1>
-              <span className="text-[9px] text-emerald-400 font-extrabold tracking-widest uppercase">
+              <span className="text-[9px] text-amber-400 font-extrabold tracking-widest uppercase">
                 Coaching Staff
               </span>
             </div>

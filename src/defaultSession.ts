@@ -1,4 +1,5 @@
 import { TrainingSession } from './types';
+import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 
 // Simple default soccer field diagram (encoded as standard base64 or inline SVG to serve as placeholder)
 const DEFAULT_TACTICAL_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
@@ -76,9 +77,10 @@ export const getDefaultSession = (): TrainingSession => {
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   
-  let savedLogo = '';
+  let savedLogo = OFFICIAL_ALULA_LOGO_DATA_URL;
   try {
-    savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
+    const customLogo = localStorage.getItem('u17_uploaded_team_logo');
+    if (customLogo) savedLogo = customLogo;
   } catch (e) {}
 
   return {
@@ -238,9 +240,10 @@ export const getEmptySession = (): TrainingSession => {
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   
-  let savedLogo = '';
+  let savedLogo = OFFICIAL_ALULA_LOGO_DATA_URL;
   try {
-    savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
+    const customLogo = localStorage.getItem('u17_uploaded_team_logo');
+    if (customLogo) savedLogo = customLogo;
   } catch (e) {}
 
   return {
