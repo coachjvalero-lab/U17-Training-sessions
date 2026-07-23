@@ -27,7 +27,9 @@ import {
   Share2,
   Check,
   Link,
-  FileText
+  FileText,
+  Search,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -103,6 +105,7 @@ export default function App() {
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
 
   const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>([]);
+  const [cloudSearchQuery, setCloudSearchQuery] = useState('');
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -262,14 +265,12 @@ export default function App() {
 
           const fitnessWarmUpIds = new Set((prev.fitnessWarmUp?.exercises || []).map(e => e.id));
           const fitnessMainPartIds = new Set((prev.fitnessMainPart?.exercises || []).map(e => e.id));
-          const fitnessCoolDownIds = new Set((prev.fitnessCoolDown?.exercises || []).map(e => e.id));
 
           const newFitWarmUp = updatedFitnessExs.filter(e => fitnessWarmUpIds.has(e.id));
           const newFitMain = updatedFitnessExs.filter(e => fitnessMainPartIds.has(e.id));
-          const newFitCool = updatedFitnessExs.filter(e => fitnessCoolDownIds.has(e.id));
 
           const unknownFitExs = updatedFitnessExs.filter(e => 
-            !fitnessWarmUpIds.has(e.id) && !fitnessMainPartIds.has(e.id) && !fitnessCoolDownIds.has(e.id)
+            !fitnessWarmUpIds.has(e.id) && !fitnessMainPartIds.has(e.id)
           );
 
           return {
@@ -285,10 +286,25 @@ export default function App() {
             fitnessMainPart: {
               ...(prev.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] }),
               exercises: newFitMain
+            }
+          };
+        } else if (blockKey === 'coolDown') {
+          const footballCoolDownExs = exercises.filter(ex => !ex.isFitness);
+          const updatedFitnessExs = exercises.filter(ex => ex.isFitness);
+
+          const fitnessCoolDownIds = new Set((prev.fitnessCoolDown?.exercises || []).map(e => e.id));
+          const newFitCool = updatedFitnessExs.filter(e => fitnessCoolDownIds.has(e.id));
+          const unknownFitCoolExs = updatedFitnessExs.filter(e => !fitnessCoolDownIds.has(e.id));
+
+          return {
+            ...prev,
+            coolDown: {
+              ...prev.coolDown,
+              exercises: footballCoolDownExs
             },
             fitnessCoolDown: {
               ...(prev.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] }),
-              exercises: newFitCool
+              exercises: [...newFitCool, ...unknownFitCoolExs]
             }
           };
         } else {
@@ -695,9 +711,16 @@ export default function App() {
   };
 
   // Dynamically map active blocks and exercises based on active tab
-  const fitnessExercises = [
+  const fitnessWarmUpAndMainExercises = [
     ...(session.fitnessWarmUp?.exercises || []),
-    ...(session.fitnessMainPart?.exercises || []),
+    ...(session.fitnessMainPart?.exercises || [])
+  ].map(ex => ({
+    ...ex,
+    isFitness: true,
+    hideGraphics: true
+  }));
+
+  const fitnessCoolDownExercises = [
     ...(session.fitnessCoolDown?.exercises || [])
   ].map(ex => ({
     ...ex,
@@ -710,7 +733,7 @@ export default function App() {
         ...session.warmUp,
         exercises: [
           ...session.warmUp.exercises,
-          ...fitnessExercises
+          ...fitnessWarmUpAndMainExercises
         ]
       }
     : activeSection === 'fitness'
@@ -724,7 +747,13 @@ export default function App() {
     : (session.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] });
 
   const activeCoolDown = activeSection === 'football'
-    ? session.coolDown
+    ? {
+        ...session.coolDown,
+        exercises: [
+          ...session.coolDown.exercises,
+          ...fitnessCoolDownExercises
+        ]
+      }
     : activeSection === 'fitness'
     ? (session.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] })
     : (session.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] });
@@ -734,6 +763,16 @@ export default function App() {
     : activeSection === 'fitness'
     ? (session.fitnessPlayerGroups || [])
     : (session.gkPlayerGroups || []);
+
+  const filteredCloudSessions = cloudSessions.filter((s) => {
+    if (!cloudSearchQuery.trim()) return true;
+    const q = cloudSearchQuery.toLowerCase().trim();
+    const sessionNum = (s.sessionNumber || '').toString().toLowerCase();
+    const mainObj = (s.mainObjective || '').toLowerCase();
+    const dateStr = (s.date || '').toLowerCase();
+    const microcycle = (s.microcycleDay || '').toLowerCase();
+    return sessionNum.includes(q) || mainObj.includes(q) || dateStr.includes(q) || microcycle.includes(q);
+  });
 
   // Quick Action: Expand All or Collapse All
   const handleToggleAll = (expand: boolean) => {
@@ -937,9 +976,33 @@ export default function App() {
 
             {/* Cloud Library Session List */}
             <div className="lg:col-span-7 flex flex-col space-y-3">
-              <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">
-                Saved Sessions ({cloudSessions.length})
-              </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">
+                  Saved Sessions ({filteredCloudSessions.length}{cloudSearchQuery ? ` / ${cloudSessions.length}` : ''})
+                </span>
+
+                {/* Search Input Filter */}
+                <div className="relative flex-1 sm:max-w-[240px]">
+                  <Search className="w-3.5 h-3.5 text-sky-200/60 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={cloudSearchQuery}
+                    onChange={(e) => setCloudSearchQuery(e.target.value)}
+                    placeholder="Search by session # or objective..."
+                    className="w-full text-xs font-medium bg-[#002142]/90 text-white placeholder:text-sky-200/40 pl-8 pr-7 py-1.5 rounded-xl border border-[#5ea4c5]/30 focus:outline-none focus:border-[#a79078] focus:ring-1 focus:ring-[#a79078]/50 transition-all"
+                  />
+                  {cloudSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setCloudSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-sky-200/60 hover:text-white p-0.5 rounded-full"
+                      title="Clear search"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {isLoadingCloud ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-sky-200/70">
@@ -954,9 +1017,21 @@ export default function App() {
                     Click "Save Changes" on the left to upload your first cloud training!
                   </p>
                 </div>
+              ) : filteredCloudSessions.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-8 text-sky-200/70 bg-[#002142]/85 border border-dashed border-[#5ea4c5]/30 rounded-2xl">
+                  <Search className="w-6 h-6 text-sky-300/40 mb-2" />
+                  <p className="text-xs font-bold text-white">No sessions match "{cloudSearchQuery}"</p>
+                  <button
+                    type="button"
+                    onClick={() => setCloudSearchQuery('')}
+                    className="mt-2 text-[10px] font-bold text-[#a79078] hover:underline cursor-pointer"
+                  >
+                    Clear search filter
+                  </button>
+                </div>
               ) : (
                 <div className="max-h-[295px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-                  {cloudSessions.map((cloudSess) => {
+                  {filteredCloudSessions.map((cloudSess) => {
                     const isActive = cloudSess.id === session.id;
                     return (
                       <div

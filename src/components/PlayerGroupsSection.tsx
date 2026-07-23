@@ -162,7 +162,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   };
 
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-5 print:shadow-none print:border-slate-300 print:p-4 print:rounded-none">
+    <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-5 print:hidden">
       
       {/* Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5 print:border-slate-300">

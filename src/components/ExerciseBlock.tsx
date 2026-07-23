@@ -598,8 +598,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         onChange={(e) => updateExercise(ex.id, { description: e.target.value })}
                         rows={4}
                         placeholder="Describe the tactical flow, rules, constraints, or jokers to trigger the desired behavior..."
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:resize-none print:p-0 print:border-none print:leading-relaxed"
+                        className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
+                      <div className="hidden print:block text-xs font-semibold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
+                        {ex.description || <span className="italic text-slate-400">Sin descripción</span>}
+                      </div>
                     </div>
 
                     {/* Coaches' Roles rendered in right column if graphics are hidden */}
@@ -626,10 +629,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       <textarea
                         value={ex.playerGroups || ''}
                         onChange={(e) => updateExercise(ex.id, { playerGroups: e.target.value })}
-                        rows={2}
+                        rows={3}
                         placeholder="e.g., Grupo 1 (Peto Azul): Rimah, Rital, Lara... Grupo 2 (Peto Amarillo): Batul, Sadeem..."
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:resize-none print:p-0 print:border-none print:leading-relaxed"
+                        className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
+                      <div className="hidden print:block text-xs font-semibold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
+                        {ex.playerGroups || <span className="italic text-slate-400">Sin asignación de grupos</span>}
+                      </div>
                     </div>
                   </div>
 
