@@ -921,17 +921,17 @@ export default function App() {
         )}
 
         {/* Print-Only Professional Document Footer */}
-        <footer className="hidden print:grid grid-cols-2 gap-8 mt-12 pt-8 border-t-2 border-slate-200">
+        <footer className="hidden print:grid grid-cols-2 gap-8 mt-6 pt-4 border-t-2 border-[#002142]">
           <div>
-            <div className="border-b border-slate-300 h-10 w-full mb-1"></div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Head Coach Signature</p>
+            <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
+            <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Head Coach Signature</p>
           </div>
           <div>
-            <div className="border-b border-slate-300 h-10 w-full mb-1"></div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 text-center">Assistant Coach Signature</p>
+            <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
+            <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Technical Staff Signature</p>
           </div>
-          <div className="col-span-2 text-center text-[9px] text-slate-400 mt-4">
-            Training Session created with <span className="font-semibold text-slate-600">U17 Training Sessions Planner</span>. Authorized for official club coaching staff use.
+          <div className="col-span-2 text-center text-[8px] text-slate-500 mt-2 font-medium tracking-wide">
+            AL ULA SC • Official Microcycle Training Session Plan • Authorized Coaching Document
           </div>
         </footer>
 

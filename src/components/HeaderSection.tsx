@@ -73,15 +73,15 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
   const logoSrc = isOldOrInvalid ? OFFICIAL_ALULA_LOGO_DATA_URL : currentLogo;
 
   return (
-    <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-4 print:rounded-none">
+    <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-4 print:rounded-xl print:border-t-4 print:border-t-[#002142] print:border-b-2 print:border-b-[#a79078]">
       {/* Upper Grid: Badge & Metadata */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center print:grid-cols-12 print:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center print:grid-cols-12 print:gap-3">
         
         {/* Column 1: Team Badge upload (Span 3) */}
-        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:col-span-3 print:border-r print:border-slate-300 print:pb-0 print:pr-4">
+        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:col-span-2 print:border-r print:border-slate-200 print:pb-0 print:pr-3">
           <div 
             onClick={() => fileInputRef.current?.click()}
-            className="group relative cursor-pointer w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 hover:border-emerald-500 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 hover:bg-slate-100 print:w-20 print:h-20 print:border-none print:bg-transparent"
+            className="group relative cursor-pointer w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 hover:border-emerald-500 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 hover:bg-slate-100 print:w-16 print:h-16 print:border-none print:bg-transparent"
           >
             {isUploadingLogo ? (
               <div className="flex flex-col items-center justify-center p-2 text-emerald-600 text-xs font-semibold">
@@ -92,7 +92,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
               <SmartImage 
                 src={logoSrc} 
                 alt="Club Badge" 
-                className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105 print:p-0"
                 onConverted={(convertedJpeg) => onChange({ teamLogo: convertedJpeg })}
               />
             )}
@@ -126,7 +126,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
         </div>
 
         {/* Column 2: Main Info Fields (Span 9) */}
-        <div className="md:col-span-9 space-y-4 print:col-span-9 print:space-y-2">
+        <div className="md:col-span-9 space-y-4 print:col-span-10 print:space-y-1.5">
           {/* Team Name Title */}
           <div>
             <label className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 block mb-1 print:hidden">
@@ -138,69 +138,69 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
               value={session.teamName}
               onChange={(e) => onChange({ teamName: e.target.value })}
               placeholder="e.g., A.D. San Pedro U17"
-              className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-xl print:font-bold print:pb-0 print:text-black"
+              className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-lg print:font-extrabold print:pb-0 print:text-[#002142]"
             />
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2 print:bg-slate-50/80 print:p-2 print:rounded-lg print:border print:border-slate-200">
             {/* Fecha */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
-              <Calendar className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Calendar className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Date</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Date</label>
                 <input
                   id="header-date"
                   type="date"
                   value={session.date}
                   onChange={(e) => onChange({ date: e.target.value })}
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-black print:text-sm"
+                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
             {/* Hora */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
-              <Clock className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Clock className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Time / Slot</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Time / Slot</label>
                 <input
                   id="header-time"
                   type="text"
                   value={session.time}
                   onChange={(e) => onChange({ time: e.target.value })}
                   placeholder="18:30 - 20:00"
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-black print:text-sm"
+                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
             {/* Nº de Sesión */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
-              <Trophy className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Trophy className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Session No.</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Session No.</label>
                 <input
                   id="header-session-number"
                   type="text"
                   value={session.sessionNumber}
                   onChange={(e) => onChange({ sessionNumber: e.target.value })}
                   placeholder="Session 1"
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-black print:text-sm"
+                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
             {/* Microcilo Day */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0">
-              <Activity className="w-4 h-4 text-emerald-500 print:text-black shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Activity className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:hidden">Microcycle Day</label>
+                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Microcycle Day</label>
                 <select
                   id="header-microcycle-day"
                   value={session.microcycleDay || ''}
                   onChange={(e) => onChange({ microcycleDay: e.target.value })}
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer print:text-black print:text-sm print:font-bold"
+                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer print:text-slate-900 print:text-xs print:font-bold"
                 >
                   <option value="">Select Day</option>
                   <option value="-4">-4</option>
@@ -218,17 +218,17 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
       </div>
 
       {/* Side-by-Side Grid: Main Objective & Materials Section */}
-      <div className="mt-6 pt-6 border-t border-slate-100 print:mt-3 print:pt-3 print:border-slate-300">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
+      <div className="mt-6 pt-6 border-t border-slate-100 print:mt-2.5 print:pt-2.5 print:border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-3">
           
           {/* Primary Session Objective */}
-          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-transparent print:border-none print:p-0">
+          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-slate-50/50 print:border print:border-slate-200 print:rounded-lg print:p-2.5">
             <div className="bg-emerald-500 p-1.5 rounded-lg text-white mt-0.5 print:hidden shrink-0 shadow-sm shadow-emerald-500/20">
               <Target className="w-4 h-4" />
             </div>
             <div className="w-full">
-              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-black print:text-xs">
-                <Target className="w-3.5 h-3.5 hidden print:inline mr-1" />
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-[#002142] print:text-[10px] print:font-black">
+                <Target className="w-3.5 h-3.5 hidden print:inline mr-1 text-[#0f5981]" />
                 <span>Primary Session Objective</span>
               </div>
               <textarea
@@ -237,19 +237,19 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
                 onChange={(e) => onChange({ mainObjective: e.target.value })}
                 rows={3}
                 placeholder="Describe the technical, tactical, or physical focus of this training session..."
-                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-black print:text-xs"
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-xs print:mt-1 print:font-semibold"
               />
             </div>
           </div>
 
           {/* Required Equipment & Materials */}
-          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-transparent print:border-none print:p-0">
+          <div className="flex items-start space-x-3 bg-emerald-50/20 border border-emerald-500/10 p-4 rounded-xl print:bg-slate-50/50 print:border print:border-slate-200 print:rounded-lg print:p-2.5">
             <div className="bg-emerald-500 p-1.5 rounded-lg text-white mt-0.5 print:hidden shrink-0 shadow-sm shadow-emerald-500/20">
               <Shield className="w-4 h-4" />
             </div>
             <div className="w-full">
-              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-black print:text-xs">
-                <Shield className="w-3.5 h-3.5 hidden print:inline mr-1" />
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-emerald-700 uppercase tracking-widest print:text-[#002142] print:text-[10px] print:font-black">
+                <Shield className="w-3.5 h-3.5 hidden print:inline mr-1 text-[#0f5981]" />
                 <span>Required Equipment & Materials</span>
               </div>
               <textarea
@@ -258,7 +258,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
                 onChange={(e) => onChange({ materialsNeeded: e.target.value })}
                 rows={3}
                 placeholder="e.g., 20 Cones (10 Yellow), 12 Bibs (6 Green, 6 Blue), 15 Balls, 2 Portable Goals..."
-                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-black print:text-xs"
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-xs print:mt-1 print:font-semibold"
               />
             </div>
           </div>
