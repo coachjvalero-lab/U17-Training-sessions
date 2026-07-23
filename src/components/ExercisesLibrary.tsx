@@ -110,25 +110,25 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     // 1. Custom exercises from user library
     customExercises.forEach(ex => {
       const cat = ex.isFitness ? 'fitness' : (ex.id.includes('gk') ? 'gk' : 'football');
-      addEx(ex, 'Biblioteca Personal', cat, true);
+      addEx(ex, 'Personal Library', cat, true);
     });
 
     // 2. Current Session Exercises
-    (currentSession.warmUp?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fútbol)', 'football'));
-    (currentSession.mainPart?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fútbol)', 'football'));
-    (currentSession.coolDown?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fútbol)', 'football'));
+    (currentSession.warmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
+    (currentSession.mainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
+    (currentSession.coolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
 
-    (currentSession.fitnessWarmUp?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fitness)', 'fitness'));
-    (currentSession.fitnessMainPart?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fitness)', 'fitness'));
-    (currentSession.fitnessCoolDown?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Fitness)', 'fitness'));
+    (currentSession.fitnessWarmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
+    (currentSession.fitnessMainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
+    (currentSession.fitnessCoolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
 
-    (currentSession.gkWarmUp?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Porteros)', 'gk'));
-    (currentSession.gkMainPart?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Porteros)', 'gk'));
-    (currentSession.gkCoolDown?.exercises || []).forEach(e => addEx(e, 'Sesión Actual (Porteros)', 'gk'));
+    (currentSession.gkWarmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
+    (currentSession.gkMainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
+    (currentSession.gkCoolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
 
     // 3. Cloud Sessions Exercises
     cloudSessions.forEach(cSess => {
-      const sessLabel = `Sesión #${cSess.sessionNumber || '1'}`;
+      const sessLabel = `Session #${cSess.sessionNumber || '1'}`;
       (cSess.warmUp?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
       (cSess.mainPart?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
       (cSess.coolDown?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
@@ -172,7 +172,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
-      alert('Imagen demasiado grande. Selecciona una menor a 8MB.');
+      alert('Image too large. Please select an image under 8MB.');
       return;
     }
     setIsUploadingImage(true);
@@ -181,7 +181,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       setNewEx(prev => ({ ...prev, image: imgData }));
     } catch (err) {
       console.error('Failed uploading exercise image:', err);
-      alert('Error procesando la imagen del ejercicio.');
+      alert('Error processing exercise image.');
     } finally {
       setIsUploadingImage(false);
     }
@@ -191,13 +191,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const handleSaveCustomExercise = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEx.name?.trim()) {
-      alert('Por favor ingresa un nombre para el ejercicio.');
+      alert('Please enter a name for the exercise.');
       return;
     }
 
     const created: Exercise = {
       id: 'custom-ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      name: newEx.name || 'Ejercicio Personalizado',
+      name: newEx.name || 'Custom Exercise',
       gameMoment: (newEx.gameMoment as GameMoment) || 'Attack',
       subMoment: newEx.subMoment || '',
       description: newEx.description || '',
@@ -224,14 +224,14 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       image: ''
     });
 
-    setAddedToast('¡Ejercicio guardado exitosamente en la biblioteca!');
+    setAddedToast('Exercise saved successfully to library!');
     setTimeout(() => setAddedToast(null), 3000);
   };
 
   // Delete custom exercise
   const handleDeleteCustomExercise = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('¿Deseas eliminar este ejercicio de la biblioteca personal?')) {
+    if (confirm('Do you want to delete this exercise from your personal library?')) {
       setCustomExercises(prev => prev.filter(ex => ex.id !== id));
     }
   };
@@ -251,8 +251,8 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     onAddExerciseToSession(blockKey, clonedEx, sectionCat);
     setOpenAddDropdownId(null);
 
-    const blockName = blockKey === 'warmUp' ? 'Calentamiento' : blockKey === 'mainPart' ? 'Parte Principal' : 'Vuelta a la Calma';
-    setAddedToast(`Añadido "${ex.name}" a ${blockName} (${sectionCat.toUpperCase()})`);
+    const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
+    setAddedToast(`Added "${ex.name}" to ${blockName} (${sectionCat.toUpperCase()})`);
     setTimeout(() => setAddedToast(null), 3500);
   };
 
@@ -278,11 +278,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 <BookOpen className="w-6 h-6" />
               </div>
               <h2 className="text-xl md:text-2xl font-display font-black tracking-tight uppercase text-white">
-                Biblioteca de Ejercicios / Exercises Database
+                Exercises Database
               </h2>
             </div>
             <p className="text-xs text-sky-200/80 max-w-2xl font-medium pt-1">
-              Explora y reutiliza todos los ejercicios creados en tus sesiones de entrenamiento. Filtra por categoría o momento táctico y añádelos con un clic a tu sesión activa.
+              Explore and reuse all exercises created across training sessions. Filter by category or tactical moment and add them to your active session with one click.
             </p>
           </div>
 
@@ -292,7 +292,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
             className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider py-3 px-5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Crear Nuevo Ejercicio</span>
+            <span>Create New Exercise</span>
           </button>
         </div>
       </div>
@@ -308,7 +308,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar ejercicio por nombre, descripción o espacio..."
+              placeholder="Search exercise by name, description or pitch size..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981]"
             />
             {searchTerm && (
@@ -329,10 +329,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               onChange={(e) => setCategoryFilter(e.target.value as any)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#0f5981] cursor-pointer"
             >
-              <option value="all">Todas las Categorías</option>
-              <option value="football">⚽ Fútbol / Football</option>
-              <option value="fitness">🏃 Prep. Física / Fitness</option>
-              <option value="gk">🧤 Porteros / Goalkeepers</option>
+              <option value="all">All Categories</option>
+              <option value="football">⚽ Football</option>
+              <option value="fitness">🏃 Fitness & Conditioning</option>
+              <option value="gk">🧤 Goalkeepers</option>
             </select>
           </div>
 
@@ -343,7 +343,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               onChange={(e) => setMomentFilter(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#0f5981] cursor-pointer"
             >
-              <option value="all">Todos los Momentos Tácticos</option>
+              <option value="all">All Tactical Moments</option>
               {gameMomentsList.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
@@ -355,7 +355,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
         {/* Counter Badge */}
         <div className="flex items-center justify-between text-xs text-slate-500 font-semibold pt-1 border-t border-slate-100">
           <span>
-            Mostrando <strong className="text-slate-900 font-extrabold">{filteredExercises.length}</strong> de <strong className="text-slate-900 font-extrabold">{allExercises.length}</strong> ejercicios disponibles
+            Showing <strong className="text-slate-900 font-extrabold">{filteredExercises.length}</strong> of <strong className="text-slate-900 font-extrabold">{allExercises.length}</strong> available exercises
           </span>
           {(categoryFilter !== 'all' || momentFilter !== 'all' || searchTerm) && (
             <button
@@ -367,7 +367,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               }}
               className="text-xs text-[#0f5981] hover:underline font-bold"
             >
-              Restablecer Filtros
+              Reset Filters
             </button>
           )}
         </div>
@@ -377,9 +377,9 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       {filteredExercises.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
           <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
-          <h3 className="text-sm font-bold text-slate-800">No se encontraron ejercicios</h3>
+          <h3 className="text-sm font-bold text-slate-800">No exercises found</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Prueba a modificar los términos de búsqueda o filtros, o crea un nuevo ejercicio para guardarlo en la biblioteca.
+            Try modifying your search terms or filters, or create a new exercise to save it to your library.
           </p>
         </div>
       ) : (
@@ -390,8 +390,8 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
             const categoryBadge = ex.sectionCategory === 'fitness' 
               ? { label: 'Fitness', color: 'bg-amber-100 text-amber-800 border-amber-300' }
               : ex.sectionCategory === 'gk'
-              ? { label: 'Portero', color: 'bg-sky-100 text-sky-800 border-sky-300' }
-              : { label: 'Fútbol', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+              ? { label: 'Goalkeeper', color: 'bg-sky-100 text-sky-800 border-sky-300' }
+              : { label: 'Football', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
 
             return (
               <div 
@@ -427,7 +427,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         type="button"
                         onClick={(e) => handleDeleteCustomExercise(ex.id, e)}
                         className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Eliminar de la biblioteca"
+                        title="Delete from library"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -448,7 +448,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     </div>
                     <div className="flex items-center space-x-1">
                       <Maximize2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{ex.dimensions || 'Camp completo'}</span>
+                      <span>{ex.dimensions || 'Full pitch'}</span>
                     </div>
                   </div>
 
@@ -475,7 +475,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 <div className="pt-3 border-t border-slate-100 relative">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      Usar en entrenamiento
+                      Use in training
                     </span>
 
                     <div className="relative">
@@ -485,7 +485,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         className="flex items-center space-x-1.5 bg-[#002142] hover:bg-[#003366] text-white text-xs font-bold py-2 px-3.5 rounded-xl shadow-sm transition-all cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5 text-[#a79078]" />
-                        <span>Añadir a la Sesión</span>
+                        <span>Add to Session</span>
                         <ChevronDown className="w-3.5 h-3.5 ml-1" />
                       </button>
 
@@ -493,7 +493,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                       {isDropdownOpen && (
                         <div className="absolute right-0 bottom-11 w-56 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-2 z-30 space-y-1">
                           <p className="text-[9px] font-black uppercase text-sky-200/60 px-2 py-1 border-b border-slate-800">
-                            Añadir a Bloque en {ex.sectionCategory?.toUpperCase() || 'FÚTBOL'}
+                            Add to Block in {ex.sectionCategory?.toUpperCase() || 'FOOTBALL'}
                           </p>
 
                           <button
@@ -501,7 +501,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                             onClick={() => handleInsert(ex, 'warmUp', ex.sectionCategory || 'football')}
                             className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
                           >
-                            <span>1. Calentamiento (Warm Up)</span>
+                            <span>1. Warm Up</span>
                             <Plus className="w-3.5 h-3.5 text-emerald-400" />
                           </button>
 
@@ -510,7 +510,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                             onClick={() => handleInsert(ex, 'mainPart', ex.sectionCategory || 'football')}
                             className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
                           >
-                            <span>2. Parte Principal (Main Part)</span>
+                            <span>2. Main Part</span>
                             <Plus className="w-3.5 h-3.5 text-emerald-400" />
                           </button>
 
@@ -519,7 +519,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                             onClick={() => handleInsert(ex, 'coolDown', ex.sectionCategory || 'football')}
                             className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
                           >
-                            <span>3. Vuelta a la Calma (Cool Down)</span>
+                            <span>3. Cool Down</span>
                             <Plus className="w-3.5 h-3.5 text-emerald-400" />
                           </button>
                         </div>
@@ -546,10 +546,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-display font-black text-slate-900 uppercase">
-                    Crear Nuevo Ejercicio para la Biblioteca
+                    Create New Exercise for Library
                   </h3>
                   <p className="text-xs text-slate-400 font-semibold">
-                    Guarda tus tareas tácticas y físicas favoritas para utilizarlas en cualquier sesión.
+                    Save your favorite tactical and physical tasks to reuse them across sessions.
                   </p>
                 </div>
               </div>
@@ -568,7 +568,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               {/* Category Selector */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                  Categoría del Ejercicio
+                  Exercise Category
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -580,7 +580,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         : 'bg-slate-50 text-slate-700 border-slate-200'
                     }`}
                   >
-                    ⚽ Fútbol
+                    ⚽ Football
                   </button>
                   <button
                     type="button"
@@ -591,7 +591,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         : 'bg-slate-50 text-slate-700 border-slate-200'
                     }`}
                   >
-                    🏃 Prep. Física
+                    🏃 Fitness
                   </button>
                   <button
                     type="button"
@@ -602,7 +602,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         : 'bg-slate-50 text-slate-700 border-slate-200'
                     }`}
                   >
-                    🧤 Porteros
+                    🧤 Goalkeepers
                   </button>
                 </div>
               </div>
@@ -610,14 +610,14 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               {/* Title */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                  Nombre del Ejercicio *
+                  Exercise Name *
                 </label>
                 <input
                   type="text"
                   required
                   value={newEx.name || ''}
                   onChange={(e) => setNewEx({ ...newEx, name: e.target.value })}
-                  placeholder="e.g. Rondo 5v2 en Transición Rápida A-D"
+                  placeholder="e.g. 5v2 Rondo with Fast A-D Transition"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                 />
               </div>
@@ -626,7 +626,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Momento del Juego
+                    Game Moment
                   </label>
                   <select
                     value={newEx.gameMoment || 'Attack'}
@@ -641,13 +641,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Sub-momento / Principio Táctico
+                    Sub-moment / Tactical Principle
                   </label>
                   <input
                     type="text"
                     value={newEx.subMoment || ''}
                     onChange={(e) => setNewEx({ ...newEx, subMoment: e.target.value })}
-                    placeholder="e.g. Presión alta tras pérdida"
+                    placeholder="e.g. High press after possession loss"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>
@@ -657,20 +657,20 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Duración
+                    Duration
                   </label>
                   <input
                     type="text"
                     value={newEx.duration || ''}
                     onChange={(e) => setNewEx({ ...newEx, duration: e.target.value })}
-                    placeholder="e.g. 15 min (3 x 4' + 1' desc)"
+                    placeholder="e.g. 15 min (3 x 4' + 1' rest)"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>
 
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Espacio / Dimensiones
+                    Space / Pitch Dimensions
                   </label>
                   <input
                     type="text"
@@ -685,13 +685,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               {/* Description */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                  Explicación & Reglas del Ejercicio
+                  Explanation & Rules
                 </label>
                 <textarea
                   rows={4}
                   value={newEx.description || ''}
                   onChange={(e) => setNewEx({ ...newEx, description: e.target.value })}
-                  placeholder="Describe la dinámica, normas, comodines, rotaciones y consignas principales..."
+                  placeholder="Describe dynamics, rules, jokers, rotations and key coaching points..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981] resize-y"
                 />
               </div>
@@ -700,26 +700,26 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Roles del Cuerpo Técnico
+                    Coaching Staff Roles
                   </label>
                   <textarea
                     rows={2}
                     value={newEx.coachRoles || ''}
                     onChange={(e) => setNewEx({ ...newEx, coachRoles: e.target.value })}
-                    placeholder="Coach A: Corrección técnica. Coach B: Ritmo de balón..."
+                    placeholder="Coach A: Technical corrections. Coach B: Ball tempo..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>
 
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Asignación de Grupos / Jugadoras
+                    Player Groups Assignment
                   </label>
                   <textarea
                     rows={2}
                     value={newEx.playerGroups || ''}
                     onChange={(e) => setNewEx({ ...newEx, playerGroups: e.target.value })}
-                    placeholder="Grupo 1 (Azul), Grupo 2 (Amarillo)..."
+                    placeholder="Group 1 (Blue), Group 2 (Yellow)..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>
@@ -728,7 +728,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               {/* Image Upload */}
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                  Gráfico o Diagrama Táctico (Opcional)
+                  Tactical Diagram / Graphic (Optional)
                 </label>
                 <div className="flex items-center space-x-3">
                   <label className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2 px-3.5 rounded-xl border border-slate-300 cursor-pointer transition-colors">
@@ -737,7 +737,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     ) : (
                       <Upload className="w-4 h-4 text-emerald-600" />
                     )}
-                    <span>{isUploadingImage ? 'Subiendo...' : 'Subir Imagen / Diagrama'}</span>
+                    <span>{isUploadingImage ? 'Uploading...' : 'Upload Image / Diagram'}</span>
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -749,7 +749,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   {newEx.image && (
                     <span className="text-xs text-emerald-600 font-bold flex items-center space-x-1">
                       <Check className="w-4 h-4" />
-                      <span>Imagen Adjuntada</span>
+                      <span>Image Attached</span>
                     </span>
                   )}
                 </div>
@@ -762,14 +762,14 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   onClick={() => setShowCreateModal(false)}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 rounded-xl"
                 >
-                  Cancelar
+                  Cancel
                 </button>
 
                 <button
                   type="submit"
                   className="px-6 py-2.5 bg-[#002142] hover:bg-[#003366] text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  Guardar en Biblioteca
+                  Save to Library
                 </button>
               </div>
 

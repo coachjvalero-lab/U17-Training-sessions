@@ -183,21 +183,21 @@ export const getDefaultSession = (): TrainingSession => {
         id: 'group-default-1',
         groupNumber: 1,
         bibColor: '#2563eb',
-        name: 'Grupo 1 (Peto Azul)',
+        name: 'Group 1 (Blue Bibs)',
         players: 'Rimah, Rital, Lara, Batul, Sadeem, Alba, Ghala, Auda'
       },
       {
         id: 'group-default-2',
         groupNumber: 2,
         bibColor: '#eab308',
-        name: 'Grupo 2 (Peto Amarillo)',
+        name: 'Group 2 (Yellow Bibs)',
         players: 'Lateen, Hedaya, Ghazal, Remas, Mayar, Maya, Asma'
       },
       {
         id: 'group-default-3',
         groupNumber: 3,
         bibColor: '#ef4444',
-        name: 'Grupo 3 (Peto Rojo)',
+        name: 'Group 3 (Red Bibs)',
         players: 'Rasil, Rema, Sara, Khulud, Ransy, Jalila, Ratil'
       }
     ],

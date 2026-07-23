@@ -97,8 +97,8 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
     if (!sessionGroups || sessionGroups.length === 0) return;
     const formatted = sessionGroups
       .map(g => {
-        const pList = g.players ? g.players.split(',').map(p => p.trim()).filter(Boolean).join(', ') : 'Sin jugadoras';
-        return `${g.name || `Grupo ${g.groupNumber}`}: ${pList}`;
+        const pList = g.players ? g.players.split(',').map(p => p.trim()).filter(Boolean).join(', ') : 'No players assigned';
+        return `${g.name || `Group ${g.groupNumber}`}: ${pList}`;
       })
       .join('\n');
     updateExercise(exId, { playerGroups: formatted });
@@ -601,7 +601,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
                       <div className="hidden print:block text-xs font-semibold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
-                        {ex.description || <span className="italic text-slate-400">Sin descripción</span>}
+                        {ex.description || <span className="italic text-slate-400">No description</span>}
                       </div>
                     </div>
 
@@ -619,10 +619,10 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                             type="button"
                             onClick={() => handleCopySessionGroups(ex.id)}
                             className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg transition-all flex items-center space-x-1 print:hidden"
-                            title="Copiar los grupos de jugadoras configurados en la sesión"
+                            title="Copy session player groups configured for this session"
                           >
                             <Users className="w-3 h-3" />
-                            <span>Aplicar Grupos de la Sesión</span>
+                            <span>Apply Session Groups</span>
                           </button>
                         )}
                       </div>
@@ -630,11 +630,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         value={ex.playerGroups || ''}
                         onChange={(e) => updateExercise(ex.id, { playerGroups: e.target.value })}
                         rows={3}
-                        placeholder="e.g., Grupo 1 (Peto Azul): Rimah, Rital, Lara... Grupo 2 (Peto Amarillo): Batul, Sadeem..."
+                        placeholder="e.g., Group 1 (Blue Bibs): Rimah, Rital, Lara... Group 2 (Yellow Bibs): Batul, Sadeem..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
                       <div className="hidden print:block text-xs font-semibold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
-                        {ex.playerGroups || <span className="italic text-slate-400">Sin asignación de grupos</span>}
+                        {ex.playerGroups || <span className="italic text-slate-400">No player groups assigned</span>}
                       </div>
                     </div>
                   </div>

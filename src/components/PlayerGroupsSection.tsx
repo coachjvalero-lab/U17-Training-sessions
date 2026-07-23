@@ -46,7 +46,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
       id: `group-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       groupNumber: nextNum,
       bibColor: colorPreset.hex,
-      name: `Grupo ${nextNum} (${colorPreset.name})`,
+      name: `Group ${nextNum} (${colorPreset.name})`,
       players: ''
     };
     onChangeGroups([...groups, newGroup]);
@@ -115,7 +115,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         id: `group-auto-${i + 1}-${Date.now()}`,
         groupNumber: i + 1,
         bibColor: preset.hex,
-        name: `Grupo ${i + 1} (${preset.name})`,
+        name: `Group ${i + 1} (${preset.name})`,
         players: ''
       });
     }
@@ -134,7 +134,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Clear all assignments
   const handleClearGroups = () => {
-    if (window.confirm('¿Seguro que quieres vaciar los grupos?')) {
+    if (window.confirm('Are you sure you want to clear all groups?')) {
       onChangeGroups([]);
     }
   };
@@ -165,51 +165,51 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-5 print:hidden">
       
       {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5 print:border-slate-300">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
         <div className="flex items-center space-x-2.5">
-          <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm print:hidden">
+          <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
             <Users className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <span>Grupos de Jugadoras / Player Groups</span>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full print:hidden">
-                {squadRoster.length} Jugadoras
+              <span>Player Groups</span>
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                {squadRoster.length} Players
               </span>
             </h2>
-            <p className="text-[10px] text-slate-400 font-bold print:hidden">
-              Asigna las jugadoras a petos/grupos de colores para los ejercicios de la sesión.
+            <p className="text-[10px] text-slate-400 font-bold">
+              Assign players to colored bibs/groups for training drills.
             </p>
           </div>
         </div>
 
-        {/* Quick Actions (Screen Only) */}
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+        {/* Quick Actions */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-[10px] font-extrabold text-slate-600 gap-1">
-            <span className="px-1.5 text-slate-400">Repartir:</span>
+            <span className="px-1.5 text-slate-400">Split:</span>
             <button
               type="button"
               onClick={() => handleAutoDivide(2)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Dividir plantilla en 2 grupos"
+              title="Split squad into 2 groups"
             >
-              2 Grupos
+              2 Groups
             </button>
             <button
               type="button"
               onClick={() => handleAutoDivide(3)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Dividir plantilla en 3 grupos"
+              title="Split squad into 3 groups"
             >
-              3 Grupos
+              3 Groups
             </button>
             <button
               type="button"
               onClick={() => handleAutoDivide(4)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Dividir plantilla en 4 grupos"
+              title="Split squad into 4 groups"
             >
-              4 Grupos
+              4 Groups
             </button>
           </div>
 
@@ -219,17 +219,17 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
             className="flex items-center space-x-1 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-sm"
           >
             <Plus className="w-3.5 h-3.5 text-[#a79078]" />
-            <span>Añadir Grupo</span>
+            <span>Add Group</span>
           </button>
 
           <button
             type="button"
             onClick={() => setIsEditingRoster(!isEditingRoster)}
             className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-2.5 py-2 rounded-xl transition-all border border-slate-200"
-            title="Editar lista de jugadoras"
+            title="Edit player roster"
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span>Plantilla</span>
+            <span>Roster</span>
           </button>
 
           {groups.length > 0 && (
@@ -237,7 +237,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               type="button"
               onClick={handleClearGroups}
               className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
-              title="Vaciar todos los grupos"
+              title="Clear all groups"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -245,12 +245,12 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         </div>
       </div>
 
-      {/* Roster Editor Drawer (Screen Only) */}
+      {/* Roster Editor Drawer */}
       {isEditingRoster && (
-        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3 print:hidden">
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold uppercase text-slate-700 tracking-wider">
-              Editar Lista de Jugadoras de la Plantilla
+              Edit Squad Player Roster
             </span>
             <button
               type="button"
@@ -258,11 +258,11 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               className="text-[10px] font-bold text-emerald-700 hover:underline flex items-center gap-1"
             >
               <RefreshCw className="w-3 h-3" />
-              <span>Restablecer Plantilla U17</span>
+              <span>Reset U17 Roster</span>
             </button>
           </div>
           <p className="text-[10px] text-slate-500">
-            Introduce los nombres separados por comas:
+            Enter names separated by commas:
           </p>
           <textarea
             value={rosterInput}
@@ -276,7 +276,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               onClick={() => setIsEditingRoster(false)}
               className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg"
             >
-              Cancelar
+              Cancel
             </button>
             <button
               type="button"
@@ -284,22 +284,22 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               className="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg shadow-sm flex items-center space-x-1"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Guardar Plantilla</span>
+              <span>Save Roster</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Unassigned Players Pool (Screen Only) */}
-      <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-2.5 print:hidden">
+      {/* Unassigned Players Pool */}
+      <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-slate-400" />
-            <span>Jugadoras Sin Grupo Asignado ({unassignedPlayers.length})</span>
+            <span>Unassigned Players ({unassignedPlayers.length})</span>
           </span>
           {unassignedPlayers.length === 0 && (
             <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
-              ✓ ¡Toda la plantilla está asignada!
+              ✓ Entire squad assigned!
             </span>
           )}
         </div>
@@ -327,7 +327,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                   {isSelected && groups.length > 0 && (
                     <div className="absolute top-full left-0 mt-1.5 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100">
                       <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 px-2 py-1">
-                        Asignar a:
+                        Assign to:
                       </div>
                       {groups.map(g => {
                         const preset = getColorPreset(g.bibColor);
@@ -342,7 +342,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                               className="w-3 h-3 rounded-full shrink-0 border border-black/10" 
                               style={{ backgroundColor: g.bibColor || preset.hex }} 
                             />
-                            <span className="truncate">{g.name || `Grupo ${g.groupNumber}`}</span>
+                            <span className="truncate">{g.name || `Group ${g.groupNumber}`}</span>
                           </button>
                         );
                       })}
@@ -354,22 +354,22 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           </div>
         ) : (
           <p className="text-xs italic text-slate-400">
-            Todas las jugadoras ({squadRoster.length}) están actualmente distribuidas en los grupos creados abajo.
+            All players ({squadRoster.length}) are currently assigned to groups below.
           </p>
         )}
       </div>
 
       {/* Groups Grid (Interactive Screen Cards) */}
       {groups.length === 0 ? (
-        <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl print:hidden">
+        <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
           <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-xs font-bold text-slate-600">No hay grupos de jugadoras configurados</p>
+          <p className="text-xs font-bold text-slate-600">No player groups configured</p>
           <p className="text-[10px] text-slate-400 mt-1 max-w-sm mx-auto">
-            Haz clic en <strong className="text-slate-700">"Añadir Grupo"</strong> o selecciona <strong className="text-emerald-600 font-bold">"2 Grupos" / "3 Grupos"</strong> para repartir automáticamente la plantilla de la U17.
+            Click <strong className="text-slate-700">"Add Group"</strong> or select <strong className="text-emerald-600 font-bold">"2 Groups" / "3 Groups"</strong> to automatically split squad.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {groups.map((group) => {
             const preset = getColorPreset(group.bibColor);
             const playerList = getGroupPlayersList(group);
@@ -388,9 +388,9 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                     />
                     <input
                       type="text"
-                      value={group.name || `Grupo ${group.groupNumber}`}
+                      value={group.name || `Group ${group.groupNumber}`}
                       onChange={(e) => handleUpdateGroup(group.id, { name: e.target.value })}
-                      placeholder="Nombre del grupo..."
+                      placeholder="Group name..."
                       className="w-full text-xs font-black bg-transparent border-b border-transparent focus:border-slate-400 focus:outline-none truncate"
                     />
                   </div>
@@ -413,7 +413,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                       type="button"
                       onClick={() => handleDeleteGroup(group.id)}
                       className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors"
-                      title="Eliminar grupo"
+                      title="Delete group"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -423,8 +423,8 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                 {/* Player Badges in Group */}
                 <div className="min-h-[50px] space-y-2">
                   <div className="flex items-center justify-between text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
-                    <span>Jugadoras ({playerList.length})</span>
-                    <span>Haz clic para quitar</span>
+                    <span>Players ({playerList.length})</span>
+                    <span>Click to remove</span>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
@@ -433,7 +433,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                         key={player}
                         onClick={() => handleRemovePlayerFromGroup(group.id, player)}
                         className={`text-xs font-extrabold px-2.5 py-1 rounded-xl border cursor-pointer transition-all hover:opacity-80 shadow-sm flex items-center space-x-1 ${preset.badgeClass}`}
-                        title="Clic para remover de este grupo"
+                        title="Click to remove from group"
                       >
                         <span>{player}</span>
                         <span className="text-[10px] opacity-60">×</span>
@@ -442,7 +442,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
                     {playerList.length === 0 && (
                       <p className="text-[11px] italic text-slate-400 py-2">
-                        Ninguna jugadora asignada aún. Haz clic en las jugadoras de arriba para añadirlas.
+                        No players assigned yet. Click on unassigned players above to add them.
                       </p>
                     )}
                   </div>
@@ -453,37 +453,6 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           })}
         </div>
       )}
-
-      {/* Display Summary for Print PDF View */}
-      <div className="hidden print:block space-y-2">
-        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1">
-          Distribución de Jugadoras por Grupos
-        </h3>
-        {groups.length === 0 ? (
-          <p className="text-xs italic text-slate-500">Sin grupos definidos</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            {groups.map(g => {
-              const preset = getColorPreset(g.bibColor);
-              const pList = getGroupPlayersList(g);
-              return (
-                <div key={g.id} className="border border-slate-300 p-2 rounded">
-                  <div className="font-bold text-slate-900 border-b border-slate-200 pb-0.5 mb-1 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full inline-block border border-black/30" style={{ backgroundColor: g.bibColor || preset.hex }} />
-                      <span>{g.name || `Grupo ${g.groupNumber}`}</span>
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-semibold">({pList.length} jugadoras)</span>
-                  </div>
-                  <p className="text-slate-700 font-medium leading-relaxed">
-                    {pList.length > 0 ? pList.join(', ') : 'Sin asignación'}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
     </section>
   );

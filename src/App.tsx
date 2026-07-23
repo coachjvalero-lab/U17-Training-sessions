@@ -6,6 +6,7 @@ import { ExerciseBlock } from './components/ExerciseBlock';
 import { PlayerGroupsSection } from './components/PlayerGroupsSection';
 import { Sidebar } from './components/Sidebar';
 import { ExercisesLibrary } from './components/ExercisesLibrary';
+import { PlanificationSection } from './components/PlanificationSection';
 import { TrainingSession, Exercise, PlayerGroup, TrainingBlock } from './types';
 import { 
   saveSessionToCloud, 
@@ -32,7 +33,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises'>('football');
+  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises' | 'planning'>('football');
 
   // Load and merge into a single unified session
   const [session, setSession] = useState<TrainingSession>(() => {
@@ -509,7 +510,7 @@ export default function App() {
 
       await saveSessionToCloud(sessionToSave);
       setSession(sessionToSave);
-      alert('¡Todos los cambios se han guardado con éxito en la nube!');
+      alert('All changes saved successfully to the cloud!');
     } catch (error) {
       console.error('Error saving session to cloud:', error);
       alert('Failed to save session to the cloud. Please check your internet connection.');
@@ -731,7 +732,7 @@ export default function App() {
       console.error('Error copying share link:', error);
       const url = new URL(window.location.href);
       url.searchParams.set('session', session.id);
-      alert('Enlace de la sesión: ' + url.toString());
+      alert('Session link: ' + url.toString());
     } finally {
       setIsCloudSaving(false);
     }
@@ -830,7 +831,12 @@ export default function App() {
 
       {/* Main Content Workspace Area */}
       <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
-        {activeSection === 'exercises' ? (
+        {activeSection === 'planning' ? (
+          <PlanificationSection
+            session={session}
+            cloudSessions={cloudSessions}
+          />
+        ) : activeSection === 'exercises' ? (
           <ExercisesLibrary
             currentSession={session}
             cloudSessions={cloudSessions}
@@ -890,7 +896,7 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                      Session Observations & Notes / Observaciones
+                      Session Observations & Notes
                     </h2>
                     <p className="text-[10px] text-slate-400 font-bold">
                       Private coaching staff notes (Screen view only — hidden when printing PDF)
@@ -898,7 +904,7 @@ export default function App() {
                   </div>
                 </div>
                 <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
-                  Screen Only / Solo Pantalla
+                  Screen Only
                 </span>
               </div>
 

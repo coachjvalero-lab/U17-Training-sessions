@@ -11,6 +11,7 @@ import {
   Activity, 
   ShieldCheck, 
   BookOpen,
+  BarChart3,
   Menu,
   X,
   RefreshCw,
@@ -22,8 +23,8 @@ import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 
 interface SidebarProps {
   session: TrainingSession;
-  activeSection: 'football' | 'fitness' | 'gk' | 'exercises';
-  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises') => void;
+  activeSection: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning';
+  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning') => void;
   onClearSession: () => void;
   onNewSession: () => void;
   isSaving: boolean;
@@ -63,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const navItems: {
-    id: 'football' | 'fitness' | 'gk' | 'exercises';
+    id: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning';
     label: string;
     sublabel: string;
     icon: any;
@@ -72,32 +73,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }[] = [
     {
       id: 'football',
-      label: 'Fútbol / Football',
+      label: 'Football',
       sublabel: 'Full Field & Tactical',
       icon: Layers,
       color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
     },
     {
       id: 'fitness',
-      label: 'Prep. Física / Fitness',
+      label: 'Fitness & Conditioning',
       sublabel: 'Conditioning & Gym',
       icon: Activity,
       color: 'bg-amber-500/20 text-amber-400 border-amber-500/30'
     },
     {
       id: 'gk',
-      label: 'Porteros / Goalkeepers',
+      label: 'Goalkeepers',
       sublabel: 'Specific GK Training',
       icon: ShieldCheck,
       color: 'bg-sky-500/20 text-sky-400 border-sky-500/30'
     },
     {
       id: 'exercises',
-      label: 'Ejercicios / Exercises',
+      label: 'Exercises Library',
       sublabel: 'Library & Database',
       icon: BookOpen,
       color: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
       badge: totalLibraryExercisesCount > 0 ? String(totalLibraryExercisesCount) : undefined
+    },
+    {
+      id: 'planning',
+      label: 'Planification',
+      sublabel: 'Game Moments & Volume',
+      icon: BarChart3,
+      color: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
     }
   ];
 
@@ -140,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Main Navigation Section Tabs */}
       <div className="space-y-1.5">
         <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
-          Navegación / Navigation
+          Navigation
         </p>
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -185,7 +193,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Quick Actions (Print / New / Clear) */}
       <div className="space-y-2 pt-2 border-t border-[#5ea4c5]/20">
         <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
-          Acciones / Actions
+          Actions
         </p>
 
         {/* Print / PDF Button */}
@@ -196,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Print or Save as PDF"
         >
           <Printer className="w-4 h-4" />
-          <span>Imprimir / PDF</span>
+          <span>Print / PDF</span>
         </button>
 
         <div className="grid grid-cols-2 gap-2">
@@ -208,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Create a new blank training session"
           >
             <Plus className="w-3.5 h-3.5 text-sky-400" />
-            <span>Nueva</span>
+            <span>New</span>
           </button>
 
           {/* Clear Session Button */}
@@ -219,7 +227,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Clear all fields to start from scratch"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Limpiar</span>
+            <span>Clear</span>
           </button>
         </div>
       </div>
@@ -233,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-wider text-sky-200/70 hover:text-white transition-colors cursor-pointer"
           >
             <FolderOpen className="w-3.5 h-3.5 text-[#a79078]" />
-            <span>Sesiones en la Nube ({cloudSessions.length})</span>
+            <span>Cloud Sessions ({cloudSessions.length})</span>
           </button>
 
           <div className="flex items-center space-x-1">
@@ -249,7 +257,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ) : (
                 <CloudUpload className="w-3 h-3 text-sky-300" />
               )}
-              <span className="hidden sm:inline">Guardar</span>
+              <span className="hidden sm:inline">Save</span>
             </button>
 
             <button
@@ -267,11 +275,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="space-y-1.5">
             {isLoadingCloud ? (
               <div className="p-3 text-center text-xs text-slate-400 italic bg-[#001020]/40 rounded-xl">
-                Cargando sesiones...
+                Loading sessions...
               </div>
             ) : cloudSessions.length === 0 ? (
               <div className="p-3 text-center text-xs text-slate-400 bg-[#001020]/40 rounded-xl border border-slate-800">
-                No hay sesiones guardadas aún. Haz clic en "Guardar" para subir tu primera sesión.
+                No saved cloud sessions yet. Click "Save" to upload your first session.
               </div>
             ) : (
               <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
@@ -305,7 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
 
                         <h5 className="text-xs font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
-                          {cloudSess.mainObjective || 'Sin objetivo asignado'}
+                          {cloudSess.mainObjective || 'No objective assigned'}
                         </h5>
                       </div>
 
@@ -314,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           type="button"
                           onClick={(e) => onDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
                           className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
-                          title="Eliminar Sesión"
+                          title="Delete Session"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -368,7 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Al Ula SC U17
               </h2>
               <span className="text-[9px] text-[#a79078] font-bold">
-                {navItems.find(n => n.id === activeSection)?.label.split('/')[0]}
+                {navItems.find(n => n.id === activeSection)?.label}
               </span>
             </div>
           </div>
