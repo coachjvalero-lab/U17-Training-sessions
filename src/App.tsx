@@ -4,8 +4,9 @@ import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
 import { PlayerGroupsSection } from './components/PlayerGroupsSection';
-import { ControlPanel } from './components/ControlPanel';
-import { TrainingSession, Exercise, PlayerGroup } from './types';
+import { Sidebar } from './components/Sidebar';
+import { ExercisesLibrary } from './components/ExercisesLibrary';
+import { TrainingSession, Exercise, PlayerGroup, TrainingBlock } from './types';
 import { 
   saveSessionToCloud, 
   deleteSessionFromCloud, 
@@ -31,7 +32,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk'>('football');
+  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises'>('football');
 
   // Load and merge into a single unified session
   const [session, setSession] = useState<TrainingSession>(() => {
@@ -341,6 +342,42 @@ export default function App() {
         };
       }
     });
+  };
+
+  const handleAddExerciseFromLibrary = (
+    blockKey: 'warmUp' | 'mainPart' | 'coolDown',
+    exercise: Exercise,
+    targetSection?: 'football' | 'fitness' | 'gk'
+  ) => {
+    const section = targetSection || (activeSection === 'exercises' ? 'football' : activeSection);
+    setSession(prev => {
+      let blockPropName: keyof TrainingSession;
+      if (section === 'football') {
+        blockPropName = blockKey;
+      } else if (section === 'fitness') {
+        blockPropName = blockKey === 'warmUp' ? 'fitnessWarmUp' : blockKey === 'mainPart' ? 'fitnessMainPart' : 'fitnessCoolDown';
+      } else {
+        blockPropName = blockKey === 'warmUp' ? 'gkWarmUp' : blockKey === 'mainPart' ? 'gkMainPart' : 'gkCoolDown';
+      }
+
+      const existingBlock = (prev[blockPropName] as TrainingBlock) || {
+        id: `${blockKey}-block-${section}`,
+        title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down',
+        exercises: []
+      };
+
+      return {
+        ...prev,
+        [blockPropName]: {
+          ...existingBlock,
+          exercises: [...(existingBlock.exercises || []), exercise]
+        }
+      };
+    });
+
+    if (exercise.id) {
+      setExpandedExercises(prev => ({ ...prev, [exercise.id]: true }));
+    }
   };
 
   const handleUpdateGroups = (playerGroups: PlayerGroup[]) => {
@@ -771,356 +808,111 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 antialiased font-sans pb-16 print:bg-white print:pb-0 print:pt-0">
+    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
       
-      {/* Outer Wrapper */}
-      <div className="w-full max-w-5xl mx-auto px-4 py-6 space-y-6 md:py-8 md:space-y-8 print:p-0 print:max-w-full">
-        
-        {/* Floating / Sticky Control Panel - Hidden in Print */}
-        <ControlPanel 
-          session={session}
-          onImportSession={handleImportSession}
-          onClearSession={handleClearSession}
-          onRestoreDemo={handleRestoreDemo}
-          isSaving={isSaving}
-        />
+      {/* Lateral Dark Blue Navigation Sidebar */}
+      <Sidebar
+        session={session}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
+        onClearSession={handleClearSession}
+        onNewSession={handleCreateNewCloudSession}
+        isSaving={isSaving}
+        cloudSessions={cloudSessions}
+        isLoadingCloud={isLoadingCloud}
+        isCloudSaving={isCloudSaving}
+        onSaveToCloud={handleSaveActiveToCloud}
+        onLoadCloudSession={handleLoadCloudSession}
+        onDeleteCloudSession={handleDeleteCloudSession}
+        copiedLink={copiedLink}
+        onCopyShareLink={handleCopyShareLink}
+      />
 
-        {/* Section Switcher Tabs - Hidden in Print */}
-        <div className="flex bg-[#ede9e6] p-1.5 rounded-2xl max-w-lg mx-auto print:hidden shadow-inner border border-[#a79078]/30 gap-1.5">
-          <button
-            type="button"
-            onClick={() => setActiveSection('football')}
-            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeSection === 'football' 
-                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
-                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
-            }`}
-          >
-            <span>⚽</span>
-            <span>Football</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSection('fitness')}
-            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeSection === 'fitness' 
-                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
-                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
-            }`}
-          >
-            <span>⚡</span>
-            <span>Fitness</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSection('gk')}
-            className={`flex-1 flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-              activeSection === 'gk' 
-                ? 'bg-[#002142] text-[#a79078] shadow-md shadow-[#002142]/25 border border-[#a79078]/30' 
-                : 'text-[#30221c]/70 hover:text-[#002142] hover:bg-white/60'
-            }`}
-          >
-            <span>🧤</span>
-            <span>GK Training</span>
-          </button>
-        </div>
-
-        {/* Dynamic Coach Instruction Banner - Hidden in Print */}
-        <div className="bg-emerald-50/40 border border-emerald-500/15 rounded-2xl p-5 flex items-start space-x-4 shadow-sm shadow-emerald-50/50 print:hidden">
-          <div className="p-2.5 bg-emerald-500 rounded-xl text-white shrink-0 shadow-md shadow-emerald-500/20">
-            <Info className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-xs font-display font-black tracking-wider uppercase text-emerald-800">Professional U17 Session Designer</h3>
-            <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
-              Fill in the session details, select tactical diagrams or upload your own diagrams. When finished, use the <strong className="text-emerald-700 font-bold">Print / PDF</strong> action to generate a compact, beautifully styled sheet to bring to the pitch or share digitally.
-            </p>
-            <div className="mt-3 flex items-center space-x-3">
-              <button
-                type="button"
-                onClick={() => handleToggleAll(true)}
-                className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 hover:text-emerald-800 cursor-pointer"
-              >
-                Expand all exercises
-              </button>
-              <span className="text-slate-300 text-[10px]">|</span>
-              <button
-                type="button"
-                onClick={() => handleToggleAll(false)}
-                className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 hover:text-emerald-800 cursor-pointer"
-              >
-                Collapse all exercises
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Cloud Database Integration Section - Hidden in Print */}
-        <div className="bg-gradient-to-br from-[#0f5981] via-[#16638f] to-[#1d6fa2] text-white rounded-3xl p-6 border border-[#5ea4c5]/35 shadow-xl print:hidden space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/15">
-            <div className="flex items-center space-x-3.5">
-              <div className="p-2.5 bg-white/10 rounded-xl text-[#ede9e6] border border-white/20 shrink-0">
-                <Database className="w-5 h-5 text-[#a79078]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-white flex items-center gap-1.5">
-                  <span>Al Ula SC Cloud Library</span>
-                  <span className="bg-[#a79078]/25 text-[#f4efe8] text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-[#a79078]/40">
-                    Real-time
-                  </span>
-                </h3>
-                <p className="text-xs text-sky-100/80 mt-0.5 font-medium">
-                  Any coach can read, edit, or create training sessions. All data is automatically synchronized for everyone.
-                </p>
-              </div>
-            </div>
+      {/* Main Content Workspace Area */}
+      <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
+        {activeSection === 'exercises' ? (
+          <ExercisesLibrary
+            currentSession={session}
+            cloudSessions={cloudSessions}
+            onAddExerciseToSession={handleAddExerciseFromLibrary}
+            activeSection={activeSection}
+          />
+        ) : (
+          <main className="space-y-6 md:space-y-8 print:space-y-4">
             
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleCreateNewCloudSession}
-                disabled={isCloudSaving}
-                className="flex items-center space-x-1.5 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all cursor-pointer border border-[#5ea4c5]/30 disabled:opacity-50 shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5 text-[#a79078]" />
-                <span>New Session</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Active Session Status & Actions */}
-            <div className="lg:col-span-5 bg-[#002142]/85 p-5 rounded-2xl border border-[#5ea4c5]/25 flex flex-col justify-between shadow-inner">
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">Active Workspace Session</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      isCloudSaving 
-                        ? 'bg-amber-500/20 text-amber-200 border-amber-400/30' 
-                        : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
-                    }`}>
-                      {isCloudSaving ? '⚡ Guardando...' : '✓ Sincronizado'}
-                    </span>
-                  </div>
-                  <h4 className="text-base font-black text-white mt-1">
-                    Sesión #{session.sessionNumber || '1'}
-                  </h4>
-                  <p className="text-xs text-sky-100/80 mt-1 line-clamp-2 font-medium">
-                    {session.mainObjective || 'No objective specified.'}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-sky-200/90 font-bold uppercase">
-                    <span className="bg-[#0f5981]/60 border border-sky-400/20 px-2 py-1 rounded">Date: {session.date || '-'}</span>
-                    <span className="bg-[#0f5981]/60 border border-sky-400/20 px-2 py-1 rounded">Type: {activeSection === 'football' ? '⚽ Football' : activeSection === 'fitness' ? '⚡ Fitness' : '🧤 GK Training'}</span>
-                  </div>
-                </div>
-
-                <div className="bg-[#0f5981]/40 p-3.5 rounded-xl border border-sky-400/20 text-[11px] text-sky-100 leading-relaxed font-medium space-y-2">
-                  <p>
-                    <strong>Sincronización automática:</strong> Todos los cambios que realizas se guardan automáticamente en la nube en tiempo real.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleCopyShareLink}
-                    className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-950/40"
-                  >
-                    {copiedLink ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-200" />
-                        <span>¡Enlace copiado!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="w-4 h-4" />
-                        <span>Copiar Enlace para Compartir</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={handleSaveActiveToCloud}
-                  disabled={isCloudSaving}
-                  className="flex items-center justify-center space-x-1.5 bg-[#a79078] hover:bg-[#967f67] text-slate-950 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
-                >
-                  <CloudUpload className="w-3.5 h-3.5" />
-                  <span>{isCloudSaving ? 'Saving...' : 'Save Changes'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAsNewToCloud}
-                  disabled={isCloudSaving}
-                  className="flex items-center justify-center space-x-1.5 bg-[#002142] hover:bg-[#002e5c] text-white border border-[#5ea4c5]/30 font-black text-[11px] uppercase tracking-wider py-3 px-4 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5 text-[#a79078]" />
-                  <span>Save as Copy</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Cloud Library Session List */}
-            <div className="lg:col-span-7 flex flex-col space-y-3">
-              <span className="text-[10px] font-bold text-[#a79078] uppercase tracking-wider">
-                Saved Sessions ({cloudSessions.length})
-              </span>
-
-              {isLoadingCloud ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 text-sky-200/70">
-                  <RefreshCw className="w-6 h-6 animate-spin text-[#a79078]" />
-                  <span className="text-xs mt-2 uppercase font-black tracking-widest">Loading cloud list...</span>
-                </div>
-              ) : cloudSessions.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-10 text-sky-200/70 bg-[#002142]/85 border border-dashed border-[#5ea4c5]/30 rounded-2xl">
-                  <Cloud className="w-8 h-8 text-sky-300/50 mb-2" />
-                  <p className="text-xs font-bold text-white">No saved cloud sessions found</p>
-                  <p className="text-[10px] text-sky-200/60 mt-1 max-w-[250px] text-center font-medium">
-                    Click "Save Changes" on the left to upload your first cloud training!
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-[295px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-                  {cloudSessions.map((cloudSess) => {
-                    const isActive = cloudSess.id === session.id;
-                    return (
-                      <div
-                        key={cloudSess.id}
-                        onClick={() => handleLoadCloudSession(cloudSess)}
-                        className={`group flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left ${
-                          isActive 
-                            ? 'border-[#a79078] bg-[#002142] shadow-md shadow-[#002142]/50 border-2' 
-                            : 'bg-[#002142]/65 hover:bg-[#002142] border border-[#5ea4c5]/20 hover:border-[#5ea4c5]/40'
-                        }`}
-                      >
-                        <div className="space-y-1 max-w-[85%]">
-                          <div className="flex items-center space-x-2">
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                              isActive 
-                                ? 'bg-[#a79078] text-slate-950' 
-                                : 'bg-[#0f5981] text-sky-100 border border-sky-400/20'
-                            }`}>
-                              Sess. #{cloudSess.sessionNumber || '1'}
-                            </span>
-                            <span className="text-sky-200/70 text-[10px] font-bold">{cloudSess.date}</span>
-                            {isActive && (
-                              <span className="text-[9px] font-extrabold text-[#a79078] uppercase tracking-wide">
-                                • Active
-                              </span>
-                            )}
-                          </div>
-                          
-                          <h5 className="text-xs font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
-                            {cloudSess.mainObjective || 'No objective set.'}
-                          </h5>
-                          
-                          <p className="text-[10px] text-sky-200/70 truncate font-semibold">
-                            Materials: {cloudSess.materialsNeeded || 'None'}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center space-x-1 shrink-0">
-                          <button
-                            type="button"
-                            title="Load Session"
-                            className="p-2 text-sky-200/80 hover:text-[#a79078] hover:bg-white/10 rounded-lg transition-colors"
-                          >
-                            <FolderOpen className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete Session"
-                            onClick={(e) => handleDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
-                            className="p-2 text-sky-300/60 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Main Document Frame */}
-        <main className="space-y-6 md:space-y-8 print:space-y-4">
-          
-          {/* Header Section */}
-          <HeaderSection 
-            session={session}
-            onChange={handleUpdateSession}
-          />
-
-          {/* Section: Player Groups Manager */}
-          <PlayerGroupsSection
-            groups={activePlayerGroups}
-            squadRoster={session.squadRoster}
-            onChangeGroups={handleUpdateGroups}
-            onChangeRoster={handleUpdateRoster}
-          />
-
-          {/* Section: Warm-Up Block */}
-          <ExerciseBlock 
-            block={activeWarmUp}
-            onChange={(exs) => handleUpdateExercises('warmUp', exs)}
-            expandedExercises={expandedExercises}
-            toggleExpand={toggleExpand}
-            sessionGroups={activePlayerGroups}
-          />
-
-          {/* Section: Main Part Block */}
-          <ExerciseBlock 
-            block={activeMainPart}
-            onChange={(exs) => handleUpdateExercises('mainPart', exs)}
-            expandedExercises={expandedExercises}
-            toggleExpand={toggleExpand}
-            sessionGroups={activePlayerGroups}
-          />
-
-          {/* Section: Cool Down Block */}
-          <ExerciseBlock 
-            block={activeCoolDown}
-            onChange={(exs) => handleUpdateExercises('coolDown', exs)}
-            expandedExercises={expandedExercises}
-            toggleExpand={toggleExpand}
-            sessionGroups={activePlayerGroups}
-          />
-
-          {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                    Session Observations & Notes / Observaciones
-                  </h2>
-                  <p className="text-[10px] text-slate-400 font-bold">
-                    Private coaching staff notes (Screen view only — hidden when printing PDF)
-                  </p>
-                </div>
-              </div>
-              <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
-                Screen Only / Solo Pantalla
-              </span>
-            </div>
-
-            <textarea
-              value={session.observations || ''}
-              onChange={(e) => handleUpdateSession({ observations: e.target.value })}
-              rows={4}
-              placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
-              className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
+            {/* Header Section */}
+            <HeaderSection 
+              session={session}
+              onChange={handleUpdateSession}
             />
-          </section>
 
-        </main>
+            {/* Section: Player Groups Manager */}
+            <PlayerGroupsSection
+              groups={activePlayerGroups}
+              squadRoster={session.squadRoster}
+              onChangeGroups={handleUpdateGroups}
+              onChangeRoster={handleUpdateRoster}
+            />
+
+            {/* Section: Warm-Up Block */}
+            <ExerciseBlock 
+              block={activeWarmUp}
+              onChange={(exs) => handleUpdateExercises('warmUp', exs)}
+              expandedExercises={expandedExercises}
+              toggleExpand={toggleExpand}
+              sessionGroups={activePlayerGroups}
+            />
+
+            {/* Section: Main Part Block */}
+            <ExerciseBlock 
+              block={activeMainPart}
+              onChange={(exs) => handleUpdateExercises('mainPart', exs)}
+              expandedExercises={expandedExercises}
+              toggleExpand={toggleExpand}
+              sessionGroups={activePlayerGroups}
+            />
+
+            {/* Section: Cool Down Block */}
+            <ExerciseBlock 
+              block={activeCoolDown}
+              onChange={(exs) => handleUpdateExercises('coolDown', exs)}
+              expandedExercises={expandedExercises}
+              toggleExpand={toggleExpand}
+              sessionGroups={activePlayerGroups}
+            />
+
+            {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
+            <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+                      Session Observations & Notes / Observaciones
+                    </h2>
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      Private coaching staff notes (Screen view only — hidden when printing PDF)
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
+                  Screen Only / Solo Pantalla
+                </span>
+              </div>
+
+              <textarea
+                value={session.observations || ''}
+                onChange={(e) => handleUpdateSession({ observations: e.target.value })}
+                rows={4}
+                placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
+                className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
+              />
+            </section>
+
+          </main>
+        )}
 
         {/* Print-Only Professional Document Footer */}
         <footer className="hidden print:grid grid-cols-2 gap-8 mt-12 pt-8 border-t-2 border-slate-200">

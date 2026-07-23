@@ -1,0 +1,410 @@
+import React, { useState } from 'react';
+import { 
+  Printer, 
+  Trash2, 
+  Plus, 
+  CloudUpload, 
+  Share2, 
+  Check, 
+  FolderOpen, 
+  Layers, 
+  Activity, 
+  ShieldCheck, 
+  BookOpen,
+  Menu,
+  X,
+  RefreshCw,
+  FileText
+} from 'lucide-react';
+import { TrainingSession } from '../types';
+import { CloudTrainingSession } from '../firebase';
+import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+
+interface SidebarProps {
+  session: TrainingSession;
+  activeSection: 'football' | 'fitness' | 'gk' | 'exercises';
+  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises') => void;
+  onClearSession: () => void;
+  onNewSession: () => void;
+  isSaving: boolean;
+  cloudSessions: CloudTrainingSession[];
+  isLoadingCloud: boolean;
+  isCloudSaving: boolean;
+  onSaveToCloud: () => void;
+  onLoadCloudSession: (sess: CloudTrainingSession) => void;
+  onDeleteCloudSession: (id: string, sessNum: string, e: React.MouseEvent) => void;
+  copiedLink: boolean;
+  onCopyShareLink: () => void;
+  totalLibraryExercisesCount?: number;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  session,
+  activeSection,
+  setActiveSection,
+  onClearSession,
+  onNewSession,
+  isSaving,
+  cloudSessions,
+  isLoadingCloud,
+  isCloudSaving,
+  onSaveToCloud,
+  onLoadCloudSession,
+  onDeleteCloudSession,
+  copiedLink,
+  onCopyShareLink,
+  totalLibraryExercisesCount = 0
+}) => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [cloudSessionsOpen, setCloudSessionsOpen] = useState(true);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const navItems: {
+    id: 'football' | 'fitness' | 'gk' | 'exercises';
+    label: string;
+    sublabel: string;
+    icon: any;
+    color: string;
+    badge?: string;
+  }[] = [
+    {
+      id: 'football',
+      label: 'Fútbol / Football',
+      sublabel: 'Full Field & Tactical',
+      icon: Layers,
+      color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+    },
+    {
+      id: 'fitness',
+      label: 'Prep. Física / Fitness',
+      sublabel: 'Conditioning & Gym',
+      icon: Activity,
+      color: 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+    },
+    {
+      id: 'gk',
+      label: 'Porteros / Goalkeepers',
+      sublabel: 'Specific GK Training',
+      icon: ShieldCheck,
+      color: 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+    },
+    {
+      id: 'exercises',
+      label: 'Ejercicios / Exercises',
+      sublabel: 'Library & Database',
+      icon: BookOpen,
+      color: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+      badge: totalLibraryExercisesCount > 0 ? String(totalLibraryExercisesCount) : undefined
+    }
+  ];
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full space-y-5 p-4 md:p-5 text-white">
+      
+      {/* Brand & Autosave Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-[#5ea4c5]/20">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-[#001020] border border-[#a79078]/40 flex items-center justify-center p-1 shadow-md shrink-0">
+            <img 
+              src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+              alt="Al Ula SC" 
+              className="w-full h-full object-contain" 
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div>
+            <h1 className="text-sm font-display font-black tracking-wider uppercase text-white leading-tight">
+              Al Ula SC U17
+            </h1>
+            <p className="text-[10px] text-[#a79078] font-extrabold tracking-widest uppercase">
+              Coaching Staff
+            </p>
+          </div>
+        </div>
+
+        {/* Local Autosave indicator */}
+        <div className="flex items-center space-x-1.5 bg-[#001020]/80 px-2 py-1 rounded-full border border-slate-700/80 shrink-0">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${isSaving ? 'bg-amber-400' : 'bg-emerald-500'}`}></span>
+          </span>
+          <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-300">
+            {isSaving ? 'Saving...' : 'Autosave'}
+          </span>
+        </div>
+      </div>
+
+      {/* Main Navigation Section Tabs */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
+          Navegación / Navigation
+        </p>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeSection === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setActiveSection(item.id);
+                setMobileOpen(false);
+              }}
+              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer text-left border ${
+                isActive 
+                  ? 'bg-[#002b54] border-[#a79078] shadow-lg shadow-[#001020]/60 ring-1 ring-[#a79078]/40' 
+                  : 'bg-[#001830]/60 hover:bg-[#002447] border-transparent hover:border-[#5ea4c5]/20 text-slate-300 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className={`p-2 rounded-lg border ${item.color} shrink-0`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="truncate">
+                  <div className={`text-xs font-bold truncate ${isActive ? 'text-white' : 'text-slate-200'}`}>
+                    {item.label}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate font-semibold">
+                    {item.sublabel}
+                  </div>
+                </div>
+              </div>
+              {item.badge && (
+                <span className="text-[10px] font-black bg-[#a79078] text-slate-950 px-2 py-0.5 rounded-full ml-1 shrink-0">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Quick Actions (Print / New / Clear) */}
+      <div className="space-y-2 pt-2 border-t border-[#5ea4c5]/20">
+        <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
+          Acciones / Actions
+        </p>
+
+        {/* Print / PDF Button */}
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="w-full flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-white font-extrabold text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-500/20"
+          title="Print or Save as PDF"
+        >
+          <Printer className="w-4 h-4" />
+          <span>Imprimir / PDF</span>
+        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          {/* New Session Button */}
+          <button
+            type="button"
+            onClick={onNewSession}
+            className="flex items-center justify-center space-x-1.5 bg-[#00284d] hover:bg-[#003566] text-sky-200 hover:text-white font-bold text-xs uppercase tracking-wider py-2 px-2.5 rounded-xl transition-all cursor-pointer border border-[#5ea4c5]/30"
+            title="Create a new blank training session"
+          >
+            <Plus className="w-3.5 h-3.5 text-sky-400" />
+            <span>Nueva</span>
+          </button>
+
+          {/* Clear Session Button */}
+          <button
+            type="button"
+            onClick={onClearSession}
+            className="flex items-center justify-center space-x-1.5 bg-[#001830] hover:bg-rose-950/80 text-slate-400 hover:text-rose-300 font-bold text-xs uppercase tracking-wider py-2 px-2.5 rounded-xl transition-all cursor-pointer border border-slate-700/60 hover:border-rose-900/50"
+            title="Clear all fields to start from scratch"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Limpiar</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Cloud Sessions & Storage Panel */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pt-2 border-t border-[#5ea4c5]/20 pr-0.5">
+        <div className="flex items-center justify-between">
+          <button 
+            type="button"
+            onClick={() => setCloudSessionsOpen(!cloudSessionsOpen)}
+            className="flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-wider text-sky-200/70 hover:text-white transition-colors cursor-pointer"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-[#a79078]" />
+            <span>Sesiones en la Nube ({cloudSessions.length})</span>
+          </button>
+
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              onClick={onSaveToCloud}
+              disabled={isCloudSaving}
+              className="p-1.5 bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 rounded-lg transition-all cursor-pointer border border-sky-400/30 text-[10px] font-bold flex items-center space-x-1"
+              title="Save current session to Cloud Firestore"
+            >
+              {isCloudSaving ? (
+                <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+              ) : (
+                <CloudUpload className="w-3 h-3 text-sky-300" />
+              )}
+              <span className="hidden sm:inline">Guardar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onCopyShareLink}
+              className="p-1.5 bg-[#a79078]/20 hover:bg-[#a79078]/40 text-[#a79078] rounded-lg transition-all cursor-pointer border border-[#a79078]/30"
+              title="Copy shareable link to current session"
+            >
+              {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Share2 className="w-3 h-3" />}
+            </button>
+          </div>
+        </div>
+
+        {cloudSessionsOpen && (
+          <div className="space-y-1.5">
+            {isLoadingCloud ? (
+              <div className="p-3 text-center text-xs text-slate-400 italic bg-[#001020]/40 rounded-xl">
+                Cargando sesiones...
+              </div>
+            ) : cloudSessions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-400 bg-[#001020]/40 rounded-xl border border-slate-800">
+                No hay sesiones guardadas aún. Haz clic en "Guardar" para subir tu primera sesión.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                {cloudSessions.map((cloudSess) => {
+                  const isActive = cloudSess.id === session.id;
+                  return (
+                    <div
+                      key={cloudSess.id}
+                      onClick={() => onLoadCloudSession(cloudSess)}
+                      className={`group flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer text-left ${
+                        isActive 
+                          ? 'border-[#a79078] bg-[#002b54] shadow-md border' 
+                          : 'bg-[#001428]/80 hover:bg-[#002040] border border-slate-800 hover:border-[#5ea4c5]/30'
+                      }`}
+                    >
+                      <div className="space-y-0.5 min-w-0 pr-2">
+                        <div className="flex items-center space-x-1.5">
+                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
+                            isActive 
+                              ? 'bg-[#a79078] text-slate-950' 
+                              : 'bg-sky-900/60 text-sky-200 border border-sky-400/20'
+                          }`}>
+                            #{cloudSess.sessionNumber || '1'}
+                          </span>
+                          <span className="text-sky-200/60 text-[9px] font-bold">{cloudSess.date}</span>
+                          {isActive && (
+                            <span className="text-[8px] font-extrabold text-[#a79078] uppercase">
+                              Active
+                            </span>
+                          )}
+                        </div>
+
+                        <h5 className="text-xs font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
+                          {cloudSess.mainObjective || 'Sin objetivo asignado'}
+                        </h5>
+                      </div>
+
+                      <div className="flex items-center space-x-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => onDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
+                          title="Eliminar Sesión"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer info */}
+      <div className="pt-2 border-t border-[#5ea4c5]/10 text-center">
+        <p className="text-[9px] text-slate-400 font-semibold">
+          Al Ula SC U17 • Technical Staff Platform
+        </p>
+      </div>
+
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar (Permanent) */}
+      <aside className="hidden md:block w-72 lg:w-80 shrink-0 bg-[#001d3a] border-r border-[#5ea4c5]/20 min-h-screen sticky top-0 h-screen overflow-y-auto print:hidden z-30 shadow-2xl">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Top Header Bar with Menu Drawer Toggle */}
+      <div className="md:hidden bg-[#001d3a] text-white p-3.5 border-b border-[#5ea4c5]/20 flex items-center justify-between sticky top-0 z-40 print:hidden shadow-lg">
+        <div className="flex items-center space-x-2.5">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="p-2 bg-[#002b54] hover:bg-[#00386d] text-white rounded-xl border border-[#5ea4c5]/30 cursor-pointer transition-colors"
+            aria-label="Toggle Menu"
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+
+          <div className="flex items-center space-x-2">
+            <img 
+              src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+              alt="Logo" 
+              className="w-7 h-7 object-contain"
+            />
+            <div>
+              <h2 className="text-xs font-display font-black text-white uppercase leading-none">
+                Al Ula SC U17
+              </h2>
+              <span className="text-[9px] text-[#a79078] font-bold">
+                {navItems.find(n => n.id === activeSection)?.label.split('/')[0]}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold uppercase py-1.5 px-3 rounded-lg shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>PDF</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex print:hidden">
+          <div 
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="relative w-4/5 max-w-sm bg-[#001d3a] h-full shadow-2xl overflow-y-auto z-10 border-r border-[#5ea4c5]/20">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="absolute top-3 right-3 p-2 text-slate-300 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
