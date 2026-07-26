@@ -17,10 +17,12 @@ import {
   ChevronDown,
   Upload,
   Loader2,
-  Sparkles
+  Sparkles,
+  Copy,
+  Edit3
 } from 'lucide-react';
-import { Exercise, GameMoment, TrainingSession } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
+import { CloudTrainingSession, saveSessionToCloud } from '../firebase';
 import { processUploadedImageFile } from '../utils/heic';
 
 interface ExercisesLibraryProps {
@@ -70,6 +72,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   });
   const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>('football');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isDuplicatingModal, setIsDuplicatingModal] = useState(false);
+
+  // Target session and department selector state when adding to session
+  const [targetSessionId, setTargetSessionId] = useState<string>('active');
+  const [targetCategory, setTargetCategory] = useState<'football' | 'fitness' | 'gk'>('football');
+  const [customSessionNum, setCustomSessionNum] = useState<string>('');
+  const [isSubmittingCloudAdd, setIsSubmittingCloudAdd] = useState(false);
 
   // Notification toast when exercise is added to session
   const [addedToast, setAddedToast] = useState<string | null>(null);
@@ -187,6 +196,59 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   };
 
+  // Open modal pre-filled to duplicate an exercise
+  const handleDuplicateExercise = (ex: Exercise & { sectionCategory?: 'football' | 'fitness' | 'gk' }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Append (Copy) if it doesn't already end with (Copy) or similar
+    const copyName = ex.name.includes('(Copy)') || ex.name.includes('(Copia)')
+      ? `${ex.name}`
+      : `${ex.name} (Copy)`;
+
+    setNewEx({
+      name: copyName,
+      gameMoment: ex.gameMoment || 'Attack',
+      subMoment: ex.subMoment || '',
+      description: ex.description || '',
+      duration: ex.duration || '15 min',
+      dimensions: ex.dimensions || '30x20m',
+      coachRoles: ex.coachRoles || '',
+      playerGroups: ex.playerGroups || '',
+      isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      image: ex.image || ''
+    });
+    
+    setNewExSection(ex.sectionCategory || (ex.isFitness ? 'fitness' : 'football'));
+    setIsDuplicatingModal(true);
+    setShowCreateModal(true);
+  };
+
+  // Quick 1-click duplicate directly to user's custom library
+  const handleQuickDuplicate = (ex: Exercise & { sectionCategory?: 'football' | 'fitness' | 'gk' }, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const copyName = ex.name.includes('(Copy)') || ex.name.includes('(Copia)')
+      ? `${ex.name}`
+      : `${ex.name} (Copy)`;
+
+    const created: Exercise = {
+      id: 'custom-ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      name: copyName,
+      gameMoment: ex.gameMoment || 'Attack',
+      subMoment: ex.subMoment || '',
+      description: ex.description || '',
+      duration: ex.duration || '15 min',
+      dimensions: ex.dimensions || '30x20m',
+      coachRoles: ex.coachRoles || '',
+      playerGroups: ex.playerGroups || '',
+      isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      image: ex.image || ''
+    };
+
+    setCustomExercises(prev => [created, ...prev]);
+    setAddedToast(`Duplicated "${ex.name}" to your library!`);
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
   // Create & Save custom exercise to local library
   const handleSaveCustomExercise = (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,6 +273,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
     setCustomExercises(prev => [created, ...prev]);
     setShowCreateModal(false);
+    setIsDuplicatingModal(false);
     setNewEx({
       name: '',
       gameMoment: 'Attack',
@@ -236,24 +299,125 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   };
 
-  // Insert selected exercise into current training session
-  const handleInsert = (
+  // Insert selected exercise into target session & block
+  const handleInsertToTargetSession = async (
     ex: Exercise, 
-    blockKey: 'warmUp' | 'mainPart' | 'coolDown', 
-    sectionCat: 'football' | 'fitness' | 'gk'
+    blockKey: 'warmUp' | 'mainPart' | 'coolDown'
   ) => {
-    // Clone exercise with fresh ID
-    const clonedEx: Exercise = {
-      ...ex,
-      id: 'ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)
-    };
+    setIsSubmittingCloudAdd(true);
+    try {
+      // Clone exercise with fresh unique ID
+      const clonedEx: Exercise = {
+        ...ex,
+        id: 'ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)
+      };
 
-    onAddExerciseToSession(blockKey, clonedEx, sectionCat);
-    setOpenAddDropdownId(null);
+      const sectionCat = targetCategory;
 
-    const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
-    setAddedToast(`Added "${ex.name}" to ${blockName} (${sectionCat.toUpperCase()})`);
-    setTimeout(() => setAddedToast(null), 3500);
+      // 1. Target is Active Session
+      if (targetSessionId === 'active' || targetSessionId === currentSession.id) {
+        onAddExerciseToSession(blockKey, clonedEx, sectionCat);
+        setOpenAddDropdownId(null);
+        const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
+        const sessNum = currentSession.sessionNumber || '1';
+        setAddedToast(`Added "${ex.name}" to ${blockName} (${sectionCat.toUpperCase()}) in Active Session #${sessNum}`);
+        setTimeout(() => setAddedToast(null), 3500);
+        return;
+      }
+
+      // 2. Target is an existing Cloud Session
+      const targetCloudSess = cloudSessions.find(s => s.id === targetSessionId || s.sessionNumber === targetSessionId);
+      if (targetCloudSess) {
+        let blockPropName: keyof TrainingSession;
+        if (sectionCat === 'football') {
+          blockPropName = blockKey;
+        } else if (sectionCat === 'fitness') {
+          blockPropName = blockKey === 'warmUp' ? 'fitnessWarmUp' : blockKey === 'mainPart' ? 'fitnessMainPart' : 'fitnessCoolDown';
+        } else {
+          blockPropName = blockKey === 'warmUp' ? 'gkWarmUp' : blockKey === 'mainPart' ? 'gkMainPart' : 'gkCoolDown';
+        }
+
+        const existingBlock = (targetCloudSess[blockPropName] as TrainingBlock) || {
+          id: `${blockKey}-block-${sectionCat}`,
+          title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down',
+          exercises: []
+        };
+
+        const updatedCloudSess: CloudTrainingSession = {
+          ...targetCloudSess,
+          [blockPropName]: {
+            ...existingBlock,
+            exercises: [...(existingBlock.exercises || []), clonedEx]
+          },
+          updatedAt: Date.now()
+        };
+
+        await saveSessionToCloud(updatedCloudSess);
+        setOpenAddDropdownId(null);
+        const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
+        const sessNum = targetCloudSess.sessionNumber || '?';
+        setAddedToast(`Added "${ex.name}" to ${blockName} (${sectionCat.toUpperCase()}) in Session #${sessNum}`);
+        setTimeout(() => setAddedToast(null), 3500);
+        return;
+      }
+
+      // 3. Target is a New Custom Session Number
+      if (targetSessionId === 'new') {
+        const newSessNum = customSessionNum.trim() || '2';
+        const newSessionId = 'sess-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+
+        let blockPropName: keyof TrainingSession;
+        if (sectionCat === 'football') {
+          blockPropName = blockKey;
+        } else if (sectionCat === 'fitness') {
+          blockPropName = blockKey === 'warmUp' ? 'fitnessWarmUp' : blockKey === 'mainPart' ? 'fitnessMainPart' : 'fitnessCoolDown';
+        } else {
+          blockPropName = blockKey === 'warmUp' ? 'gkWarmUp' : blockKey === 'mainPart' ? 'gkMainPart' : 'gkCoolDown';
+        }
+
+        const defaultBlock = (title: string, id: string): TrainingBlock => ({ id, title, exercises: [] });
+
+        const newSessionData: TrainingSession = {
+          id: newSessionId,
+          teamName: currentSession.teamName || 'U17 Women Al Ula',
+          date: new Date().toISOString().split('T')[0],
+          time: '18:30 - 20:00',
+          sessionNumber: newSessNum,
+          microcycleDay: 'MD-3',
+          mainObjective: `Session #${newSessNum} Training Plan`,
+          materialsNeeded: currentSession.materialsNeeded || 'Cones, Balls, Bibs',
+          warmUp: defaultBlock('Warm Up', 'warmup-block'),
+          mainPart: defaultBlock('Main Part', 'main-block'),
+          coolDown: defaultBlock('Cool Down', 'cooldown-block'),
+          playerGroups: [],
+          fitnessWarmUp: defaultBlock('Warm Up', 'warmup-block-fitness'),
+          fitnessMainPart: defaultBlock('Main Part', 'main-block-fitness'),
+          fitnessCoolDown: defaultBlock('Cool Down', 'cooldown-block-fitness'),
+          fitnessPlayerGroups: [],
+          gkWarmUp: defaultBlock('Warm Up', 'warmup-block-gk'),
+          gkMainPart: defaultBlock('Main Part', 'main-block-gk'),
+          gkCoolDown: defaultBlock('Cool Down', 'cooldown-block-gk'),
+          gkPlayerGroups: []
+        };
+
+        const targetBlock = newSessionData[blockPropName] as TrainingBlock;
+        (newSessionData as any)[blockPropName] = {
+          ...targetBlock,
+          exercises: [clonedEx]
+        };
+
+        await saveSessionToCloud(newSessionData);
+        setOpenAddDropdownId(null);
+        const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
+        setAddedToast(`Created Session #${newSessNum} and added "${ex.name}" to ${blockName}!`);
+        setTimeout(() => setAddedToast(null), 3500);
+      }
+    } catch (err) {
+      console.error('Error adding exercise to target session:', err);
+      alert('An error occurred while adding exercise to session.');
+    } finally {
+      setIsSubmittingCloudAdd(false);
+    }
   };
 
   const gameMomentsList: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
@@ -473,55 +637,198 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
                 {/* Bottom Actions Row */}
                 <div className="pt-3 border-t border-slate-100 relative">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      Use in training
-                    </span>
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Duplicate Buttons Group */}
+                    <div className="flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleDuplicateExercise(ex, e)}
+                        className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold py-2 px-3 rounded-xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer"
+                        title="Duplicate exercise to customize and save as new"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-[#0f5981]" />
+                        <span>Duplicar</span>
+                      </button>
 
+                      <button
+                        type="button"
+                        onClick={(e) => handleQuickDuplicate(ex, e)}
+                        className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors border border-transparent hover:border-emerald-200 cursor-pointer"
+                        title="Quick 1-click clone into library"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Add to Session Dropdown Button */}
                     <div className="relative">
                       <button
                         type="button"
-                        onClick={() => setOpenAddDropdownId(isDropdownOpen ? null : ex.id)}
+                        onClick={() => {
+                          if (isDropdownOpen) {
+                            setOpenAddDropdownId(null);
+                          } else {
+                            setOpenAddDropdownId(ex.id);
+                            setTargetCategory(ex.sectionCategory || 'football');
+                            setTargetSessionId('active');
+                            setCustomSessionNum('');
+                          }
+                        }}
                         className="flex items-center space-x-1.5 bg-[#002142] hover:bg-[#003366] text-white text-xs font-bold py-2 px-3.5 rounded-xl shadow-sm transition-all cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5 text-[#a79078]" />
                         <span>Add to Session</span>
-                        <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                        <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
                       </button>
 
-                      {/* Dropdown Menu to choose destination block */}
+                      {/* Dropdown Menu to Choose Session Number, Category, and Block */}
                       {isDropdownOpen && (
-                        <div className="absolute right-0 bottom-11 w-56 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-2 z-30 space-y-1">
-                          <p className="text-[9px] font-black uppercase text-sky-200/60 px-2 py-1 border-b border-slate-800">
-                            Add to Block in {ex.sectionCategory?.toUpperCase() || 'FOOTBALL'}
-                          </p>
+                        <div className="absolute right-0 bottom-11 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-3 z-30 space-y-3">
+                          
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <div className="flex items-center space-x-1.5">
+                              <Plus className="w-4 h-4 text-[#a79078]" />
+                              <span className="text-xs font-black uppercase tracking-wider text-sky-200">
+                                Add to Training Session
+                              </span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => setOpenAddDropdownId(null)}
+                              className="text-slate-400 hover:text-white p-0.5 rounded-lg cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleInsert(ex, 'warmUp', ex.sectionCategory || 'football')}
-                            className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
-                          >
-                            <span>1. Warm Up</span>
-                            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                          </button>
+                          {/* 1. Target Session Number Selector */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">
+                              Target Session Number
+                            </label>
+                            <select
+                              value={targetSessionId}
+                              onChange={(e) => setTargetSessionId(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 text-xs font-bold text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-sky-400 cursor-pointer"
+                            >
+                              <option value="active">
+                                Active Session (#{currentSession.sessionNumber || '1'})
+                              </option>
+                              {cloudSessions
+                                .filter(s => s.id !== currentSession.id)
+                                .map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    Session #{s.sessionNumber || '1'} ({s.date || 'Saved'})
+                                  </option>
+                                ))}
+                              <option value="new">+ Create New Session Number...</option>
+                            </select>
 
-                          <button
-                            type="button"
-                            onClick={() => handleInsert(ex, 'mainPart', ex.sectionCategory || 'football')}
-                            className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
-                          >
-                            <span>2. Main Part</span>
-                            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                          </button>
+                            {targetSessionId === 'new' && (
+                              <div className="pt-1">
+                                <input
+                                  type="text"
+                                  value={customSessionNum}
+                                  onChange={(e) => setCustomSessionNum(e.target.value)}
+                                  placeholder="Enter Session # (e.g., 4)"
+                                  className="w-full bg-slate-800 border border-emerald-500 text-xs font-bold text-emerald-300 rounded-xl px-2.5 py-1.5 focus:outline-none placeholder:text-slate-500"
+                                />
+                              </div>
+                            )}
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleInsert(ex, 'coolDown', ex.sectionCategory || 'football')}
-                            className="w-full text-left text-xs font-bold p-2 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between"
-                          >
-                            <span>3. Cool Down</span>
-                            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                          </button>
+                          {/* 2. Target Category/Department */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">
+                              Department / Section
+                            </label>
+                            <div className="grid grid-cols-3 gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setTargetCategory('football')}
+                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                  targetCategory === 'football' 
+                                    ? 'bg-emerald-600 text-white border-emerald-500' 
+                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                }`}
+                              >
+                                ⚽ Football
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTargetCategory('fitness')}
+                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                  targetCategory === 'fitness' 
+                                    ? 'bg-amber-600 text-white border-amber-500' 
+                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                }`}
+                              >
+                                🏃 Fitness
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTargetCategory('gk')}
+                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                  targetCategory === 'gk' 
+                                    ? 'bg-sky-600 text-white border-sky-500' 
+                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                }`}
+                              >
+                                🧤 GK
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 3. Target Block Selector Buttons */}
+                          <div className="space-y-1 pt-1 border-t border-slate-800">
+                            <label className="text-[9px] font-black uppercase text-slate-400 block tracking-wider mb-1">
+                              Insert into Block
+                            </label>
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                disabled={isSubmittingCloudAdd}
+                                onClick={() => handleInsertToTargetSession(ex, 'warmUp')}
+                                className="w-full text-left text-xs font-bold p-2 bg-slate-800 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between group cursor-pointer disabled:opacity-50"
+                              >
+                                <span>1. Warm Up</span>
+                                {isSubmittingCloudAdd ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                                ) : (
+                                  <Plus className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110" />
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={isSubmittingCloudAdd}
+                                onClick={() => handleInsertToTargetSession(ex, 'mainPart')}
+                                className="w-full text-left text-xs font-bold p-2 bg-slate-800 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between group cursor-pointer disabled:opacity-50"
+                              >
+                                <span>2. Main Part</span>
+                                {isSubmittingCloudAdd ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                                ) : (
+                                  <Plus className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110" />
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={isSubmittingCloudAdd}
+                                onClick={() => handleInsertToTargetSession(ex, 'coolDown')}
+                                className="w-full text-left text-xs font-bold p-2 bg-slate-800 hover:bg-[#0f5981] rounded-xl transition-colors flex items-center justify-between group cursor-pointer disabled:opacity-50"
+                              >
+                                <span>3. Cool Down</span>
+                                {isSubmittingCloudAdd ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                                ) : (
+                                  <Plus className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
                         </div>
                       )}
                     </div>
@@ -542,21 +849,26 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl">
-                  <PlusCircle className="w-5 h-5" />
+                  {isDuplicatingModal ? <Copy className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base font-display font-black text-slate-900 uppercase">
-                    Create New Exercise for Library
+                    {isDuplicatingModal ? 'Duplicate Exercise for Library' : 'Create New Exercise for Library'}
                   </h3>
                   <p className="text-xs text-slate-400 font-semibold">
-                    Save your favorite tactical and physical tasks to reuse them across sessions.
+                    {isDuplicatingModal 
+                      ? 'Customize fields and save as a new exercise in your personal library.' 
+                      : 'Save your favorite tactical and physical tasks to reuse them across sessions.'}
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setIsDuplicatingModal(false);
+                }}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
@@ -759,7 +1071,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setIsDuplicatingModal(false);
+                  }}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 rounded-xl"
                 >
                   Cancel
@@ -769,7 +1084,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   type="submit"
                   className="px-6 py-2.5 bg-[#002142] hover:bg-[#003366] text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  Save to Library
+                  {isDuplicatingModal ? 'Save Duplicate to Library' : 'Save to Library'}
                 </button>
               </div>
 
