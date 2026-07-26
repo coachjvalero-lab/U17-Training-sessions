@@ -35,6 +35,18 @@ const TACTICAL_SUB_MOMENTS = [
 
 const COACH_NAMES = ['Wilian', 'Marta', 'Joao', 'Javi', 'Shouq', 'Mariana'];
 
+const getPrintFontSizeClass = (text: string = '') => {
+  const len = text.trim().length;
+  if (len > 450) {
+    return 'print:text-[7.5px] print:leading-tight print:p-1';
+  } else if (len > 250) {
+    return 'print:text-[8.5px] print:leading-snug print:p-1.5';
+  } else if (len > 120) {
+    return 'print:text-[9.5px] print:leading-normal print:p-1.5';
+  }
+  return 'print:text-xs print:leading-relaxed print:p-2';
+};
+
 interface CoachRoleEntry {
   name: string;
   role: string;
@@ -600,7 +612,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         placeholder="Describe the tactical flow, rules, constraints, or jokers to trigger the desired behavior..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
-                      <div className="hidden print:block text-xs font-semibold text-slate-800 whitespace-pre-wrap leading-relaxed bg-slate-50/60 p-2 border border-slate-200/80 rounded-lg">
+                      <div className={`hidden print:block font-semibold text-slate-800 whitespace-pre-wrap bg-slate-50/60 border border-slate-200/80 rounded-lg ${getPrintFontSizeClass(ex.description)}`}>
                         {ex.description || <span className="italic text-slate-400">No description</span>}
                       </div>
                     </div>
@@ -633,7 +645,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         placeholder="e.g., Group 1 (Blue Bibs): Rimah, Rital, Lara... Group 2 (Yellow Bibs): Batul, Sadeem..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
-                      <div className="hidden print:block text-xs font-semibold text-slate-800 whitespace-pre-wrap leading-relaxed bg-slate-50/60 p-2 border border-slate-200/80 rounded-lg">
+                      <div className={`hidden print:block font-semibold text-slate-800 whitespace-pre-wrap bg-slate-50/60 border border-slate-200/80 rounded-lg ${getPrintFontSizeClass(ex.playerGroups || '')}`}>
                         {ex.playerGroups || <span className="italic text-slate-400">No player groups assigned</span>}
                       </div>
                     </div>

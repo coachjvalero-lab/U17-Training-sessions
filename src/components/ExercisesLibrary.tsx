@@ -56,6 +56,16 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   });
 
+  // Track deleted exercise IDs across all library exercises (custom, sample, cloud, current)
+  const [deletedExerciseIds, setDeletedExerciseIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('u17_deleted_exercise_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   // Modal for creating a new exercise
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newEx, setNewEx] = useState<Partial<Exercise>>({
@@ -95,6 +105,15 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   }, [customExercises]);
 
+  // Save deleted exercise IDs to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('u17_deleted_exercise_ids', JSON.stringify(deletedExerciseIds));
+    } catch (e) {
+      console.error('Failed to save deleted exercise IDs:', e);
+    }
+  }, [deletedExerciseIds]);
+
   // Extract all exercises across current session, all cloud sessions, and custom library
   const allExercises = (() => {
     const list: (Exercise & { sourceSession?: string; sectionCategory?: 'football' | 'fitness' | 'gk'; isCustom?: boolean })[] = [];
@@ -102,9 +121,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
     const addEx = (ex: Exercise, source: string, sectionCat: 'football' | 'fitness' | 'gk', isCustom = false) => {
       if (!ex || !ex.name) return;
-      // Deduplicate identical IDs or name+description pairs
-      const uniqueKey = ex.id || `${ex.name}-${ex.description.substring(0, 30)}`;
+      const uniqueKey = ex.id || `${ex.name}-${(ex.description || '').substring(0, 30)}`;
       if (seenIds.has(uniqueKey)) return;
+      if (ex.id && deletedExerciseIds.includes(ex.id)) return;
+      if (deletedExerciseIds.includes(uniqueKey)) return;
       seenIds.add(uniqueKey);
 
       list.push({
@@ -291,11 +311,18 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     setTimeout(() => setAddedToast(null), 3000);
   };
 
-  // Delete custom exercise
-  const handleDeleteCustomExercise = (id: string, e: React.MouseEvent) => {
+  // Delete exercise from library (custom or sample)
+  const handleDeleteExercise = (ex: Exercise & { isCustom?: boolean }, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Do you want to delete this exercise from your personal library?')) {
-      setCustomExercises(prev => prev.filter(ex => ex.id !== id));
+    if (confirm(`Do you want to delete "${ex.name}" from the library?`)) {
+      if (ex.id) {
+        setDeletedExerciseIds(prev => [...prev, ex.id]);
+      }
+      const uniqueKey = ex.id || `${ex.name}-${(ex.description || '').substring(0, 30)}`;
+      setDeletedExerciseIds(prev => [...prev, uniqueKey]);
+      setCustomExercises(prev => prev.filter(item => item.id !== ex.id));
+      setAddedToast(`Deleted "${ex.name}" from library.`);
+      setTimeout(() => setAddedToast(null), 3000);
     }
   };
 
@@ -585,17 +612,15 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                       </h4>
                     </div>
 
-                    {/* Delete button for custom items */}
-                    {ex.isCustom && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteCustomExercise(ex.id, e)}
-                        className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete from library"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Delete button for all items */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteExercise(ex, e)}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete from library"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
 
                   {/* Submoment & Metadata badges */}
@@ -647,7 +672,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         title="Duplicate exercise to customize and save as new"
                       >
                         <Copy className="w-3.5 h-3.5 text-[#0f5981]" />
-                        <span>Duplicar</span>
+                        <span>Duplicate</span>
                       </button>
 
                       <button
