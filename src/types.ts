@@ -1,6 +1,6 @@
 export type GameMoment = 'Attack' | 'Defense' | 'Transition A-D' | 'Transition D-A' | 'Set Pieces' | 'Other';
 
-export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Unknown';
+export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Unknown';
 
 export interface PlayerAttendance {
   playerName: string;

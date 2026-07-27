@@ -7,6 +7,7 @@ import {
   Palmtree, 
   GraduationCap, 
   Stethoscope, 
+  FileCheck,
   HelpCircle, 
   Plus, 
   Trash2, 
@@ -31,11 +32,12 @@ export const ABSENCE_REASONS: { key: AbsenceReason; label: string; icon: any; co
   { key: 'Vacation', label: 'Vacation', icon: Palmtree, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
   { key: 'Study', label: 'Study', icon: GraduationCap, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
   { key: 'Injury', label: 'Injury', icon: Stethoscope, color: 'text-rose-600', bg: 'bg-rose-50 border-rose-200' },
+  { key: 'Permission', label: 'Permission', icon: FileCheck, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
   { key: 'Unknown', label: 'Unknown', icon: HelpCircle, color: 'text-slate-600', bg: 'bg-slate-100 border-slate-300' },
 ];
 
 export const getAbsenceReasonConfig = (reason?: AbsenceReason) => {
-  return ABSENCE_REASONS.find(r => r.key === reason) || ABSENCE_REASONS[3];
+  return ABSENCE_REASONS.find(r => r.key === reason) || ABSENCE_REASONS[4];
 };
 
 export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> = ({
@@ -69,6 +71,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const vacationCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Vacation').length;
   const studyCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Study').length;
   const injuryCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Injury').length;
+  const permissionCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Permission').length;
   const unknownCount = effectiveAttendance.filter(a => a.status === 'Absent' && (!a.absenceReason || a.absenceReason === 'Unknown')).length;
 
   const handleAttendanceStateChange = (playerName: string, value: string) => {
@@ -143,7 +146,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   });
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-4 print:border-slate-300 print:shadow-none print:p-3">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-4 print:hidden">
       
       {/* Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
@@ -214,42 +217,50 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
       </div>
 
       {/* Summary Stat Chips Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-bold">
-        <div className="bg-emerald-50 border border-emerald-200/80 p-2.5 rounded-xl flex items-center justify-between text-emerald-900">
-          <div className="flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs font-bold">
+        <div className="bg-emerald-50 border border-emerald-200/80 p-2 rounded-xl flex items-center justify-between text-emerald-900">
+          <div className="flex items-center space-x-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
             <span>Attending</span>
           </div>
           <span className="text-sm font-black">{attendingCount}</span>
         </div>
 
-        <div className="bg-amber-50 border border-amber-200/80 p-2.5 rounded-xl flex items-center justify-between text-amber-900">
-          <div className="flex items-center space-x-1.5">
-            <Palmtree className="w-3.5 h-3.5 text-amber-600" />
+        <div className="bg-amber-50 border border-amber-200/80 p-2 rounded-xl flex items-center justify-between text-amber-900">
+          <div className="flex items-center space-x-1 text-[11px]">
+            <Palmtree className="w-3 h-3 text-amber-600" />
             <span>Vacation</span>
           </div>
           <span className="text-sm font-black">{vacationCount}</span>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200/80 p-2.5 rounded-xl flex items-center justify-between text-blue-900">
-          <div className="flex items-center space-x-1.5">
-            <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
+        <div className="bg-blue-50 border border-blue-200/80 p-2 rounded-xl flex items-center justify-between text-blue-900">
+          <div className="flex items-center space-x-1 text-[11px]">
+            <GraduationCap className="w-3 h-3 text-blue-600" />
             <span>Study</span>
           </div>
           <span className="text-sm font-black">{studyCount}</span>
         </div>
 
-        <div className="bg-rose-50 border border-rose-200/80 p-2.5 rounded-xl flex items-center justify-between text-rose-900">
-          <div className="flex items-center space-x-1.5">
-            <Stethoscope className="w-3.5 h-3.5 text-rose-600" />
+        <div className="bg-rose-50 border border-rose-200/80 p-2 rounded-xl flex items-center justify-between text-rose-900">
+          <div className="flex items-center space-x-1 text-[11px]">
+            <Stethoscope className="w-3 h-3 text-rose-600" />
             <span>Injury</span>
           </div>
           <span className="text-sm font-black">{injuryCount}</span>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex items-center justify-between text-slate-800">
-          <div className="flex items-center space-x-1.5">
-            <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+        <div className="bg-purple-50 border border-purple-200/80 p-2 rounded-xl flex items-center justify-between text-purple-900">
+          <div className="flex items-center space-x-1 text-[11px]">
+            <FileCheck className="w-3 h-3 text-purple-600" />
+            <span>Permission</span>
+          </div>
+          <span className="text-sm font-black">{permissionCount}</span>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 p-2 rounded-xl flex items-center justify-between text-slate-800">
+          <div className="flex items-center space-x-1 text-[11px]">
+            <HelpCircle className="w-3 h-3 text-slate-500" />
             <span>Unknown</span>
           </div>
           <span className="text-sm font-black">{unknownCount}</span>
@@ -314,6 +325,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                 } else if (record.absenceReason === 'Injury') {
                   cardBg = 'bg-rose-50/60 border-rose-200 hover:border-rose-300';
                   selectBg = 'bg-rose-600 text-white border-rose-700 focus:ring-rose-500';
+                } else if (record.absenceReason === 'Permission') {
+                  cardBg = 'bg-purple-50/60 border-purple-200 hover:border-purple-300';
+                  selectBg = 'bg-purple-600 text-white border-purple-700 focus:ring-purple-500';
                 } else {
                   cardBg = 'bg-slate-100/60 border-slate-200 hover:border-slate-300';
                   selectBg = 'bg-slate-700 text-white border-slate-800 focus:ring-slate-500';
@@ -358,6 +372,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                       </option>
                       <option value="Injury" className="bg-white text-rose-900 font-bold py-1">
                         🏥 Injury (Absent)
+                      </option>
+                      <option value="Permission" className="bg-white text-purple-900 font-bold py-1">
+                        📋 Permission (Absent)
                       </option>
                       <option value="Unknown" className="bg-white text-slate-900 font-bold py-1">
                         ❓ Unknown (Absent)

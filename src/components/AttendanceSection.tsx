@@ -8,6 +8,7 @@ import {
   Palmtree, 
   GraduationCap, 
   Stethoscope, 
+  FileCheck,
   HelpCircle, 
   TrendingUp, 
   Calendar, 
@@ -84,6 +85,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
       Vacation: 0,
       Study: 0,
       Injury: 0,
+      Permission: 0,
       Unknown: 0
     };
 
@@ -142,8 +144,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const totalVacations = playerStats.reduce((sum, p) => sum + p.reasonsMap.Vacation, 0);
   const totalStudies = playerStats.reduce((sum, p) => sum + p.reasonsMap.Study, 0);
   const totalInjuries = playerStats.reduce((sum, p) => sum + p.reasonsMap.Injury, 0);
+  const totalPermissions = playerStats.reduce((sum, p) => sum + p.reasonsMap.Permission, 0);
   const totalUnknowns = playerStats.reduce((sum, p) => sum + p.reasonsMap.Unknown, 0);
-  const totalAbsences = totalVacations + totalStudies + totalInjuries + totalUnknowns;
+  const totalAbsences = totalVacations + totalStudies + totalInjuries + totalPermissions + totalUnknowns;
 
   const handleAddPlayer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,6 +344,14 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               <span className="font-black">{totalInjuries}</span>
             </div>
 
+            <div className="bg-purple-50 border border-purple-200/60 p-1.5 rounded-lg flex items-center justify-between text-purple-900">
+              <span className="flex items-center gap-1 text-[11px]">
+                <FileCheck className="w-3 h-3 text-purple-600" />
+                Permission
+              </span>
+              <span className="font-black">{totalPermissions}</span>
+            </div>
+
             <div className="bg-slate-100 border border-slate-200 p-1.5 rounded-lg flex items-center justify-between text-slate-800">
               <span className="flex items-center gap-1 text-[11px]">
                 <HelpCircle className="w-3 h-3 text-slate-500" />
@@ -395,6 +406,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               <option value="Vacation">Vacation Only</option>
               <option value="Study">Study Only</option>
               <option value="Injury">Injury Only</option>
+              <option value="Permission">Permission Only</option>
               <option value="Unknown">Unknown Only</option>
             </select>
           </div>
@@ -412,6 +424,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 <th className="py-3 px-3 text-center">Vacation</th>
                 <th className="py-3 px-3 text-center">Study</th>
                 <th className="py-3 px-3 text-center">Injury</th>
+                <th className="py-3 px-3 text-center">Permission</th>
                 <th className="py-3 px-3 text-center">Unknown</th>
                 <th className="py-3 px-3 text-right">Actions</th>
               </tr>
@@ -486,6 +499,11 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                     {/* Injury */}
                     <td className="py-3 px-3 text-center font-bold text-rose-700">
                       {stat.reasonsMap.Injury > 0 ? stat.reasonsMap.Injury : <span className="text-slate-300">0</span>}
+                    </td>
+
+                    {/* Permission */}
+                    <td className="py-3 px-3 text-center font-bold text-purple-700">
+                      {stat.reasonsMap.Permission > 0 ? stat.reasonsMap.Permission : <span className="text-slate-300">0</span>}
                     </td>
 
                     {/* Unknown */}
