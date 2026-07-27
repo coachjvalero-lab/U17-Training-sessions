@@ -44,7 +44,21 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
     ...session,
     updatedAt: Date.now()
   };
-  await setDoc(sessionRef, cloudData, { merge: true });
+  
+  // Timeout Promise after 5 seconds to prevent infinite spinning if connection lags
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Cloud save operation timed out')), 5000);
+  });
+
+  try {
+    await Promise.race([
+      setDoc(sessionRef, cloudData, { merge: true }),
+      timeoutPromise
+    ]);
+  } catch (err) {
+    console.error('saveSessionToCloud error:', err);
+    throw err;
+  }
 }
 
 /**

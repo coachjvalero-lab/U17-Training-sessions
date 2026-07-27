@@ -197,15 +197,23 @@ export default function App() {
     setIsSaving(true);
     const now = Date.now();
     
-    localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
-    localStorage.setItem('u17_training_session_updatedAt', String(now));
+    try {
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
+      localStorage.setItem('u17_training_session_updatedAt', String(now));
+    } catch (e) {
+      console.warn('LocalStorage save failed:', e);
+    }
 
     // Update URL parameter without reloading page so sharing current URL works out of the box
     if (session.id && window.history.replaceState) {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get('session') !== session.id) {
-        url.searchParams.set('session', session.id);
-        window.history.replaceState({}, '', url.toString());
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('session') !== session.id) {
+          url.searchParams.set('session', session.id);
+          window.history.replaceState({}, '', url.toString());
+        }
+      } catch (e) {
+        console.warn('URL update failed:', e);
       }
     }
 
@@ -242,7 +250,7 @@ export default function App() {
           console.error('Auto-save to Cloud failed:', err);
           setIsCloudSaving(false);
         });
-    }, 400);
+    }, 500);
 
     return () => {
       clearTimeout(localTimer);

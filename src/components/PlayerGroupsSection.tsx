@@ -63,7 +63,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
       id: `group-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       groupNumber: nextNum,
       bibColor: colorPreset.hex,
-      name: `Group ${nextNum} (${colorPreset.name})`,
+      name: `Group ${nextNum}`,
       players: ''
     };
     onChangeGroups([...groups, newGroup]);
@@ -133,7 +133,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         id: `group-auto-${i + 1}-${Date.now()}`,
         groupNumber: i + 1,
         bibColor: preset.hex,
-        name: `Group ${i + 1} (${preset.name})`,
+        name: `Group ${i + 1}`,
         players: ''
       });
     }
