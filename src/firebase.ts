@@ -45,9 +45,9 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
     updatedAt: Date.now()
   };
   
-  // Timeout Promise after 5 seconds to prevent infinite spinning if connection lags
+  // Timeout Promise after 4 seconds to prevent hanging if connection lags or quota is exceeded
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Cloud save operation timed out')), 5000);
+    setTimeout(() => reject(new Error('Cloud save operation timed out')), 4000);
   });
 
   try {
@@ -55,8 +55,13 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
       setDoc(sessionRef, cloudData, { merge: true }),
       timeoutPromise
     ]);
-  } catch (err) {
-    console.error('saveSessionToCloud error:', err);
+  } catch (err: any) {
+    const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
+    if (isQuotaError) {
+      console.warn('Firestore daily write quota reached. Changes saved locally in browser.');
+    } else {
+      console.warn('saveSessionToCloud warning:', err?.message || err);
+    }
     throw err;
   }
 }

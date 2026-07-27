@@ -117,6 +117,8 @@ export default function App() {
   const lastLoadedSessionTimeRef = useRef<number>(0);
   const currentSessionIdRef = useRef<string>('');
   const latestSessionRef = useRef<TrainingSession>(session);
+  const lastSavedJsonRef = useRef<string>('');
+  const cloudQuotaExceededUntilRef = useRef<number>(0);
 
   // Keep latest session ref in sync for window unload / visibilitychange handlers
   useEffect(() => {
@@ -126,6 +128,19 @@ export default function App() {
   // Direct helper to save current session to Firestore immediately
   const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession) => {
     if (!hasInitialCloudLoadedRef.current) return;
+
+    // Check if daily quota was recently exceeded; if so, skip cloud write attempt until backoff expires
+    if (Date.now() < cloudQuotaExceededUntilRef.current) {
+      setIsCloudSaving(false);
+      return;
+    }
+
+    const currentJson = JSON.stringify(sessionToSave);
+    if (currentJson === lastSavedJsonRef.current) {
+      setIsCloudSaving(false);
+      return;
+    }
+
     const activeLogo = getActiveLogo();
     const saveTimestamp = Date.now();
     const formattedSession: TrainingSession = {
@@ -138,8 +153,16 @@ export default function App() {
     setIsCloudSaving(true);
     try {
       await saveSessionToCloud(formattedSession);
-    } catch (err) {
-      console.error('Instant cloud save failed:', err);
+      lastSavedJsonRef.current = currentJson;
+    } catch (err: any) {
+      const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
+      if (isQuotaError) {
+        // Pause network writes for 2 minutes to prevent spamming failed requests
+        cloudQuotaExceededUntilRef.current = Date.now() + 120000;
+        console.warn('Firestore write quota exceeded. Autosave will continue locally in browser.');
+      } else {
+        console.warn('Cloud sync temporarily unavailable, saved locally.');
+      }
     } finally {
       setIsCloudSaving(false);
     }
@@ -228,6 +251,7 @@ export default function App() {
             };
 
             isRemoteUpdateRef.current = true;
+            lastSavedJsonRef.current = JSON.stringify(unifiedSession);
             setSession(unifiedSession);
 
             try {
@@ -299,7 +323,7 @@ export default function App() {
     setIsCloudSaving(true);
     const cloudTimer = setTimeout(() => {
       saveCurrentSessionToCloudNow(session);
-    }, 150);
+    }, 2000);
 
     return () => {
       clearTimeout(localTimer);
