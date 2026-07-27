@@ -114,8 +114,10 @@ export default function App() {
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
+  const lastLoadedSessionTimeRef = useRef<number>(0);
+  const currentSessionIdRef = useRef<string>('');
 
-  // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load
+  // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
     setIsLoadingCloud(true);
     const unsubscribe = subscribeToSessions((sessions) => {
@@ -123,28 +125,33 @@ export default function App() {
       setIsLoadingCloud(false);
 
       if (sessions.length > 0) {
-        // Read URL query parameters to see if a specific session ID was shared
+        // Read URL query parameters to see if a specific session ID was requested
         const urlParams = new URLSearchParams(window.location.search);
         const targetId = urlParams.get('session');
 
+        // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0] (most recently updated session in Cloud)
         let sessionToLoad = targetId 
           ? sessions.find(s => s.id === targetId) 
           : undefined;
 
-        // If no target ID or not found in URL, pick the most recently updated session
-        if (!sessionToLoad && !hasInitialCloudLoadedRef.current) {
-          sessionToLoad = sessions[0];
+        if (!sessionToLoad) {
+          sessionToLoad = sessions[0]; // Pick the latest active session in Firestore
         }
 
         if (sessionToLoad) {
-          const localSavedAt = localStorage.getItem('u17_training_session_updatedAt');
-          const localSavedTime = localSavedAt ? Number(localSavedAt) : 0;
           const cloudTime = sessionToLoad.updatedAt || 0;
+          const isNewer = cloudTime > lastLoadedSessionTimeRef.current;
+          const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
-          // Load on initial startup OR if URL specified a session ID OR if cloud data is newer
-          if (!hasInitialCloudLoadedRef.current || targetId || cloudTime > localSavedTime) {
+          // Load from cloud if:
+          // 1) First initial startup
+          // 2) Received a newer timestamp update from Firestore
+          // 3) Session ID changed
+          if (!hasInitialCloudLoadedRef.current || isNewer || isDifferentSession) {
             hasInitialCloudLoadedRef.current = true;
-            
+            lastLoadedSessionTimeRef.current = cloudTime;
+            currentSessionIdRef.current = sessionToLoad.id;
+
             const { updatedAt, ...baseSession } = sessionToLoad;
 
             // Normalize old team names if needed
@@ -172,6 +179,13 @@ export default function App() {
             isRemoteUpdateRef.current = true;
             setSession(unifiedSession);
 
+            try {
+              localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
+              localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
+            } catch (e) {
+              console.warn('LocalStorage sync warning:', e);
+            }
+
             if (unifiedSession.id && window.history.replaceState) {
               const url = new URL(window.location.href);
               if (url.searchParams.get('session') !== unifiedSession.id) {
@@ -179,15 +193,10 @@ export default function App() {
                 window.history.replaceState({}, '', url.toString());
               }
             }
-          } else {
-            hasInitialCloudLoadedRef.current = true;
           }
-        } else {
-          hasInitialCloudLoadedRef.current = true;
         }
-      } else {
-        hasInitialCloudLoadedRef.current = true;
       }
+      hasInitialCloudLoadedRef.current = true;
     });
     return () => unsubscribe();
   }, []);
@@ -203,6 +212,9 @@ export default function App() {
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
     }
+
+    // Keep active session ID tracking ref in sync
+    currentSessionIdRef.current = session.id;
 
     // Update URL parameter without reloading page so sharing current URL works out of the box
     if (session.id && window.history.replaceState) {
@@ -236,11 +248,15 @@ export default function App() {
     setIsCloudSaving(true);
     const cloudTimer = setTimeout(() => {
       const activeLogo = getActiveLogo();
+      const saveTimestamp = Date.now();
       const sessionToSave: TrainingSession = {
         ...session,
         teamLogo: session.teamLogo || activeLogo,
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
+
+      // Update timestamp ref to avoid redundant re-render when snapshot echoes back
+      lastLoadedSessionTimeRef.current = saveTimestamp;
 
       saveSessionToCloud(sessionToSave)
         .then(() => {
