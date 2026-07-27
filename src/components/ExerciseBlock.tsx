@@ -604,9 +604,6 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                             Series, Tiempo y Descanso
                           </span>
                         </div>
-                        <div className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200 print:text-[8px] print:p-0 print:border-none print:bg-transparent">
-                          Tiempo Total: <span className="underline font-black">{ex.duration || '0 min'}</span>
-                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2.5 print:grid-cols-3 print:gap-1.5">

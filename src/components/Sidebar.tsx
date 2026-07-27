@@ -153,49 +153,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Main Navigation Section Tabs */}
-      <div className="space-y-1.5">
+      {/* Main Navigation Section Tabs (Scrollable & Compact) */}
+      <div className="space-y-1">
         <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
           Navigation
         </p>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeSection === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                setActiveSection(item.id);
-                setMobileOpen(false);
-              }}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer text-left border ${
-                isActive 
-                  ? 'bg-[#002b54] border-[#a79078] shadow-lg shadow-[#001020]/60 ring-1 ring-[#a79078]/40' 
-                  : 'bg-[#001830]/60 hover:bg-[#002447] border-transparent hover:border-[#5ea4c5]/20 text-slate-300 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className={`p-2 rounded-lg border ${item.color} shrink-0`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="truncate">
-                  <div className={`text-xs font-bold truncate ${isActive ? 'text-white' : 'text-slate-200'}`}>
-                    {item.label}
+        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setActiveSection(item.id);
+                  setMobileOpen(false);
+                }}
+                className={`w-full flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer text-left border ${
+                  isActive 
+                    ? 'bg-[#002b54] border-[#a79078] shadow-md shadow-[#001020]/60 ring-1 ring-[#a79078]/40' 
+                    : 'bg-[#001830]/60 hover:bg-[#002447] border-transparent hover:border-[#5ea4c5]/20 text-slate-300 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className={`p-1.5 rounded-lg border ${item.color} shrink-0`}>
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <div className="text-[10px] text-slate-400 truncate font-semibold">
-                    {item.sublabel}
+                  <div className="truncate">
+                    <div className={`text-xs font-bold truncate ${isActive ? 'text-white' : 'text-slate-200'}`}>
+                      {item.label}
+                    </div>
+                    <div className="text-[9px] text-slate-400 truncate font-semibold">
+                      {item.sublabel}
+                    </div>
                   </div>
                 </div>
-              </div>
-              {item.badge && (
-                <span className="text-[10px] font-black bg-[#a79078] text-slate-950 px-2 py-0.5 rounded-full ml-1 shrink-0">
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                {item.badge && (
+                  <span className="text-[10px] font-black bg-[#a79078] text-slate-950 px-2 py-0.5 rounded-full ml-1 shrink-0">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Quick Actions (Print / New / Clear) */}
@@ -290,7 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 No saved cloud sessions yet. Click "Save" to upload your first session.
               </div>
             ) : (
-              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 custom-scrollbar">
                 {cloudSessions.map((cloudSess) => {
                   const isActive = cloudSess.id === session.id;
                   return (

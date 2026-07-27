@@ -1013,9 +1013,6 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
                     Series, Tiempo y Descanso
                   </span>
-                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200">
-                    Tiempo Total: {newEx.duration || '0 min'}
-                  </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2.5">

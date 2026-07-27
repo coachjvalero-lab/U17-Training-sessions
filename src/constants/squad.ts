@@ -38,8 +38,8 @@ export interface ColorPreset {
 export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   {
     id: 'blue',
-    name: 'Peto Azul',
-    label: 'Azul 🔵',
+    name: 'Blue Bib',
+    label: 'Blue 🔵',
     hex: '#2563eb',
     bgClass: 'bg-blue-600',
     textClass: 'text-blue-700',
@@ -49,8 +49,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'yellow',
-    name: 'Peto Amarillo',
-    label: 'Amarillo 🟡',
+    name: 'Yellow Bib',
+    label: 'Yellow 🟡',
     hex: '#eab308',
     bgClass: 'bg-yellow-500',
     textClass: 'text-amber-800',
@@ -60,8 +60,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'red',
-    name: 'Peto Rojo',
-    label: 'Rojo 🔴',
+    name: 'Red Bib',
+    label: 'Red 🔴',
     hex: '#ef4444',
     bgClass: 'bg-red-600',
     textClass: 'text-red-700',
@@ -71,8 +71,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'green',
-    name: 'Peto Verde',
-    label: 'Verde 🟢',
+    name: 'Green Bib',
+    label: 'Green 🟢',
     hex: '#22c55e',
     bgClass: 'bg-emerald-600',
     textClass: 'text-emerald-800',
@@ -82,8 +82,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'orange',
-    name: 'Peto Naranja',
-    label: 'Naranja 🟠',
+    name: 'Orange Bib',
+    label: 'Orange 🟠',
     hex: '#f97316',
     bgClass: 'bg-orange-500',
     textClass: 'text-orange-800',
@@ -93,8 +93,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'purple',
-    name: 'Peto Morado',
-    label: 'Morado 🟣',
+    name: 'Purple Bib',
+    label: 'Purple 🟣',
     hex: '#a855f7',
     bgClass: 'bg-purple-600',
     textClass: 'text-purple-800',
@@ -104,8 +104,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'pink',
-    name: 'Peto Rosa',
-    label: 'Rosa 🩷',
+    name: 'Pink Bib',
+    label: 'Pink 🩷',
     hex: '#ec4899',
     bgClass: 'bg-pink-500',
     textClass: 'text-pink-800',
@@ -115,8 +115,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'white',
-    name: 'Sin Peto / Blanco',
-    label: 'Blanco ⚪',
+    name: 'No Bib / White',
+    label: 'White ⚪',
     hex: '#f8fafc',
     bgClass: 'bg-slate-300',
     textClass: 'text-slate-800',
@@ -126,8 +126,8 @@ export const GROUP_COLOR_PRESETS: ColorPreset[] = [
   },
   {
     id: 'dark',
-    name: 'Peto Negro',
-    label: 'Negro ⬛',
+    name: 'Black Bib',
+    label: 'Black ⬛',
     hex: '#1e293b',
     bgClass: 'bg-slate-800',
     textClass: 'text-slate-900',
