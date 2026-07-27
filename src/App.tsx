@@ -869,7 +869,7 @@ export default function App() {
             activeSection={activeSection}
           />
         ) : (
-          <main className="space-y-6 md:space-y-8 print:space-y-4">
+          <main className="space-y-6 md:space-y-8 print:space-y-1.5">
             
             {/* Header Section */}
             <HeaderSection 

@@ -374,7 +374,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   );
 
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-3 print:rounded-xl print:no-break space-y-4">
+    <section className={`bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-2 print:rounded-lg print:no-break space-y-4 ${block.exercises.length === 0 ? 'print:hidden' : ''}`}>
       {/* Block Header */}
       <div className="flex justify-between items-center border-b border-slate-100 pb-3.5 print:border-slate-200 print:pb-1.5">
         <h2 className="text-sm font-display font-black text-slate-900 tracking-wider uppercase flex items-center space-x-2 print:text-[#002142] print:text-sm print:font-extrabold">

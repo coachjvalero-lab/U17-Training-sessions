@@ -47,25 +47,27 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 4mm 6mm 4mm 6mm;
+    margin: 3mm 4mm 3mm 4mm;
   }
   
   html, body {
     background-color: #ffffff !important;
     color: #0f172a !important;
-    font-size: 7.5pt !important;
-    line-height: 1.2 !important;
+    font-size: 7pt !important;
+    line-height: 1.15 !important;
     font-family: "Inter", system-ui, sans-serif !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   /* Force clean structured cards for print */
   header, section, main {
-    padding: 5px 8px !important;
-    margin-top: 3px !important;
-    margin-bottom: 3px !important;
-    border-radius: 6px !important;
+    padding: 4px 6px !important;
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+    border-radius: 5px !important;
     border: 1px solid #cbd5e1 !important;
     box-shadow: none !important;
     background-color: #ffffff !important;
@@ -80,8 +82,8 @@ body {
   /* Compact form of tactical pitch diagrams */
   .relative.aspect-\[4\/3\] {
     aspect-ratio: 16/9 !important;
-    max-height: 80px !important;
-    border-radius: 6px !important;
+    max-height: 65px !important;
+    border-radius: 4px !important;
     border: 1px solid #cbd5e1 !important;
     background-color: #f8fafc !important;
   }
@@ -95,14 +97,15 @@ body {
     resize: none !important;
     color: #0f172a !important;
     font-weight: 600 !important;
-    font-size: 7.5pt !important;
+    font-size: 7pt !important;
+    line-height: 1.12 !important;
   }
 
   /* Primary Objective and Materials fields - ultra compact in print */
   #header-objective, #header-materials {
-    font-size: 7pt !important;
-    line-height: 1.15 !important;
-    max-height: 22px !important;
+    font-size: 6.5pt !important;
+    line-height: 1.1 !important;
+    max-height: 18px !important;
     margin-top: 1px !important;
   }
 
@@ -124,8 +127,8 @@ body {
   }
 
   /* Reduce gap sizes for compact clean layout */
-  .gap-5, .gap-6, .gap-3\.5 {
-    gap: 4px !important;
+  .gap-5, .gap-6, .gap-3\.5, .gap-3, .gap-2\.5 {
+    gap: 2px !important;
   }
   
   .space-y-4 > :not([hidden]) ~ :not([hidden]),
@@ -133,29 +136,30 @@ body {
   .space-y-6 > :not([hidden]) ~ :not([hidden]),
   .space-y-8 > :not([hidden]) ~ :not([hidden]) {
     --tw-space-y-reverse: 0 !important;
-    margin-top: 3px !important;
+    margin-top: 2px !important;
     margin-bottom: 0px !important;
   }
 
   .space-y-3\.5 > :not([hidden]) ~ :not([hidden]),
   .space-y-3 > :not([hidden]) ~ :not([hidden]),
-  .space-y-2\.5 > :not([hidden]) ~ :not([hidden]) {
+  .space-y-2\.5 > :not([hidden]) ~ :not([hidden]),
+  .space-y-2 > :not([hidden]) ~ :not([hidden]) {
     --tw-space-y-reverse: 0 !important;
-    margin-top: 2px !important;
+    margin-top: 1px !important;
     margin-bottom: 0px !important;
   }
 
   /* Professional signature footer */
   footer {
-    margin-top: 6px !important;
-    padding: 4px 8px !important;
+    margin-top: 3px !important;
+    padding: 2px 6px !important;
     border-top: 1.5px solid #002142 !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
   footer p {
-    font-size: 7pt !important;
+    font-size: 6.5pt !important;
     color: #475569 !important;
   }
 
