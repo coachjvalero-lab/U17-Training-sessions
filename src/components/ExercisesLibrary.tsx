@@ -1014,7 +1014,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     Series, Tiempo y Descanso
                   </span>
                   <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200">
-                    Total Encabezado: {newEx.duration || '0 min'}
+                    Tiempo Total: {newEx.duration || '0 min'}
                   </span>
                 </div>
 
@@ -1060,33 +1060,18 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 </div>
               </div>
 
-              {/* Duration & Dimensions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Duration (Header Total)
-                  </label>
-                  <input
-                    type="text"
-                    value={newEx.duration || ''}
-                    onChange={(e) => setNewEx({ ...newEx, duration: e.target.value })}
-                    placeholder="e.g. 15 min"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Space / Pitch Dimensions
-                  </label>
-                  <input
-                    type="text"
-                    value={newEx.dimensions || ''}
-                    onChange={(e) => setNewEx({ ...newEx, dimensions: e.target.value })}
-                    placeholder="e.g. 40x30 meters"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
-                  />
-                </div>
+              {/* Dimensions */}
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                  Space / Pitch Dimensions
+                </label>
+                <input
+                  type="text"
+                  value={newEx.dimensions || ''}
+                  onChange={(e) => setNewEx({ ...newEx, dimensions: e.target.value })}
+                  placeholder="e.g. 40x30 meters"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
+                />
               </div>
 
               {/* Description */}

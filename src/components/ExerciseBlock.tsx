@@ -446,21 +446,16 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     </span>
                   )}
 
-                  {/* Editable Duration field inside the header */}
-                  <div 
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center space-x-1.5 bg-slate-100/85 border border-slate-200/80 px-2 py-1 rounded-xl focus-within:border-emerald-500/50 focus-within:bg-white transition-all print:bg-slate-100 print:border print:border-slate-200 print:px-1.5 print:py-0.5 print:rounded-md shrink-0"
-                    title="Duration"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-slate-400 print:text-[#0f5981] print:w-3 print:h-3 shrink-0" />
-                    <input
-                      type="text"
-                      value={ex.duration}
-                      onChange={(e) => updateExercise(ex.id, { duration: e.target.value })}
-                      placeholder="15 min"
-                      className="w-14 bg-transparent text-xs font-extrabold text-slate-700 focus:outline-none text-center print:text-slate-900 print:text-[10px] print:w-12 print:font-bold"
-                    />
-                  </div>
+                  {/* Duration Badge (Calculated from Series, Work Time & Rest) */}
+                  {ex.duration && (
+                    <div 
+                      className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl text-emerald-900 shrink-0 print:bg-slate-100 print:border print:border-slate-200 print:px-1.5 print:py-0.5 print:rounded-md"
+                      title="Tiempo total del ejercicio"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-emerald-600 print:text-[#0f5981] print:w-3 print:h-3 shrink-0" />
+                      <span className="text-xs font-black print:text-[10px]">{ex.duration}</span>
+                    </div>
+                  )}
 
                   {/* Moment badge */}
                   <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md border ${getMomentBadgeStyles(ex.gameMoment)} print:px-1.5 print:py-0.5 print:text-[8px] print:font-extrabold`}>
@@ -610,7 +605,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           </span>
                         </div>
                         <div className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200 print:text-[8px] print:p-0 print:border-none print:bg-transparent">
-                          Total Encabezado: <span className="underline font-black">{ex.duration || '0 min'}</span>
+                          Tiempo Total: <span className="underline font-black">{ex.duration || '0 min'}</span>
                         </div>
                       </div>
 

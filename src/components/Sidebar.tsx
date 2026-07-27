@@ -290,37 +290,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 No saved cloud sessions yet. Click "Save" to upload your first session.
               </div>
             ) : (
-              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
                 {cloudSessions.map((cloudSess) => {
                   const isActive = cloudSess.id === session.id;
                   return (
                     <div
                       key={cloudSess.id}
                       onClick={() => onLoadCloudSession(cloudSess)}
-                      className={`group flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer text-left ${
+                      className={`group flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer text-left ${
                         isActive 
-                          ? 'border-[#a79078] bg-[#002b54] shadow-md border' 
+                          ? 'border-[#a79078] bg-[#002b54] shadow-md border ring-1 ring-[#a79078]/40' 
                           : 'bg-[#001428]/80 hover:bg-[#002040] border border-slate-800 hover:border-[#5ea4c5]/30'
                       }`}
                     >
-                      <div className="space-y-0.5 min-w-0 pr-2">
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
+                      <div className="space-y-1 min-w-0 pr-2">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                             isActive 
                               ? 'bg-[#a79078] text-slate-950' 
-                              : 'bg-sky-900/60 text-sky-200 border border-sky-400/20'
+                              : 'bg-sky-900/80 text-sky-200 border border-sky-400/30'
                           }`}>
                             #{cloudSess.sessionNumber || '1'}
                           </span>
-                          <span className="text-sky-200/60 text-[9px] font-bold">{cloudSess.date}</span>
+                          <span className="text-sky-200/70 text-[10px] font-bold">{cloudSess.date}</span>
                           {isActive && (
-                            <span className="text-[8px] font-extrabold text-[#a79078] uppercase">
+                            <span className="text-[9px] font-black text-[#a79078] uppercase tracking-wider">
                               Active
                             </span>
                           )}
                         </div>
 
-                        <h5 className="text-xs font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
+                        <h5 className="text-xs sm:text-sm font-bold text-white group-hover:text-[#a79078] transition-colors truncate">
                           {cloudSess.mainObjective || 'No objective assigned'}
                         </h5>
                       </div>
@@ -332,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
                           title="Delete Session"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

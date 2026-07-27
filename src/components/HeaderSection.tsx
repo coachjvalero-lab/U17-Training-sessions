@@ -143,64 +143,64 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2 print:bg-slate-50/80 print:p-2 print:rounded-lg print:border print:border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 print:grid-cols-4 print:gap-2 print:bg-slate-50/80 print:p-2 print:rounded-lg print:border print:border-slate-200">
             {/* Fecha */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
-              <Calendar className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl hover:border-slate-300 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Calendar className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Date</label>
+                <label className="text-[10px] uppercase font-black text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500">Date</label>
                 <input
                   id="header-date"
                   type="date"
                   value={session.date}
                   onChange={(e) => onChange({ date: e.target.value })}
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
+                  className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
             {/* Hora */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
-              <Clock className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl hover:border-slate-300 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Clock className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Time / Slot</label>
+                <label className="text-[10px] uppercase font-black text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500">Time / Slot</label>
                 <input
                   id="header-time"
                   type="text"
                   value={session.time}
                   onChange={(e) => onChange({ time: e.target.value })}
                   placeholder="18:30 - 20:00"
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
+                  className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
-            {/* Nº de Sesión */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
-              <Trophy className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
+            {/* Nº de Sesión (Highlighted & Larger) */}
+            <div className="flex items-center space-x-3 bg-emerald-50/80 border border-emerald-300/80 px-4 py-3 rounded-2xl hover:border-emerald-400 transition-all shadow-sm ring-1 ring-emerald-500/10 print:bg-transparent print:border-none print:p-0 print:ring-0 print:shadow-none print:space-x-1.5">
+              <Trophy className="w-5 h-5 text-emerald-600 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Session No.</label>
+                <label className="text-[10px] uppercase font-black text-emerald-700 block tracking-wider print:text-[8px] print:text-slate-500">Session No.</label>
                 <input
                   id="header-session-number"
                   type="text"
                   value={session.sessionNumber}
                   onChange={(e) => onChange({ sessionNumber: e.target.value })}
-                  placeholder="Session 1"
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
+                  placeholder="e.g. Session 1"
+                  className="w-full bg-transparent text-sm sm:text-base font-black text-emerald-950 placeholder:text-emerald-300 focus:outline-none print:text-slate-900 print:text-xs print:font-bold"
                 />
               </div>
             </div>
 
             {/* Microcilo Day */}
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-100 px-3.5 py-2.5 rounded-xl hover:border-slate-200 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
-              <Activity className="w-4 h-4 text-emerald-500 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
+            <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl hover:border-slate-300 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1.5">
+              <Activity className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3.5 print:h-3.5 shrink-0" />
               <div className="w-full">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500 print:font-extrabold">Microcycle Day</label>
+                <label className="text-[10px] uppercase font-black text-slate-400 block tracking-wider print:text-[8px] print:text-slate-500">Microcycle Day</label>
                 <select
                   id="header-microcycle-day"
                   value={session.microcycleDay || ''}
                   onChange={(e) => onChange({ microcycleDay: e.target.value })}
-                  className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer print:text-slate-900 print:text-xs print:font-bold"
+                  className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none cursor-pointer print:text-slate-900 print:text-xs print:font-bold"
                 >
                   <option value="">Select Day</option>
                   <option value="-4">-4</option>
