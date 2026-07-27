@@ -24,6 +24,7 @@ import {
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { CloudTrainingSession, saveSessionToCloud } from '../firebase';
 import { processUploadedImageFile } from '../utils/heic';
+import { calculateExerciseTotalDuration } from './ExerciseBlock';
 
 interface ExercisesLibraryProps {
   currentSession: TrainingSession;
@@ -83,6 +84,22 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>('football');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDuplicatingModal, setIsDuplicatingModal] = useState(false);
+
+  const handleNewExTimingChange = (field: 'series' | 'workTime' | 'restTime', val: string) => {
+    const updatedSeries = field === 'series' ? val : (newEx.series ?? '');
+    const updatedWorkTime = field === 'workTime' ? val : (newEx.workTime ?? '');
+    const updatedRestTime = field === 'restTime' ? val : (newEx.restTime ?? '');
+
+    const { durationStr } = calculateExerciseTotalDuration(updatedSeries, updatedWorkTime, updatedRestTime);
+
+    setNewEx(prev => ({
+      ...prev,
+      series: updatedSeries,
+      workTime: updatedWorkTime,
+      restTime: updatedRestTime,
+      ...(durationStr ? { duration: durationStr } : {})
+    }));
+  };
 
   // Target session and department selector state when adding to session
   const [targetSessionId, setTargetSessionId] = useState<string>('active');
@@ -990,17 +1007,70 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 </div>
               </div>
 
+              {/* Series, Tiempo y Descanso (Timing Structure) */}
+              <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    Series, Tiempo y Descanso
+                  </span>
+                  <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200">
+                    Total Encabezado: {newEx.duration || '0 min'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                      Series
+                    </label>
+                    <input
+                      type="text"
+                      value={newEx.series ?? ''}
+                      onChange={(e) => handleNewExTimingChange('series', e.target.value)}
+                      placeholder="ej: 3"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                      Tiempo / Serie (min)
+                    </label>
+                    <input
+                      type="text"
+                      value={newEx.workTime ?? ''}
+                      onChange={(e) => handleNewExTimingChange('workTime', e.target.value)}
+                      placeholder="ej: 4"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                      Descanso (min)
+                    </label>
+                    <input
+                      type="text"
+                      value={newEx.restTime ?? ''}
+                      onChange={(e) => handleNewExTimingChange('restTime', e.target.value)}
+                      placeholder="ej: 1"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Duration & Dimensions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Duration
+                    Duration (Header Total)
                   </label>
                   <input
                     type="text"
                     value={newEx.duration || ''}
                     onChange={(e) => setNewEx({ ...newEx, duration: e.target.value })}
-                    placeholder="e.g. 15 min (3 x 4' + 1' rest)"
+                    placeholder="e.g. 15 min"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>

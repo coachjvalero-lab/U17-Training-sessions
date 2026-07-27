@@ -95,6 +95,33 @@ const FIELD_TEMPLATES = {
   halfField: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%"><rect width="400" height="300" fill="%2314532d" /><rect x="10" y="10" width="380" height="280" fill="none" stroke="white" stroke-width="2" /><line x1="10" y1="150" x2="390" y2="150" stroke="white" stroke-width="2" stroke-dasharray="3" /><rect x="110" y="10" width="180" height="70" fill="none" stroke="white" stroke-width="2" /><circle cx="200" cy="80" r="3" fill="white" /><path d="M 160 80 A 40 40 0 0 0 240 80" fill="none" stroke="white" stroke-width="2" /></svg>`
 };
 
+export function calculateExerciseTotalDuration(
+  seriesInput?: number | string,
+  workTimeInput?: number | string,
+  restTimeInput?: number | string
+): { totalMinutes: number; durationStr: string } {
+  const seriesStr = String(seriesInput ?? '').trim();
+  const workStr = String(workTimeInput ?? '').trim();
+  const restStr = String(restTimeInput ?? '').trim();
+
+  const series = parseFloat(seriesStr) || 0;
+  const workTime = parseFloat(workStr) || 0;
+  const restTime = parseFloat(restStr) || 0;
+
+  if (series <= 0 || workTime <= 0) {
+    return { totalMinutes: 0, durationStr: '' };
+  }
+
+  const totalWork = series * workTime;
+  const totalRest = series > 1 ? (series - 1) * restTime : 0;
+  const totalMinutes = Math.round((totalWork + totalRest) * 10) / 10;
+
+  return {
+    totalMinutes,
+    durationStr: `${totalMinutes} min`
+  };
+}
+
 export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({ 
   block, 
   onChange, 
@@ -104,6 +131,26 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+
+  const handleTimingChange = (
+    exId: string, 
+    currentEx: Exercise, 
+    field: 'series' | 'workTime' | 'restTime', 
+    val: string
+  ) => {
+    const updatedSeries = field === 'series' ? val : (currentEx.series ?? '');
+    const updatedWorkTime = field === 'workTime' ? val : (currentEx.workTime ?? '');
+    const updatedRestTime = field === 'restTime' ? val : (currentEx.restTime ?? '');
+
+    const { durationStr } = calculateExerciseTotalDuration(updatedSeries, updatedWorkTime, updatedRestTime);
+
+    updateExercise(exId, {
+      series: updatedSeries,
+      workTime: updatedWorkTime,
+      restTime: updatedRestTime,
+      ...(durationStr ? { duration: durationStr } : {})
+    });
+  };
 
   const handleCopySessionGroups = (exId: string) => {
     if (!sessionGroups || sessionGroups.length === 0) return;
@@ -551,8 +598,64 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   )}
 
                   {/* Right col: Form controls (Span 8 if graphics shown, Span 12 if hideGraphics is true) */}
-                  <div className={`space-y-3.5 print:space-y-1.5 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-8'}`}>
+                  <div className={`space-y-3.5 print:space-y-2 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-8'}`}>
                     
+                    {/* Series, Tiempo y Descanso (Timing & Structure) Card */}
+                    <div className="bg-slate-50/90 border border-slate-200/80 p-3 rounded-2xl space-y-2 print:bg-slate-50 print:border print:border-slate-200 print:p-2 print:rounded-lg">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5 print:border-slate-200">
+                        <div className="flex items-center space-x-1.5">
+                          <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0 print:w-3 print:h-3" />
+                          <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider print:text-[8px] print:text-black">
+                            Series, Tiempo y Descanso
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200 print:text-[8px] print:p-0 print:border-none print:bg-transparent">
+                          Total Encabezado: <span className="underline font-black">{ex.duration || '0 min'}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2.5 print:grid-cols-3 print:gap-1.5">
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
+                            Series
+                          </label>
+                          <input
+                            type="text"
+                            value={ex.series ?? ''}
+                            onChange={(e) => handleTimingChange(ex.id, ex, 'series', e.target.value)}
+                            placeholder="ej: 3"
+                            className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
+                            Tiempo / Serie (min)
+                          </label>
+                          <input
+                            type="text"
+                            value={ex.workTime ?? ''}
+                            onChange={(e) => handleTimingChange(ex.id, ex, 'workTime', e.target.value)}
+                            placeholder="ej: 4"
+                            className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
+                            Descanso (min)
+                          </label>
+                          <input
+                            type="text"
+                            value={ex.restTime ?? ''}
+                            onChange={(e) => handleTimingChange(ex.id, ex, 'restTime', e.target.value)}
+                            placeholder="ej: 1"
+                            className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Game Moment / Tactical Sub-moment / Pitch Size (Combined in a compact 3-column row) */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 print:grid-cols-3 print:gap-2">
                       <div>

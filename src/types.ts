@@ -16,6 +16,9 @@ export interface Exercise {
   subMoment: string;
   description: string;
   duration: string; // e.g., "15 min"
+  series?: number | string; // Number of sets/series e.g. 3
+  workTime?: number | string; // Work duration per series in min e.g. 4
+  restTime?: number | string; // Rest duration between series in min e.g. 1
   dimensions: string; // e.g., "40x30m"
   coachRoles: string; // e.g., "Coach A: Referee, Coach B: Feedback"
   image?: string; // base64 image or placeholder
