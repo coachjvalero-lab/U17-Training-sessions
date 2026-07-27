@@ -116,6 +116,57 @@ export default function App() {
   const hasInitialCloudLoadedRef = useRef(false);
   const lastLoadedSessionTimeRef = useRef<number>(0);
   const currentSessionIdRef = useRef<string>('');
+  const latestSessionRef = useRef<TrainingSession>(session);
+
+  // Keep latest session ref in sync for window unload / visibilitychange handlers
+  useEffect(() => {
+    latestSessionRef.current = session;
+  }, [session]);
+
+  // Direct helper to save current session to Firestore immediately
+  const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession) => {
+    if (!hasInitialCloudLoadedRef.current) return;
+    const activeLogo = getActiveLogo();
+    const saveTimestamp = Date.now();
+    const formattedSession: TrainingSession = {
+      ...sessionToSave,
+      teamLogo: sessionToSave.teamLogo || activeLogo,
+      teamName: sessionToSave.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : sessionToSave.teamName
+    };
+
+    lastLoadedSessionTimeRef.current = saveTimestamp;
+    setIsCloudSaving(true);
+    try {
+      await saveSessionToCloud(formattedSession);
+    } catch (err) {
+      console.error('Instant cloud save failed:', err);
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
+  // Immediate flush on page hide or tab close so no pending edits are lost
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && latestSessionRef.current) {
+        saveCurrentSessionToCloudNow(latestSessionRef.current);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      if (latestSessionRef.current) {
+        saveCurrentSessionToCloudNow(latestSessionRef.current);
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
@@ -247,26 +298,8 @@ export default function App() {
     // Debounced Cloud Sync (Auto-save to Firestore)
     setIsCloudSaving(true);
     const cloudTimer = setTimeout(() => {
-      const activeLogo = getActiveLogo();
-      const saveTimestamp = Date.now();
-      const sessionToSave: TrainingSession = {
-        ...session,
-        teamLogo: session.teamLogo || activeLogo,
-        teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
-      };
-
-      // Update timestamp ref to avoid redundant re-render when snapshot echoes back
-      lastLoadedSessionTimeRef.current = saveTimestamp;
-
-      saveSessionToCloud(sessionToSave)
-        .then(() => {
-          setIsCloudSaving(false);
-        })
-        .catch((err) => {
-          console.error('Auto-save to Cloud failed:', err);
-          setIsCloudSaving(false);
-        });
-    }, 500);
+      saveCurrentSessionToCloudNow(session);
+    }, 150);
 
     return () => {
       clearTimeout(localTimer);
