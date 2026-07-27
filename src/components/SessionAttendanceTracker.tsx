@@ -71,29 +71,22 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const injuryCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Injury').length;
   const unknownCount = effectiveAttendance.filter(a => a.status === 'Absent' && (!a.absenceReason || a.absenceReason === 'Unknown')).length;
 
-  const handleToggleStatus = (playerName: string) => {
+  const handleAttendanceStateChange = (playerName: string, value: string) => {
     const updated = effectiveAttendance.map(a => {
       if (a.playerName.toLowerCase() === playerName.toLowerCase()) {
-        const nextStatus: 'Attending' | 'Absent' = a.status === 'Attending' ? 'Absent' : 'Attending';
-        return {
-          ...a,
-          status: nextStatus,
-          absenceReason: nextStatus === 'Absent' ? (a.absenceReason || 'Unknown') : undefined
-        };
-      }
-      return a;
-    });
-    onChangeAttendance(updated);
-  };
-
-  const handleReasonChange = (playerName: string, reason: AbsenceReason) => {
-    const updated = effectiveAttendance.map(a => {
-      if (a.playerName.toLowerCase() === playerName.toLowerCase()) {
-        return {
-          ...a,
-          status: 'Absent' as const,
-          absenceReason: reason
-        };
+        if (value === 'Attending') {
+          return {
+            ...a,
+            status: 'Attending' as const,
+            absenceReason: undefined
+          };
+        } else {
+          return {
+            ...a,
+            status: 'Absent' as const,
+            absenceReason: value as AbsenceReason
+          };
+        }
       }
       return a;
     });
@@ -298,75 +291,79 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
             </div>
 
             <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">
-              Click badge to toggle status
+              Select status from dropdown
             </span>
           </div>
 
           {/* Player Grid Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredPlayers.map((record) => {
               const isAttending = record.status === 'Attending';
-              const reasonConfig = getAbsenceReasonConfig(record.absenceReason);
-              const ReasonIcon = reasonConfig.icon;
+              const currentSelectValue = isAttending ? 'Attending' : (record.absenceReason || 'Unknown');
+              
+              // Determine card styling based on attendance status
+              let cardBg = 'bg-emerald-50/50 border-emerald-200/80 hover:border-emerald-300';
+              let selectBg = 'bg-emerald-600 text-white border-emerald-700 focus:ring-emerald-500';
+              if (!isAttending) {
+                if (record.absenceReason === 'Vacation') {
+                  cardBg = 'bg-amber-50/60 border-amber-200 hover:border-amber-300';
+                  selectBg = 'bg-amber-600 text-white border-amber-700 focus:ring-amber-500';
+                } else if (record.absenceReason === 'Study') {
+                  cardBg = 'bg-blue-50/60 border-blue-200 hover:border-blue-300';
+                  selectBg = 'bg-blue-600 text-white border-blue-700 focus:ring-blue-500';
+                } else if (record.absenceReason === 'Injury') {
+                  cardBg = 'bg-rose-50/60 border-rose-200 hover:border-rose-300';
+                  selectBg = 'bg-rose-600 text-white border-rose-700 focus:ring-rose-500';
+                } else {
+                  cardBg = 'bg-slate-100/60 border-slate-200 hover:border-slate-300';
+                  selectBg = 'bg-slate-700 text-white border-slate-800 focus:ring-slate-500';
+                }
+              }
 
               return (
                 <div
                   key={record.playerName}
-                  className={`p-2.5 rounded-2xl border transition-all flex flex-col justify-between space-y-2 ${
-                    isAttending
-                      ? 'bg-emerald-50/40 border-emerald-200/80 hover:bg-emerald-50'
-                      : 'bg-rose-50/40 border-rose-200/80 hover:bg-rose-50'
-                  }`}
+                  className={`p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-2.5 shadow-sm ${cardBg}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 truncate pr-1">
-                      {record.playerName}
-                    </span>
-
-                    {/* Status Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(record.playerName)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border flex items-center space-x-1 ${
-                        isAttending
-                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
-                          : 'bg-rose-600 text-white border-rose-700 shadow-sm'
-                      }`}
-                      title={`Click to mark as ${isAttending ? 'Absent' : 'Attending'}`}
-                    >
-                      {isAttending ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          <span>Present</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-3 h-3" />
-                          <span>Absent</span>
-                        </>
-                      )}
-                    </button>
+                  {/* Player Name Box / Header */}
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-[#002142] text-[#a79078] font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                      {record.playerName.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="truncate min-w-0 flex-1">
+                      <span className="text-xs font-black text-slate-900 block truncate">
+                        {record.playerName}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Absence Reason Selector (shown if absent) */}
-                  {!isAttending && (
-                    <div className="pt-1 border-t border-rose-200/60 space-y-1">
-                      <label className="text-[9px] font-extrabold uppercase text-rose-800 tracking-wider block">
-                        Reason:
-                      </label>
-                      <select
-                        value={record.absenceReason || 'Unknown'}
-                        onChange={(e) => handleReasonChange(record.playerName, e.target.value as AbsenceReason)}
-                        className="w-full text-[11px] font-bold bg-white border border-rose-300 text-rose-950 rounded-lg px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
-                      >
-                        {ABSENCE_REASONS.map(r => (
-                          <option key={r.key} value={r.key}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  {/* Attendance State Dropdown Select */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-slate-500 tracking-wider block">
+                      Attendance Status:
+                    </label>
+                    <select
+                      value={currentSelectValue}
+                      onChange={(e) => handleAttendanceStateChange(record.playerName, e.target.value)}
+                      className={`w-full text-xs font-black rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 cursor-pointer transition-all border shadow-sm ${selectBg}`}
+                    >
+                      <option value="Attending" className="bg-white text-emerald-900 font-bold py-1">
+                        ✓ Attending (Present)
+                      </option>
+                      <option value="Vacation" className="bg-white text-amber-900 font-bold py-1">
+                        🏖️ Vacation (Absent)
+                      </option>
+                      <option value="Study" className="bg-white text-blue-900 font-bold py-1">
+                        📚 Study (Absent)
+                      </option>
+                      <option value="Injury" className="bg-white text-rose-900 font-bold py-1">
+                        🏥 Injury (Absent)
+                      </option>
+                      <option value="Unknown" className="bg-white text-slate-900 font-bold py-1">
+                        ❓ Unknown (Absent)
+                      </option>
+                    </select>
+                  </div>
                 </div>
               );
             })}

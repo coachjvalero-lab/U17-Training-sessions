@@ -25,7 +25,7 @@ import {
 import { TrainingSession, PlayerAttendance, AbsenceReason } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
-import { ABSENCE_REASONS, getAbsenceReasonConfig } from './SessionAttendanceTracker';
+import { ABSENCE_REASONS, getAbsenceReasonConfig, SessionAttendanceTracker } from './SessionAttendanceTracker';
 
 interface AttendanceSectionProps {
   session: TrainingSession;
@@ -228,6 +228,14 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Active Session Attendance Tracker */}
+      <SessionAttendanceTracker
+        attendance={session.attendance}
+        squadRoster={squadRoster}
+        onChangeAttendance={(attendance) => onChangeSession({ attendance })}
+        onChangeRoster={onChangeRoster}
+      />
 
       {/* Global Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
