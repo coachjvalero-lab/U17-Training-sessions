@@ -7,7 +7,9 @@ import { PlayerGroupsSection } from './components/PlayerGroupsSection';
 import { Sidebar } from './components/Sidebar';
 import { ExercisesLibrary } from './components/ExercisesLibrary';
 import { PlanificationSection } from './components/PlanificationSection';
-import { TrainingSession, Exercise, PlayerGroup, TrainingBlock } from './types';
+import { AttendanceSection } from './components/AttendanceSection';
+import { SessionAttendanceTracker } from './components/SessionAttendanceTracker';
+import { TrainingSession, Exercise, PlayerGroup, TrainingBlock, PlayerAttendance } from './types';
 import { 
   saveSessionToCloud, 
   deleteSessionFromCloud, 
@@ -33,7 +35,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises' | 'planning'>('football');
+  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance'>('football');
 
   // Load and merge into a single unified session
   const [session, setSession] = useState<TrainingSession>(() => {
@@ -406,6 +408,13 @@ export default function App() {
     setSession(prev => ({
       ...prev,
       squadRoster
+    }));
+  };
+
+  const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
+    setSession(prev => ({
+      ...prev,
+      attendance
     }));
   };
 
@@ -836,6 +845,14 @@ export default function App() {
             session={session}
             cloudSessions={cloudSessions}
           />
+        ) : activeSection === 'attendance' ? (
+          <AttendanceSection
+            session={session}
+            cloudSessions={cloudSessions}
+            squadRoster={session.squadRoster}
+            onChangeSession={handleUpdateSession}
+            onChangeRoster={handleUpdateRoster}
+          />
         ) : activeSection === 'exercises' ? (
           <ExercisesLibrary
             currentSession={session}
@@ -852,10 +869,19 @@ export default function App() {
               onChange={handleUpdateSession}
             />
 
+            {/* Section: Session Attendance Quick Tracker */}
+            <SessionAttendanceTracker
+              attendance={session.attendance}
+              squadRoster={session.squadRoster}
+              onChangeAttendance={handleUpdateAttendance}
+              onChangeRoster={handleUpdateRoster}
+            />
+
             {/* Section: Player Groups Manager */}
             <PlayerGroupsSection
               groups={activePlayerGroups}
               squadRoster={session.squadRoster}
+              attendance={session.attendance}
               onChangeGroups={handleUpdateGroups}
               onChangeRoster={handleUpdateRoster}
             />

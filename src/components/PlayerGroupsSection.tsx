@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Users, Plus, Trash2, Shuffle, Edit3, Check, RefreshCw, Layers, Shield } from 'lucide-react';
-import { PlayerGroup } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Users, Plus, Trash2, Shuffle, Edit3, Check, RefreshCw, Layers, Shield, UserCheck, AlertCircle } from 'lucide-react';
+import { PlayerGroup, PlayerAttendance } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
 
 interface PlayerGroupsSectionProps {
   groups: PlayerGroup[];
   squadRoster?: string[];
+  attendance?: PlayerAttendance[];
   onChangeGroups: (groups: PlayerGroup[]) => void;
   onChangeRoster?: (roster: string[]) => void;
 }
@@ -13,12 +14,27 @@ interface PlayerGroupsSectionProps {
 export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   groups,
   squadRoster = DEFAULT_SQUAD_PLAYERS,
+  attendance = [],
   onChangeGroups,
   onChangeRoster
 }) => {
   const [isEditingRoster, setIsEditingRoster] = useState(false);
   const [rosterInput, setRosterInput] = useState(squadRoster.join(', '));
   const [selectedUnassignedPlayer, setSelectedUnassignedPlayer] = useState<string | null>(null);
+
+  // Compute attending vs absent lists
+  const attendingPlayers = useMemo(() => {
+    if (!attendance || attendance.length === 0) return squadRoster;
+    return squadRoster.filter(player => {
+      const record = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
+      return !record || record.status === 'Attending';
+    });
+  }, [attendance, squadRoster]);
+
+  const absentPlayers = useMemo(() => {
+    if (!attendance || attendance.length === 0) return [];
+    return attendance.filter(a => a.status === 'Absent');
+  }, [attendance]);
 
   // Helper to get array of player names in a group
   const getGroupPlayersList = (group: PlayerGroup): string[] => {
@@ -35,7 +51,8 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     getGroupPlayersList(g).forEach(p => allAssignedPlayers.add(p));
   });
 
-  // Unassigned players
+  // Unassigned attending players vs unassigned all
+  const unassignedAttendingPlayers = attendingPlayers.filter(p => !allAssignedPlayers.has(p));
   const unassignedPlayers = squadRoster.filter(p => !allAssignedPlayers.has(p));
 
   // Add new group
@@ -101,12 +118,13 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     onChangeGroups(updated);
   };
 
-  // Auto divide squad into N groups
-  const handleAutoDivide = (numGroups: number) => {
-    if (squadRoster.length === 0) return;
+  // Auto divide squad into N groups using attending players
+  const handleAutoDivide = (numGroups: number, useOnlyAttending = true) => {
+    const targetList = useOnlyAttending ? attendingPlayers : squadRoster;
+    if (targetList.length === 0) return;
 
     // Shuffle roster randomly or keep order
-    const shuffled = [...squadRoster];
+    const shuffled = [...targetList];
     
     const newGroups: PlayerGroup[] = [];
     for (let i = 0; i < numGroups; i++) {
@@ -173,12 +191,13 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           <div>
             <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <span>Player Groups</span>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                {squadRoster.length} Players
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <UserCheck className="w-3 h-3" />
+                <span>{attendingPlayers.length}/{squadRoster.length} Attending</span>
               </span>
             </h2>
             <p className="text-[10px] text-slate-400 font-bold">
-              Assign players to colored bibs/groups for training drills.
+              Assign attending players to colored bibs/groups for training drills.
             </p>
           </div>
         </div>
@@ -186,28 +205,28 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         {/* Quick Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-[10px] font-extrabold text-slate-600 gap-1">
-            <span className="px-1.5 text-slate-400">Split:</span>
+            <span className="px-1.5 text-emerald-700 font-black">Split Attending:</span>
             <button
               type="button"
-              onClick={() => handleAutoDivide(2)}
+              onClick={() => handleAutoDivide(2, true)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Split squad into 2 groups"
+              title="Split attending players into 2 groups"
             >
               2 Groups
             </button>
             <button
               type="button"
-              onClick={() => handleAutoDivide(3)}
+              onClick={() => handleAutoDivide(3, true)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Split squad into 3 groups"
+              title="Split attending players into 3 groups"
             >
               3 Groups
             </button>
             <button
               type="button"
-              onClick={() => handleAutoDivide(4)}
+              onClick={() => handleAutoDivide(4, true)}
               className="px-2 py-1 bg-white hover:bg-emerald-50 hover:text-emerald-700 rounded-lg shadow-sm transition-all"
-              title="Split squad into 4 groups"
+              title="Split attending players into 4 groups"
             >
               4 Groups
             </button>
@@ -295,25 +314,25 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-slate-400" />
-            <span>Unassigned Players ({unassignedPlayers.length})</span>
+            <span>Unassigned Attending Players ({unassignedAttendingPlayers.length})</span>
           </span>
-          {unassignedPlayers.length === 0 && (
+          {unassignedAttendingPlayers.length === 0 && (
             <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
-              ✓ Entire squad assigned!
+              ✓ All attending players assigned!
             </span>
           )}
         </div>
 
-        {unassignedPlayers.length > 0 ? (
+        {unassignedAttendingPlayers.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {unassignedPlayers.map(player => {
+            {unassignedAttendingPlayers.map(player => {
               const isSelected = selectedUnassignedPlayer === player;
               return (
                 <div key={player} className="relative group">
                   <button
                     type="button"
                     onClick={() => setSelectedUnassignedPlayer(isSelected ? null : player)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all flex items-center space-x-1.5 ${
+                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all flex items-center space-x-1.5 cursor-pointer ${
                       isSelected 
                         ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-emerald-500/30' 
                         : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300 shadow-sm'
@@ -336,7 +355,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
                             key={g.id}
                             type="button"
                             onClick={() => handleAddPlayerToGroup(g.id, player)}
-                            className="w-full text-left text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center space-x-2 transition-colors"
+                            className="w-full text-left text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center space-x-2 transition-colors cursor-pointer"
                           >
                             <span 
                               className="w-3 h-3 rounded-full shrink-0 border border-black/10" 
@@ -354,8 +373,18 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           </div>
         ) : (
           <p className="text-xs italic text-slate-400">
-            All players ({squadRoster.length}) are currently assigned to groups below.
+            All attending players ({attendingPlayers.length}) are currently assigned to groups below.
           </p>
+        )}
+
+        {/* Absent Players Notice */}
+        {absentPlayers.length > 0 && (
+          <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 text-[11px] font-bold text-rose-700 bg-rose-50/50 p-2 rounded-xl">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+            <span>
+              Absent ({absentPlayers.length}): {absentPlayers.map(a => `${a.playerName} (${a.absenceReason || 'Absent'})`).join(', ')}
+            </span>
+          </div>
         )}
       </div>
 

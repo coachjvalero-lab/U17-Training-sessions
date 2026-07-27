@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   RefreshCw,
-  FileText
+  FileText,
+  UserCheck
 } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { CloudTrainingSession } from '../firebase';
@@ -23,8 +24,8 @@ import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 
 interface SidebarProps {
   session: TrainingSession;
-  activeSection: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning';
-  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning') => void;
+  activeSection: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance';
+  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance') => void;
   onClearSession: () => void;
   onNewSession: () => void;
   isSaving: boolean;
@@ -64,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const navItems: {
-    id: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning';
+    id: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance';
     label: string;
     sublabel: string;
     icon: any;
@@ -91,6 +92,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Specific GK Training',
       icon: ShieldCheck,
       color: 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+    },
+    {
+      id: 'attendance',
+      label: 'Attendance & Roster',
+      sublabel: 'Player Absence Tracking',
+      icon: UserCheck,
+      color: 'bg-teal-500/20 text-teal-300 border-teal-500/30'
     },
     {
       id: 'exercises',

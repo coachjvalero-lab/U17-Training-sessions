@@ -178,6 +178,30 @@ export const getDefaultSession = (): TrainingSession => {
       'Mayar', 'Maya', 'Asma', 'Rasil', 'Rema', 'Sara', 
       'Khulud', 'Ransy', 'Jalila', 'Ratil'
     ],
+    attendance: [
+      { playerName: 'Rimah', status: 'Attending' },
+      { playerName: 'Rital', status: 'Attending' },
+      { playerName: 'Lara', status: 'Attending' },
+      { playerName: 'Batul', status: 'Attending' },
+      { playerName: 'Sadeem', status: 'Attending' },
+      { playerName: 'Alba', status: 'Attending' },
+      { playerName: 'Ghala', status: 'Attending' },
+      { playerName: 'Auda', status: 'Attending' },
+      { playerName: 'Lateen', status: 'Absent', absenceReason: 'Injury', notes: 'Ankle sprain' },
+      { playerName: 'Hedaya', status: 'Attending' },
+      { playerName: 'Ghazal', status: 'Attending' },
+      { playerName: 'Remas', status: 'Absent', absenceReason: 'Study', notes: 'Exams week' },
+      { playerName: 'Mayar', status: 'Absent', absenceReason: 'Vacation', notes: 'Family trip' },
+      { playerName: 'Maya', status: 'Attending' },
+      { playerName: 'Asma', status: 'Attending' },
+      { playerName: 'Rasil', status: 'Attending' },
+      { playerName: 'Rema', status: 'Attending' },
+      { playerName: 'Sara', status: 'Attending' },
+      { playerName: 'Khulud', status: 'Attending' },
+      { playerName: 'Ransy', status: 'Attending' },
+      { playerName: 'Jalila', status: 'Attending' },
+      { playerName: 'Ratil', status: 'Attending' }
+    ],
     playerGroups: [
       {
         id: 'group-default-1',

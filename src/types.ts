@@ -1,5 +1,14 @@
 export type GameMoment = 'Attack' | 'Defense' | 'Transition A-D' | 'Transition D-A' | 'Set Pieces' | 'Other';
 
+export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Unknown';
+
+export interface PlayerAttendance {
+  playerName: string;
+  status: 'Attending' | 'Absent';
+  absenceReason?: AbsenceReason;
+  notes?: string;
+}
+
 export interface Exercise {
   id: string;
   name: string;
@@ -53,4 +62,5 @@ export interface TrainingSession {
   gkMainPart?: TrainingBlock;
   gkCoolDown?: TrainingBlock;
   gkPlayerGroups?: PlayerGroup[];
+  attendance?: PlayerAttendance[];
 }
