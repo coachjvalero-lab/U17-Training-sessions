@@ -127,8 +127,6 @@ export default function App() {
 
   // Direct helper to save current session to Firestore immediately
   const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession) => {
-    if (!hasInitialCloudLoadedRef.current) return;
-
     // Check if daily quota was recently exceeded; if so, skip cloud write attempt until backoff expires
     if (Date.now() < cloudQuotaExceededUntilRef.current) {
       setIsCloudSaving(false);
@@ -316,20 +314,22 @@ export default function App() {
     }
   }, [session]);
 
-  // Periodic Cloud Autosave every 30 seconds
+  // Debounced Cloud Autosave: automatically sync local changes to Firestore 2 seconds after editing stops
   useEffect(() => {
-    const autoSaveInterval = setInterval(() => {
-      if (latestSessionRef.current && hasInitialCloudLoadedRef.current) {
-        if (isRemoteUpdateRef.current) {
-          isRemoteUpdateRef.current = false;
-        } else {
-          saveCurrentSessionToCloudNow(latestSessionRef.current);
-        }
-      }
-    }, 30000);
+    // If this session state update came directly from a Firestore remote snapshot, skip auto-saving
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
+      return;
+    }
 
-    return () => clearInterval(autoSaveInterval);
-  }, []);
+    const timer = setTimeout(() => {
+      if (latestSessionRef.current) {
+        saveCurrentSessionToCloudNow(latestSessionRef.current);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [session]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
     setSession(prev => ({
@@ -717,6 +717,11 @@ export default function App() {
         url.searchParams.set('session', unifiedSession.id);
         window.history.replaceState({}, '', url.toString());
       }
+
+      isRemoteUpdateRef.current = true;
+      lastLoadedSessionTimeRef.current = loadedSession.updatedAt || Date.now();
+      currentSessionIdRef.current = unifiedSession.id;
+      lastSavedJsonRef.current = JSON.stringify(unifiedSession);
 
       setSession(unifiedSession);
       

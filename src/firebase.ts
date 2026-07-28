@@ -41,8 +41,11 @@ const SESSIONS_COLLECTION = 'sessions';
 export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<number> {
   const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
   const saveTimestamp = Date.now();
+  
+  // Clean object via JSON cycle to strip any undefined properties that Firestore setDoc rejects
+  const cleanSession = JSON.parse(JSON.stringify(session));
   const cloudData: CloudTrainingSession = {
-    ...session,
+    ...cleanSession,
     updatedAt: saveTimestamp
   };
   
