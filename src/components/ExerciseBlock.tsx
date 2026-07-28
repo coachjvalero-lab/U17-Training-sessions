@@ -737,7 +737,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         value={ex.playerGroups || ''}
                         onChange={(e) => updateExercise(ex.id, { playerGroups: e.target.value })}
                         rows={3}
-                        placeholder="e.g., Group 1 (Blue Bibs): Rimah, Rital, Lara... Group 2 (Yellow Bibs): Batul, Sadeem..."
+                        placeholder="e.g., Group 1: Rimah, Rital, Lara... Group 2: Batul, Sadeem..."
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
                       <div className={`hidden print:block font-semibold text-slate-800 whitespace-pre-wrap bg-slate-50/60 border border-slate-200/80 rounded-lg ${getPrintFontSizeClass(ex.playerGroups || '')}`}>

@@ -79,7 +79,8 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
  */
 export function subscribeToSessions(
   typeOrCallback: ('football' | 'fitness') | ((sessions: CloudTrainingSession[]) => void),
-  maybeCallback?: (sessions: CloudTrainingSession[]) => void
+  maybeCallback?: (sessions: CloudTrainingSession[]) => void,
+  onError?: (error: any) => void
 ) {
   const callback = typeof typeOrCallback === 'function' ? typeOrCallback : maybeCallback;
   
@@ -99,6 +100,9 @@ export function subscribeToSessions(
     });
     callback(sessions);
   }, (error) => {
-    console.error(`Error in session subscription:`, error);
+    console.warn(`Error in session subscription:`, error);
+    if (onError) {
+      onError(error);
+    }
   });
 }

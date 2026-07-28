@@ -151,6 +151,7 @@ export default function App() {
 
     lastLoadedSessionTimeRef.current = saveTimestamp;
     setIsCloudSaving(true);
+    setIsSaving(true);
     try {
       await saveSessionToCloud(formattedSession);
       lastSavedJsonRef.current = currentJson;
@@ -165,6 +166,7 @@ export default function App() {
       }
     } finally {
       setIsCloudSaving(false);
+      setTimeout(() => setIsSaving(false), 800);
     }
   };
 
@@ -194,104 +196,108 @@ export default function App() {
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
     setIsLoadingCloud(true);
-    const unsubscribe = subscribeToSessions((sessions) => {
-      setCloudSessions(sessions);
-      setIsLoadingCloud(false);
+    const unsubscribe = subscribeToSessions(
+      (sessions) => {
+        setCloudSessions(sessions);
+        setIsLoadingCloud(false);
 
-      if (sessions.length > 0) {
-        // Read URL query parameters to see if a specific session ID was requested
-        const urlParams = new URLSearchParams(window.location.search);
-        const targetId = urlParams.get('session');
+        if (sessions.length > 0) {
+          // Read URL query parameters to see if a specific session ID was requested
+          const urlParams = new URLSearchParams(window.location.search);
+          const targetId = urlParams.get('session');
 
-        // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0] (most recently updated session in Cloud)
-        let sessionToLoad = targetId 
-          ? sessions.find(s => s.id === targetId) 
-          : undefined;
+          // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0] (most recently updated session in Cloud)
+          let sessionToLoad = targetId 
+            ? sessions.find(s => s.id === targetId) 
+            : undefined;
 
-        if (!sessionToLoad) {
-          sessionToLoad = sessions[0]; // Pick the latest active session in Firestore
-        }
+          if (!sessionToLoad) {
+            sessionToLoad = sessions[0]; // Pick the latest active session in Firestore
+          }
 
-        if (sessionToLoad) {
-          const cloudTime = sessionToLoad.updatedAt || 0;
-          const isNewer = cloudTime > lastLoadedSessionTimeRef.current;
-          const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
+          if (sessionToLoad) {
+            const cloudTime = sessionToLoad.updatedAt || 0;
+            const isNewer = cloudTime > lastLoadedSessionTimeRef.current;
+            const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
-          // Load from cloud if:
-          // 1) First initial startup
-          // 2) Received a newer timestamp update from Firestore
-          // 3) Session ID changed
-          if (!hasInitialCloudLoadedRef.current || isNewer || isDifferentSession) {
-            hasInitialCloudLoadedRef.current = true;
-            lastLoadedSessionTimeRef.current = cloudTime;
-            currentSessionIdRef.current = sessionToLoad.id;
+            // Load from cloud if:
+            // 1) First initial startup
+            // 2) Received a newer timestamp update from Firestore
+            // 3) Session ID changed
+            if (!hasInitialCloudLoadedRef.current || isNewer || isDifferentSession) {
+              hasInitialCloudLoadedRef.current = true;
+              lastLoadedSessionTimeRef.current = cloudTime;
+              currentSessionIdRef.current = sessionToLoad.id;
 
-            const { updatedAt, ...baseSession } = sessionToLoad;
+              const { updatedAt, ...baseSession } = sessionToLoad;
 
-            // Normalize old team names if needed
-            if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
-              baseSession.teamName = 'U17 Women Al Ula';
-            }
-            if (baseSession.sessionNumber === '42') {
-              baseSession.sessionNumber = '001';
-            }
+              // Normalize old team names if needed
+              if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
+                baseSession.teamName = 'U17 Women Al Ula';
+              }
+              if (baseSession.sessionNumber === '42') {
+                baseSession.sessionNumber = '001';
+              }
 
-            const defaultTemplate = getDefaultSession();
+              const defaultTemplate = getDefaultSession();
 
-            const unifiedSession: TrainingSession = {
-              ...baseSession,
-              fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-              fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-              fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-              fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
-              gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-              gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-              gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-              gkPlayerGroups: baseSession.gkPlayerGroups || [],
-            };
+              const unifiedSession: TrainingSession = {
+                ...baseSession,
+                fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+                fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+                fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+                fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
+                gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+                gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+                gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+                gkPlayerGroups: baseSession.gkPlayerGroups || [],
+              };
 
-            isRemoteUpdateRef.current = true;
-            lastSavedJsonRef.current = JSON.stringify(unifiedSession);
-            setSession(unifiedSession);
+              isRemoteUpdateRef.current = true;
+              lastSavedJsonRef.current = JSON.stringify(unifiedSession);
+              setSession(unifiedSession);
 
-            try {
-              localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
-              localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
-            } catch (e) {
-              console.warn('LocalStorage sync warning:', e);
-            }
+              try {
+                localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
+                localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
+              } catch (e) {
+                console.warn('LocalStorage sync warning:', e);
+              }
 
-            if (unifiedSession.id && window.history.replaceState) {
-              const url = new URL(window.location.href);
-              if (url.searchParams.get('session') !== unifiedSession.id) {
-                url.searchParams.set('session', unifiedSession.id);
-                window.history.replaceState({}, '', url.toString());
+              if (unifiedSession.id && window.history.replaceState) {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get('session') !== unifiedSession.id) {
+                  url.searchParams.set('session', unifiedSession.id);
+                  window.history.replaceState({}, '', url.toString());
+                }
               }
             }
           }
         }
+        hasInitialCloudLoadedRef.current = true;
+      },
+      undefined,
+      (err) => {
+        setIsLoadingCloud(false);
+        hasInitialCloudLoadedRef.current = true;
+        console.warn('Firestore subscription offline or quota limit reached:', err);
       }
-      hasInitialCloudLoadedRef.current = true;
-    });
+    );
     return () => unsubscribe();
   }, []);
 
-  // Automatically persist the unified session locally and auto-sync to Cloud Firestore
+  // Quietly persist the unified session locally whenever state updates
   useEffect(() => {
-    setIsSaving(true);
-    const now = Date.now();
-    
+    latestSessionRef.current = session;
+    currentSessionIdRef.current = session.id;
+
     try {
       localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
-      localStorage.setItem('u17_training_session_updatedAt', String(now));
+      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
     }
 
-    // Keep active session ID tracking ref in sync
-    currentSessionIdRef.current = session.id;
-
-    // Update URL parameter without reloading page so sharing current URL works out of the box
     if (session.id && window.history.replaceState) {
       try {
         const url = new URL(window.location.href);
@@ -303,32 +309,22 @@ export default function App() {
         console.warn('URL update failed:', e);
       }
     }
+  }, [session]);
 
-    const localTimer = setTimeout(() => {
-      setIsSaving(false);
-    }, 400);
-
-    // Prevent cloud auto-save before initial cloud load finishes
-    if (!hasInitialCloudLoadedRef.current) {
-      return () => clearTimeout(localTimer);
-    }
-
-    // If change was received from remote Cloud Firestore snapshot or session deletion/switch, don't re-trigger save
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false;
-      return () => clearTimeout(localTimer);
-    }
-
-    // Debounced Cloud Sync (Auto-save to Firestore every 30 seconds)
-    const cloudTimer = setTimeout(() => {
-      saveCurrentSessionToCloudNow(session);
+  // Periodic Cloud Autosave every 30 seconds
+  useEffect(() => {
+    const autoSaveInterval = setInterval(() => {
+      if (latestSessionRef.current && hasInitialCloudLoadedRef.current) {
+        if (isRemoteUpdateRef.current) {
+          isRemoteUpdateRef.current = false;
+        } else {
+          saveCurrentSessionToCloudNow(latestSessionRef.current);
+        }
+      }
     }, 30000);
 
-    return () => {
-      clearTimeout(localTimer);
-      clearTimeout(cloudTimer);
-    };
-  }, [session]);
+    return () => clearInterval(autoSaveInterval);
+  }, []);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
     setSession(prev => ({

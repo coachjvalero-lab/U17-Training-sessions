@@ -197,7 +197,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               </span>
             </h2>
             <p className="text-[10px] text-slate-400 font-bold">
-              Assign attending players to colored bibs/groups for training drills.
+              Assign attending players to groups for training drills.
             </p>
           </div>
         </div>

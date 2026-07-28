@@ -108,7 +108,7 @@ export const getDefaultSession = (): TrainingSession => {
           dimensions: '10x10 meters',
           coachRoles: 'Coach A: Monitors pass quality and body positioning.\nCoach B: Demands maximum intensity in the first 3 seconds post-turnover.',
           image: DEFAULT_RONDO_SVG,
-          playerGroups: 'Group A (Blue Bibs): Sophia L., Valeria M., Marta G., Alba R.\nGroup B (Yellow Bibs): Luciana F., Carmen V., Irene S., Andrea O.'
+          playerGroups: 'Group A: Sophia L., Valeria M., Marta G., Alba R.\nGroup B: Luciana F., Carmen V., Irene S., Andrea O.'
         },
         {
           id: 'ex-warmup-2',
@@ -138,7 +138,7 @@ export const getDefaultSession = (): TrainingSession => {
           dimensions: '40x30 meters',
           coachRoles: 'Coach A: Referees the game, feeds balls from the sides for high tempo.\nCoach B: Directs the defensive line on compact spacing and horizontal shifting.',
           image: DEFAULT_POSSESSION_SVG,
-          playerGroups: 'Blue Team: Sophia, Valeria, Marta, Alba, Daniela, Julia\nYellow Team: Luciana, Carmen, Irene, Andrea, Elena, Sara\nJokers (Purple): Noa, Maria, Claudia'
+          playerGroups: 'Blue Team: Sophia, Valeria, Marta, Alba, Daniela, Julia\nYellow Team: Luciana, Carmen, Irene, Andrea, Elena, Sara\nJokers: Noa, Maria, Claudia'
         },
         {
           id: 'ex-main-2',
