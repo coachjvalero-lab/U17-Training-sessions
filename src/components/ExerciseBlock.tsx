@@ -601,7 +601,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         <div className="flex items-center space-x-1.5">
                           <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0 print:w-3 print:h-3" />
                           <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider print:text-[8px] print:text-black">
-                            Series, Tiempo y Descanso
+                            Sets, Time & Rest
                           </span>
                         </div>
                       </div>
@@ -609,39 +609,39 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       <div className="grid grid-cols-3 gap-2.5 print:grid-cols-3 print:gap-1.5">
                         <div>
                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
-                            Series
+                            Sets
                           </label>
                           <input
                             type="text"
                             value={ex.series ?? ''}
                             onChange={(e) => handleTimingChange(ex.id, ex, 'series', e.target.value)}
-                            placeholder="ej: 3"
+                            placeholder="e.g. 3"
                             className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
                           />
                         </div>
 
                         <div>
                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
-                            Tiempo / Serie (min)
+                            Time / Set (min)
                           </label>
                           <input
                             type="text"
                             value={ex.workTime ?? ''}
                             onChange={(e) => handleTimingChange(ex.id, ex, 'workTime', e.target.value)}
-                            placeholder="ej: 4"
+                            placeholder="e.g. 4"
                             className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
                           />
                         </div>
 
                         <div>
                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block mb-1 print:text-[8px] print:text-black">
-                            Descanso (min)
+                            Rest (min)
                           </label>
                           <input
                             type="text"
                             value={ex.restTime ?? ''}
                             onChange={(e) => handleTimingChange(ex.id, ex, 'restTime', e.target.value)}
-                            placeholder="ej: 1"
+                            placeholder="e.g. 1"
                             className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all print:py-0.5 print:px-1.5 print:text-[9px]"
                           />
                         </div>

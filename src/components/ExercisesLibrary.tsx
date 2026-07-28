@@ -1011,46 +1011,46 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                    Series, Tiempo y Descanso
+                    Sets, Time & Rest
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                      Series
+                      Sets
                     </label>
                     <input
                       type="text"
                       value={newEx.series ?? ''}
                       onChange={(e) => handleNewExTimingChange('series', e.target.value)}
-                      placeholder="ej: 3"
+                      placeholder="e.g. 3"
                       className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                     />
                   </div>
 
                   <div>
                     <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                      Tiempo / Serie (min)
+                      Time / Set (min)
                     </label>
                     <input
                       type="text"
                       value={newEx.workTime ?? ''}
                       onChange={(e) => handleNewExTimingChange('workTime', e.target.value)}
-                      placeholder="ej: 4"
+                      placeholder="e.g. 4"
                       className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                     />
                   </div>
 
                   <div>
                     <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                      Descanso (min)
+                      Rest (min)
                     </label>
                     <input
                       type="text"
                       value={newEx.restTime ?? ''}
                       onChange={(e) => handleNewExTimingChange('restTime', e.target.value)}
-                      placeholder="ej: 1"
+                      placeholder="e.g. 1"
                       className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                     />
                   </div>

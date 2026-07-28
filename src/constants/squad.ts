@@ -19,7 +19,6 @@ export const DEFAULT_SQUAD_PLAYERS = [
   'Sara',
   'Khulud',
   'Ransy',
-  'Jalila',
   'Ratil'
 ];
 

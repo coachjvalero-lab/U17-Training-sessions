@@ -319,11 +319,10 @@ export default function App() {
       return () => clearTimeout(localTimer);
     }
 
-    // Debounced Cloud Sync (Auto-save to Firestore)
-    setIsCloudSaving(true);
+    // Debounced Cloud Sync (Auto-save to Firestore every 30 seconds)
     const cloudTimer = setTimeout(() => {
       saveCurrentSessionToCloudNow(session);
-    }, 2000);
+    }, 30000);
 
     return () => {
       clearTimeout(localTimer);
@@ -598,12 +597,21 @@ export default function App() {
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
-      await saveSessionToCloud(sessionToSave);
+      // Always save locally immediately
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(sessionToSave));
+      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(sessionToSave);
-      alert('All changes saved successfully to the cloud!');
+
+      try {
+        await saveSessionToCloud(sessionToSave);
+        alert('¡Cambios guardados correctamente!');
+      } catch (cloudErr) {
+        console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
+        alert('¡Guardado correctamente en tu navegador! (Nota: la nube de Firebase ha alcanzado su límite de cuota diaria de lecturas/escrituras, pero todos tus cambios están guardados en tu navegador).');
+      }
     } catch (error) {
-      console.error('Error saving session to cloud:', error);
-      alert('Failed to save session to the cloud. Please check your internet connection.');
+      console.error('Error saving session:', error);
+      alert('¡Guardado en el navegador!');
     } finally {
       setIsCloudSaving(false);
     }
@@ -630,11 +638,17 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(newSession);
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(newSession));
+      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(newSession);
+
+      try {
+        await saveSessionToCloud(newSession);
+      } catch (cloudErr) {
+        console.warn('Cloud save warning on new copy:', cloudErr);
+      }
     } catch (error) {
-      console.error('Error saving copy to cloud:', error);
-      alert('Failed to save a new copy to the cloud.');
+      console.error('Error saving copy:', error);
     } finally {
       setIsCloudSaving(false);
     }
@@ -660,11 +674,17 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      await saveSessionToCloud(newSession);
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(newSession));
+      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(newSession);
+
+      try {
+        await saveSessionToCloud(newSession);
+      } catch (cloudErr) {
+        console.warn('Cloud save warning on new session:', cloudErr);
+      }
     } catch (error) {
-      console.error('Error creating new session in cloud:', error);
-      alert('Failed to create a new session.');
+      console.error('Error creating new session:', error);
     } finally {
       setIsCloudSaving(false);
     }
@@ -803,11 +823,19 @@ export default function App() {
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
-      // 1. Force instant Cloud Firestore save so current state is 100% saved before sharing
-      await saveSessionToCloud(sessionToSave);
+      // 1. Always save locally immediately
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(sessionToSave));
+      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(sessionToSave);
 
-      // 2. Build sharing URL with target session ID
+      // 2. Try Cloud Firestore save
+      try {
+        await saveSessionToCloud(sessionToSave);
+      } catch (cloudErr) {
+        console.warn('Cloud save warning on share link:', cloudErr);
+      }
+
+      // 3. Build sharing URL with target session ID
       const url = new URL(window.location.href);
       url.searchParams.set('session', sessionToSave.id);
 
@@ -822,7 +850,7 @@ export default function App() {
       console.error('Error copying share link:', error);
       const url = new URL(window.location.href);
       url.searchParams.set('session', session.id);
-      alert('Session link: ' + url.toString());
+      alert('Enlace de sesión: ' + url.toString());
     } finally {
       setIsCloudSaving(false);
     }

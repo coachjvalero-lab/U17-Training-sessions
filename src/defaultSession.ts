@@ -176,7 +176,7 @@ export const getDefaultSession = (): TrainingSession => {
       'Rimah', 'Rital', 'Lara', 'Batul', 'Sadeem', 'Alba', 
       'Ghala', 'Auda', 'Lateen', 'Hedaya', 'Ghazal', 'Remas', 
       'Mayar', 'Maya', 'Asma', 'Rasil', 'Rema', 'Sara', 
-      'Khulud', 'Ransy', 'Jalila', 'Ratil'
+      'Khulud', 'Ransy', 'Ratil'
     ],
     attendance: [
       { playerName: 'Rimah', status: 'Attending' },
@@ -199,7 +199,6 @@ export const getDefaultSession = (): TrainingSession => {
       { playerName: 'Sara', status: 'Attending' },
       { playerName: 'Khulud', status: 'Attending' },
       { playerName: 'Ransy', status: 'Attending' },
-      { playerName: 'Jalila', status: 'Attending' },
       { playerName: 'Ratil', status: 'Attending' }
     ],
     playerGroups: [
@@ -222,7 +221,7 @@ export const getDefaultSession = (): TrainingSession => {
         groupNumber: 3,
         bibColor: '#ef4444',
         name: 'Group 3',
-        players: 'Rasil, Rema, Sara, Khulud, Ransy, Jalila, Ratil'
+        players: 'Rasil, Rema, Sara, Khulud, Ransy, Ratil'
       }
     ],
     fitnessWarmUp: {
