@@ -20,7 +20,11 @@ import {
   Filter, 
   BarChart3, 
   AlertTriangle,
-  FileSpreadsheet,
+  Trophy,
+  Crown,
+  Medal,
+  Award,
+  BarChart2,
   Check
 } from 'lucide-react';
 import { TrainingSession, PlayerAttendance, AbsenceReason } from '../types';
@@ -45,6 +49,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [reasonFilter, setReasonFilter] = useState<'all' | AbsenceReason>('all');
+  const [chartSort, setChartSort] = useState<'rate' | 'attended' | 'absences'>('rate');
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
 
@@ -530,80 +535,247 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         </div>
       </div>
 
-      {/* Session-by-Session Attendance Matrix */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center space-x-2">
-            <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl">
-              <FileSpreadsheet className="w-4 h-4" />
+      {/* Attendance Classification & Ranking Chart (Gráfico de Clasificación de Asistencia) */}
+      {(() => {
+        const sortedChartPlayers = [...playerStats].sort((a, b) => {
+          if (chartSort === 'rate') {
+            if (b.rate !== a.rate) return b.rate - a.rate;
+            return b.attendedCount - a.attendedCount;
+          }
+          if (chartSort === 'attended') {
+            if (b.attendedCount !== a.attendedCount) return b.attendedCount - a.attendedCount;
+            return b.rate - a.rate;
+          }
+          if (chartSort === 'absences') {
+            if (a.absentCount !== b.absentCount) return a.absentCount - b.absentCount;
+            return b.rate - a.rate;
+          }
+          return 0;
+        });
+
+        const top1 = sortedChartPlayers[0];
+        const top2 = sortedChartPlayers[1];
+        const top3 = sortedChartPlayers[2];
+
+        return (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-6">
+            
+            {/* Header & View Switchers */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
+                  <Trophy className="w-5 h-5 text-[#a79078]" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-base font-display font-black text-slate-900 uppercase tracking-wider">
+                      Gráfico de Clasificación de Asistencia
+                    </h2>
+                    <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                      <Crown className="w-3 h-3 text-amber-600" />
+                      Ranking
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Clasificación visual por asistencia, sesiones asistidas y ausencias acumuladas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Sorting Filter */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setChartSort('rate')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    chartSort === 'rate' 
+                      ? 'bg-white text-slate-900 shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  % Asistencia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartSort('attended')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    chartSort === 'attended' 
+                      ? 'bg-white text-slate-900 shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Asistencias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartSort('absences')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    chartSort === 'absences' 
+                      ? 'bg-white text-slate-900 shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Menos Faltas
+                </button>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                Session-by-Session Attendance Matrix
-              </h2>
-              <p className="text-[10px] text-slate-400 font-bold">
-                Detailed presence matrix across all saved training sessions.
-              </p>
+
+            {/* Top 3 Podium Standings */}
+            {sortedChartPlayers.length >= 2 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                {/* 2nd Place */}
+                {top2 && (
+                  <div className="order-2 md:order-1 bg-gradient-to-b from-slate-50 to-slate-100/60 border-2 border-slate-300/80 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-between text-center relative overflow-hidden">
+                    <div className="absolute top-2 right-2 bg-slate-200 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-slate-300 flex items-center gap-1">
+                      <Medal className="w-3 h-3 text-slate-500" /> #2 Plata
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-slate-300 text-slate-800 font-black text-sm flex items-center justify-center border-2 border-slate-400 mt-2 shadow-inner">
+                      {top2.player.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="mt-3 space-y-0.5">
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-[150px]">
+                        {top2.player}
+                      </h4>
+                      <p className="text-xs font-black text-slate-600">
+                        {top2.rate}% Asistencia
+                      </p>
+                    </div>
+                    <div className="mt-3 w-full bg-white/80 border border-slate-200 rounded-xl p-2 text-[11px] font-bold text-slate-600 flex justify-around">
+                      <span>Asistidos: <strong className="text-emerald-600">{top2.attendedCount}</strong></span>
+                      <span>Faltas: <strong className="text-rose-600">{top2.absentCount}</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 1st Place (Gold) */}
+                {top1 && (
+                  <div className="order-1 md:order-2 bg-gradient-to-b from-amber-50 to-amber-100/50 border-2 border-amber-400 rounded-2xl p-5 shadow-md flex flex-col items-center justify-between text-center relative overflow-hidden transform md:-translate-y-2">
+                    <div className="absolute top-2 right-2 bg-amber-400 text-amber-950 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-amber-500 flex items-center gap-1 shadow-sm">
+                      <Crown className="w-3.5 h-3.5 text-amber-900" /> #1 Oro
+                    </div>
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white font-black text-base flex items-center justify-center border-2 border-amber-300 mt-1 shadow-md">
+                      {top1.player.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="mt-3 space-y-0.5">
+                      <h4 className="font-black text-amber-950 text-base truncate max-w-[170px]">
+                        {top1.player}
+                      </h4>
+                      <div className="inline-block bg-amber-500 text-white text-xs font-black px-3 py-0.5 rounded-full shadow-sm">
+                        {top1.rate}% Asistencia Líder
+                      </div>
+                    </div>
+                    <div className="mt-3 w-full bg-white/90 border border-amber-200/80 rounded-xl p-2 text-[11px] font-bold text-slate-700 flex justify-around shadow-sm">
+                      <span>Asistidos: <strong className="text-emerald-600">{top1.attendedCount}</strong></span>
+                      <span>Faltas: <strong className="text-rose-600">{top1.absentCount}</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3rd Place */}
+                {top3 && (
+                  <div className="order-3 bg-gradient-to-b from-amber-50/30 to-amber-100/30 border-2 border-amber-300/60 rounded-2xl p-4 shadow-sm flex flex-col items-center justify-between text-center relative overflow-hidden">
+                    <div className="absolute top-2 right-2 bg-amber-200 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                      <Award className="w-3 h-3 text-amber-700" /> #3 Bronce
+                    </div>
+                    <div className="w-12 h-12 rounded-full bg-amber-200 text-amber-900 font-black text-sm flex items-center justify-center border-2 border-amber-400 mt-2 shadow-inner">
+                      {top3.player.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="mt-3 space-y-0.5">
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-[150px]">
+                        {top3.player}
+                      </h4>
+                      <p className="text-xs font-black text-amber-800">
+                        {top3.rate}% Asistencia
+                      </p>
+                    </div>
+                    <div className="mt-3 w-full bg-white/80 border border-amber-200/50 rounded-xl p-2 text-[11px] font-bold text-slate-600 flex justify-around">
+                      <span>Asistidos: <strong className="text-emerald-600">{top3.attendedCount}</strong></span>
+                      <span>Faltas: <strong className="text-rose-600">{top3.absentCount}</strong></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Classification Bar Graph Ranking List */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between text-xs font-black uppercase text-slate-400 px-2">
+                <span>Jugador & Posición</span>
+                <span>Barra de Clasificación (% Asistencia)</span>
+              </div>
+
+              <div className="space-y-2.5">
+                {sortedChartPlayers.map((stat, idx) => {
+                  const rank = idx + 1;
+                  const isExcellent = stat.rate >= 85;
+                  const isGood = stat.rate >= 70 && stat.rate < 85;
+
+                  return (
+                    <div 
+                      key={stat.player} 
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        rank === 1 
+                          ? 'bg-amber-50/40 border-amber-300/80 shadow-sm' 
+                          : rank === 2 
+                          ? 'bg-slate-50 border-slate-300/80' 
+                          : rank === 3 
+                          ? 'bg-amber-50/20 border-amber-200' 
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Left: Rank # & Player info */}
+                      <div className="flex items-center space-x-3 min-w-[200px]">
+                        <div className={`w-7 h-7 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${
+                          rank === 1 ? 'bg-amber-400 text-amber-950 border border-amber-500' :
+                          rank === 2 ? 'bg-slate-300 text-slate-800 border border-slate-400' :
+                          rank === 3 ? 'bg-amber-200 text-amber-900 border border-amber-300' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          #{rank}
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                            <span>{stat.player}</span>
+                            {rank === 1 && <Crown className="w-3.5 h-3.5 text-amber-500 inline" />}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            {stat.attendedCount} de {stat.totalSessions} sesiones asistidas ({stat.absentCount} faltas)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: Graphic Progress Bar */}
+                      <div className="flex-1 max-w-md flex items-center space-x-3">
+                        <div className="flex-1 bg-slate-100 h-4 rounded-full overflow-hidden p-0.5 border border-slate-200 relative flex">
+                          {/* Attended Portion Bar */}
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isExcellent ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
+                              isGood ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                              'bg-gradient-to-r from-rose-500 to-rose-600'
+                            }`}
+                            style={{ width: `${stat.rate}%` }}
+                          />
+                        </div>
+
+                        {/* Percentage badge */}
+                        <div className={`min-w-[52px] text-right text-xs font-black ${
+                          isExcellent ? 'text-emerald-700' :
+                          isGood ? 'text-amber-700' :
+                          'text-rose-700'
+                        }`}>
+                          {stat.rate}%
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
           </div>
-        </div>
-
-        {/* Matrix Grid Overflow */}
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left text-xs border-collapse min-w-[600px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500">
-                <th className="py-3 px-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 shadow-sm min-w-[140px]">
-                  Player
-                </th>
-                {allSessionsList.map((s, idx) => (
-                  <th key={s.id} className="py-2 px-2 text-center border-r border-slate-200 min-w-[100px]">
-                    <div className="font-extrabold text-slate-900">
-                      S#{s.sessionNumber || idx + 1}
-                    </div>
-                    <div className="text-[9px] text-slate-400 font-bold">
-                      {s.date || 'No Date'}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {masterPlayerList.map(player => (
-                <tr key={player} className="hover:bg-slate-50/80">
-                  <td className="py-2 px-3 font-extrabold text-slate-900 sticky left-0 bg-white border-r border-slate-200 z-10 shadow-sm">
-                    {player}
-                  </td>
-                  {allSessionsList.map(s => {
-                    const attList = s.attendance || [];
-                    const record = attList.find(a => a.playerName.toLowerCase() === player.toLowerCase());
-                    const isPresent = !record || record.status === 'Attending';
-                    const reason = record?.absenceReason || 'Unknown';
-                    const reasonConfig = getAbsenceReasonConfig(reason);
-                    const Icon = reasonConfig.icon;
-
-                    return (
-                      <td key={s.id} className="py-2 px-2 text-center border-r border-slate-100">
-                        {isPresent ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
-                            <Check className="w-3 h-3" />
-                            <span>Present</span>
-                          </span>
-                        ) : (
-                          <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-black ${reasonConfig.bg} ${reasonConfig.color}`}>
-                            <Icon className="w-3 h-3" />
-                            <span>{reasonConfig.label}</span>
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Add Player Modal */}
       {showRosterModal && (

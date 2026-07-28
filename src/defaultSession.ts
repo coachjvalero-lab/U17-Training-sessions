@@ -286,7 +286,7 @@ export const getDefaultSession = (): TrainingSession => {
         {
           id: 'ex-gk-warmup-1',
           name: 'Handling Mechanics & Footwork Drills',
-          gameMoment: 'Other',
+          gameMoment: 'Feet distribution',
           subMoment: 'Technical Preparation',
           description: 'Fast footwork around cone sets followed by catching volley serves at low and medium heights. Focus on hand positioning (W-shape), soft landings, and rapid recovery footwork.',
           duration: '15 min',
@@ -304,7 +304,7 @@ export const getDefaultSession = (): TrainingSession => {
         {
           id: 'ex-gk-main-1',
           name: 'Shot Stopping & Reaction Diving',
-          gameMoment: 'Defense',
+          gameMoment: 'Shot stop',
           subMoment: 'Shot stopping & positioning',
           description: '1v1 reactions, low-dive saves against central strikes, and aerial cross claims from wide areas. Transition immediately into rapid distribution to outfield players after making the save.',
           duration: '25 min',
@@ -322,7 +322,7 @@ export const getDefaultSession = (): TrainingSession => {
         {
           id: 'ex-gk-cooldown-1',
           name: 'Upper Body Stretching & Shoulder Mobility',
-          gameMoment: 'Other',
+          gameMoment: 'Feet distribution',
           subMoment: 'Recovery',
           description: 'Band resistance mobility for shoulders, chest, and hip flexors. Light throwing/catching cool-down.',
           duration: '10 min',

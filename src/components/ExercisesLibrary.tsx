@@ -464,7 +464,21 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   };
 
-  const gameMomentsList: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
+  const gameMomentsList: GameMoment[] = ['-', 'Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Match', 'Other'];
+  const gkGameMomentsList: GameMoment[] = ['-', 'Shot stop', 'Depth control', '1 vs 1', 'Feet distribution', 'Cross defending'];
+
+  // Reset momentFilter if switching between Goalkeeper and other categories
+  useEffect(() => {
+    if (categoryFilter === 'gk') {
+      if (momentFilter !== 'all' && !gkGameMomentsList.includes(momentFilter as GameMoment)) {
+        setMomentFilter('all');
+      }
+    } else {
+      if (momentFilter !== 'all' && gkGameMomentsList.includes(momentFilter as GameMoment) && momentFilter !== '-') {
+        setMomentFilter('all');
+      }
+    }
+  }, [categoryFilter]);
 
   return (
     <div className="space-y-6 print:hidden">
@@ -552,7 +566,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#0f5981] cursor-pointer"
             >
               <option value="all">All Tactical Moments</option>
-              {gameMomentsList.map(m => (
+              {(categoryFilter === 'gk' ? gkGameMomentsList : gameMomentsList).map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
@@ -927,7 +941,12 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setNewExSection('football')}
+                    onClick={() => {
+                      setNewExSection('football');
+                      if (gkGameMomentsList.includes(newEx.gameMoment as GameMoment) && newEx.gameMoment !== '-') {
+                        setNewEx(prev => ({ ...prev, gameMoment: 'Attack' }));
+                      }
+                    }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       newExSection === 'football' 
                         ? 'bg-[#002142] text-white border-[#002142]' 
@@ -938,7 +957,12 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setNewExSection('fitness')}
+                    onClick={() => {
+                      setNewExSection('fitness');
+                      if (gkGameMomentsList.includes(newEx.gameMoment as GameMoment) && newEx.gameMoment !== '-') {
+                        setNewEx(prev => ({ ...prev, gameMoment: 'Attack' }));
+                      }
+                    }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       newExSection === 'fitness' 
                         ? 'bg-[#002142] text-white border-[#002142]' 
@@ -949,7 +973,12 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setNewExSection('gk')}
+                    onClick={() => {
+                      setNewExSection('gk');
+                      if (!gkGameMomentsList.includes(newEx.gameMoment as GameMoment)) {
+                        setNewEx(prev => ({ ...prev, gameMoment: 'Shot stop' }));
+                      }
+                    }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       newExSection === 'gk' 
                         ? 'bg-[#002142] text-white border-[#002142]' 
@@ -983,11 +1012,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     Game Moment
                   </label>
                   <select
-                    value={newEx.gameMoment || 'Attack'}
+                    value={newEx.gameMoment || (newExSection === 'gk' ? 'Shot stop' : 'Attack')}
                     onChange={(e) => setNewEx({ ...newEx, gameMoment: e.target.value as GameMoment })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   >
-                    {gameMomentsList.map(m => (
+                    {(newExSection === 'gk' ? gkGameMomentsList : gameMomentsList).map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>

@@ -20,7 +20,9 @@ import {
   CheckCircle2, 
   Dumbbell, 
   TrendingUp,
-  Info
+  Info,
+  Trophy,
+  Minus
 } from 'lucide-react';
 
 interface PlanificationSectionProps {
@@ -182,6 +184,21 @@ const MOMENT_CONFIGS: Record<string, {
       hex: '#9333ea'
     }
   },
+  'Match': {
+    label: 'Match / Game Simulation',
+    shortLabel: 'Match',
+    icon: Trophy,
+    color: {
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/30',
+      text: 'text-emerald-700',
+      accentBg: 'bg-emerald-600',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      barColor: 'bg-emerald-600',
+      lightBg: 'bg-emerald-50/70',
+      hex: '#10b981'
+    }
+  },
   'Other': {
     label: 'General / Warm Up / Other',
     shortLabel: 'Other',
@@ -195,6 +212,21 @@ const MOMENT_CONFIGS: Record<string, {
       barColor: 'bg-slate-600',
       lightBg: 'bg-slate-50/70',
       hex: '#64748b'
+    }
+  },
+  '-': {
+    label: 'Unassigned / Non-tactical',
+    shortLabel: '-',
+    icon: Minus,
+    color: {
+      bg: 'bg-slate-400/10',
+      border: 'border-slate-300',
+      text: 'text-slate-600',
+      accentBg: 'bg-slate-500',
+      badgeBg: 'bg-slate-100 text-slate-700 border-slate-200',
+      barColor: 'bg-slate-400',
+      lightBg: 'bg-slate-50/70',
+      hex: '#94a3b8'
     }
   }
 };
@@ -210,7 +242,9 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
     'Transition A-D': false,
     'Transition D-A': false,
     'Set Pieces': false,
-    'Other': false
+    'Match': false,
+    'Other': false,
+    '-': false
   });
 
   // Combine sessions based on selected filter scope

@@ -13,9 +13,12 @@ interface ExerciseBlockProps {
   expandedExercises: Record<string, boolean>;
   toggleExpand: (id: string) => void;
   sessionGroups?: PlayerGroup[];
+  isGk?: boolean;
 }
 
-const GAME_MOMENTS: GameMoment[] = ['Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Other'];
+export const GAME_MOMENTS: GameMoment[] = ['-', 'Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Match', 'Other'];
+
+export const GK_GAME_MOMENTS: GameMoment[] = ['-', 'Shot stop', 'Depth control', '1 vs 1', 'Feet distribution', 'Cross defending'];
 
 const TACTICAL_SUB_MOMENTS = [
   '-',
@@ -127,7 +130,8 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   onChange, 
   expandedExercises, 
   toggleExpand,
-  sessionGroups
+  sessionGroups,
+  isGk
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
@@ -281,6 +285,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       case 'Transition A-D': return 'bg-orange-50 text-orange-700 border-orange-200';
       case 'Transition D-A': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'Set Pieces': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'Match': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Shot stop': return 'bg-sky-50 text-sky-700 border-sky-200';
+      case 'Depth control': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case '1 vs 1': return 'bg-rose-100 text-rose-800 border-rose-300';
+      case 'Feet distribution': return 'bg-teal-50 text-teal-700 border-teal-200';
+      case 'Cross defending': return 'bg-violet-50 text-violet-700 border-violet-200';
+      case '-': return 'bg-slate-50 text-slate-500 border-slate-200';
       default: return 'bg-slate-50 text-slate-700 border-slate-200';
     }
   };
@@ -659,7 +670,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           onChange={(e) => updateExercise(ex.id, { gameMoment: e.target.value as GameMoment })}
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-1 print:bg-slate-50 print:border print:border-slate-200 print:rounded print:text-[10px] print:font-bold truncate cursor-pointer"
                         >
-                          {GAME_MOMENTS.map(moment => (
+                          {((isGk || block.id?.includes('gk') || ex.playerGroups === 'Goalkeepers') ? GK_GAME_MOMENTS : GAME_MOMENTS).map(moment => (
                             <option key={moment} value={moment}>{moment}</option>
                           ))}
                         </select>

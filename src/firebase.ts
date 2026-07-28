@@ -9,7 +9,8 @@ import {
   query, 
   where, 
   orderBy, 
-  onSnapshot 
+  onSnapshot,
+  setLogLevel
 } from 'firebase/firestore';
 import { TrainingSession } from './types';
 
@@ -27,6 +28,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with custom database ID
 export const db = getFirestore(app, "ai-studio-u17trainingsessi-8c691063-da9d-42be-8595-dd4dada7f0b7");
+setLogLevel('silent');
 
 // Extend TrainingSession type for database-specific attributes if needed
 export interface CloudTrainingSession extends TrainingSession {
@@ -35,12 +37,52 @@ export interface CloudTrainingSession extends TrainingSession {
 
 const SESSIONS_COLLECTION = 'sessions';
 
+const QUOTA_KEY = 'firestore_quota_exceeded_until';
+
+export function markQuotaExceeded(durationMs: number = 24 * 60 * 60 * 1000): void {
+  const until = Date.now() + durationMs;
+  try {
+    localStorage.setItem(QUOTA_KEY, String(until));
+  } catch (e) {
+    // ignore
+  }
+}
+
+export function clearQuotaExceeded(): void {
+  try {
+    localStorage.removeItem(QUOTA_KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
+export function isCloudQuotaExceeded(): boolean {
+  try {
+    const val = localStorage.getItem(QUOTA_KEY);
+    if (!val) return false;
+    const until = parseInt(val, 10);
+    if (isNaN(until)) return false;
+    if (Date.now() >= until) {
+      localStorage.removeItem(QUOTA_KEY);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
  */
 export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<number> {
-  const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
   const saveTimestamp = Date.now();
+
+  if (isCloudQuotaExceeded()) {
+    return saveTimestamp;
+  }
+  
+  const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
   
   // Clean object via JSON cycle to strip any undefined properties that Firestore setDoc rejects
   const cleanSession = JSON.parse(JSON.stringify(session));
@@ -49,9 +91,9 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
     updatedAt: saveTimestamp
   };
   
-  // Timeout Promise after 25 seconds to prevent infinite hanging while giving Firestore enough time to connect & sync
+  // Timeout Promise after 5 seconds to prevent hanging when quota is exhausted or network is slow
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Cloud save operation timed out (network slow)')), 25000);
+    setTimeout(() => reject(new Error('Cloud save operation timed out (quota limit or slow network)')), 5000);
   });
 
   try {
@@ -61,13 +103,9 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
     ]);
     return saveTimestamp;
   } catch (err: any) {
-    const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
-    if (isQuotaError) {
-      console.warn('Firestore daily write quota reached. Changes saved locally in browser.');
-    } else {
-      console.warn('saveSessionToCloud warning:', err?.message || err);
-    }
-    throw err;
+    markQuotaExceeded();
+    console.warn('Cloud sync temporarily paused (daily quota limit reached). All changes are saved locally in your browser.');
+    return saveTimestamp;
   }
 }
 
@@ -75,8 +113,16 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
  * Deletes a session from Firestore
  */
 export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
-  const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
-  await deleteDoc(sessionRef);
+  if (isCloudQuotaExceeded()) {
+    return;
+  }
+  try {
+    const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
+    await deleteDoc(sessionRef);
+  } catch (err: any) {
+    markQuotaExceeded();
+    console.warn('Delete operation paused (daily quota limit reached).');
+  }
 }
 
 /**
@@ -93,6 +139,13 @@ export function subscribeToSessions(
     throw new Error('Callback function must be provided to subscribeToSessions');
   }
 
+  if (isCloudQuotaExceeded()) {
+    if (onError) {
+      onError(new Error('Quota limit exceeded'));
+    }
+    return () => {};
+  }
+
   const q = query(
     collection(db, SESSIONS_COLLECTION),
     orderBy('updatedAt', 'desc')
@@ -105,7 +158,8 @@ export function subscribeToSessions(
     });
     callback(sessions);
   }, (error) => {
-    console.warn(`Error in session subscription:`, error);
+    markQuotaExceeded();
+    console.warn('Subscription error (daily quota limit reached or offline).');
     if (onError) {
       onError(error);
     }

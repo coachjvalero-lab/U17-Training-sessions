@@ -14,6 +14,9 @@ import {
   saveSessionToCloud, 
   deleteSessionFromCloud, 
   subscribeToSessions, 
+  isCloudQuotaExceeded,
+  markQuotaExceeded,
+  clearQuotaExceeded,
   CloudTrainingSession 
 } from './firebase';
 import { 
@@ -127,8 +130,8 @@ export default function App() {
 
   // Direct helper to save current session to Firestore immediately
   const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession) => {
-    // Check if daily quota was recently exceeded; if so, skip cloud write attempt until backoff expires
-    if (Date.now() < cloudQuotaExceededUntilRef.current) {
+    // Check if daily quota was recently exceeded; if so, skip cloud write attempt
+    if (isCloudQuotaExceeded() || Date.now() < cloudQuotaExceededUntilRef.current) {
       setIsCloudSaving(false);
       return;
     }
@@ -152,15 +155,8 @@ export default function App() {
       const savedTime = await saveSessionToCloud(formattedSession);
       lastLoadedSessionTimeRef.current = savedTime;
       lastSavedJsonRef.current = currentJson;
-    } catch (err: any) {
-      const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
-      if (isQuotaError) {
-        // Pause network writes for 2 minutes to prevent spamming failed requests
-        cloudQuotaExceededUntilRef.current = Date.now() + 120000;
-        console.warn('Firestore write quota exceeded. Autosave will continue locally in browser.');
-      } else {
-        console.warn('Cloud sync temporarily unavailable, saved locally.');
-      }
+    } catch (_err) {
+      cloudQuotaExceededUntilRef.current = Date.now() + 24 * 60 * 60 * 1000;
     } finally {
       setIsCloudSaving(false);
       setTimeout(() => setIsSaving(false), 800);
@@ -283,7 +279,8 @@ export default function App() {
       (err) => {
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
-        console.warn('Firestore subscription offline or quota limit reached:', err);
+        markQuotaExceeded();
+        console.warn('Firestore subscription offline or quota limit reached.');
       }
     );
     return () => unsubscribe();
@@ -314,7 +311,38 @@ export default function App() {
     }
   }, [session]);
 
-  // Debounced Cloud Autosave: automatically sync local changes to Firestore 2 seconds after editing stops
+  // Scheduled Daily Sync at 0:30 AM (after Firestore daily write quota resets)
+  useEffect(() => {
+    const checkDailyReset = () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+
+      // Check if current local time is at or past 0:30 AM (00:30)
+      const isPast030 = now.getHours() > 0 || (now.getHours() === 0 && now.getMinutes() >= 30);
+
+      const lastResetDate = localStorage.getItem('u17_last_030_reset_date');
+
+      if (isPast030 && lastResetDate !== todayStr) {
+        console.log('Resetting daily Firestore quota lock at 0:30 AM and performing initial daily save...');
+        clearQuotaExceeded();
+        cloudQuotaExceededUntilRef.current = 0;
+        localStorage.setItem('u17_last_030_reset_date', todayStr);
+
+        if (latestSessionRef.current) {
+          saveCurrentSessionToCloudNow(latestSessionRef.current);
+        }
+      }
+    };
+
+    checkDailyReset();
+    const interval = setInterval(checkDailyReset, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Debounced Cloud Autosave: automatically sync local changes to Firestore 1 minute (60 seconds) after editing stops
   useEffect(() => {
     // If this session state update came directly from a Firestore remote snapshot, skip auto-saving
     if (isRemoteUpdateRef.current) {
@@ -326,7 +354,7 @@ export default function App() {
       if (latestSessionRef.current) {
         saveCurrentSessionToCloudNow(latestSessionRef.current);
       }
-    }, 2000);
+    }, 60000); // 1 minute (60,000 ms) instead of 2 seconds
 
     return () => clearTimeout(timer);
   }, [session]);
@@ -1013,6 +1041,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
+              isGk={activeSection === 'gk'}
             />
 
             {/* Section: Main Part Block */}
@@ -1022,6 +1051,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
+              isGk={activeSection === 'gk'}
             />
 
             {/* Section: Cool Down Block */}
@@ -1031,6 +1061,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
+              isGk={activeSection === 'gk'}
             />
 
             {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}

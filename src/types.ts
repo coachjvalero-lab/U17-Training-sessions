@@ -1,4 +1,17 @@
-export type GameMoment = 'Attack' | 'Defense' | 'Transition A-D' | 'Transition D-A' | 'Set Pieces' | 'Other';
+export type GameMoment = 
+  | 'Attack' 
+  | 'Defense' 
+  | 'Transition A-D' 
+  | 'Transition D-A' 
+  | 'Set Pieces' 
+  | 'Match' 
+  | 'Other' 
+  | '-'
+  | 'Shot stop'
+  | 'Depth control'
+  | '1 vs 1'
+  | 'Feet distribution'
+  | 'Cross defending';
 
 export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Unknown';
 
