@@ -129,15 +129,9 @@ export default function App() {
   }, [session]);
 
   // Direct helper to save current session to Firestore immediately
-  const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession) => {
-    // Check if daily quota was recently exceeded; if so, skip cloud write attempt
-    if (isCloudQuotaExceeded() || Date.now() < cloudQuotaExceededUntilRef.current) {
-      setIsCloudSaving(false);
-      return;
-    }
-
-    const currentJson = JSON.stringify(sessionToSave);
-    if (currentJson === lastSavedJsonRef.current) {
+  const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession, force: boolean = false) => {
+    // Check if daily quota was recently exceeded; if so, skip background autosave
+    if (!force && isCloudQuotaExceeded()) {
       setIsCloudSaving(false);
       return;
     }
@@ -149,14 +143,22 @@ export default function App() {
       teamName: sessionToSave.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : sessionToSave.teamName
     };
 
+    const currentJson = JSON.stringify(formattedSession);
+    if (currentJson === lastSavedJsonRef.current) {
+      setIsCloudSaving(false);
+      return;
+    }
+
     setIsCloudSaving(true);
     setIsSaving(true);
     try {
-      const savedTime = await saveSessionToCloud(formattedSession);
+      const savedTime = await saveSessionToCloud(formattedSession, force);
       lastLoadedSessionTimeRef.current = savedTime;
       lastSavedJsonRef.current = currentJson;
+      clearQuotaExceeded();
+      cloudQuotaExceededUntilRef.current = 0;
     } catch (_err) {
-      cloudQuotaExceededUntilRef.current = Date.now() + 24 * 60 * 60 * 1000;
+      console.warn('Cloud save skipped or throttled. All progress remains safely saved locally.');
     } finally {
       setIsCloudSaving(false);
       setTimeout(() => setIsSaving(false), 800);
@@ -632,13 +634,15 @@ export default function App() {
       setSession(sessionToSave);
 
       try {
-        const savedTime = await saveSessionToCloud(sessionToSave);
+        const savedTime = await saveSessionToCloud(sessionToSave, true);
         lastLoadedSessionTimeRef.current = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
-        alert('¡Cambios guardados correctamente en la nube y en tu navegador!');
+        clearQuotaExceeded();
+        cloudQuotaExceededUntilRef.current = 0;
+        alert('¡Cambios guardados en la nube y sincronizados en todos tus dispositivos!');
       } catch (cloudErr) {
         console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
-        alert('¡Guardado correctamente en tu navegador! (Si hubo un corte temporal de red, se sincronizará automáticamente).');
+        alert('¡Guardado en tu navegador! (Se reintentará la sincronización en la nube cuando se reestablezca el límite de Firestore).');
       }
     } catch (error) {
       console.error('Error saving session:', error);

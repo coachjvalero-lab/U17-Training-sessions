@@ -2,12 +2,10 @@ import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, 
   collection, 
-  getDocs, 
   doc, 
   setDoc, 
   deleteDoc, 
   query, 
-  where, 
   orderBy, 
   onSnapshot,
   setLogLevel
@@ -36,10 +34,9 @@ export interface CloudTrainingSession extends TrainingSession {
 }
 
 const SESSIONS_COLLECTION = 'sessions';
+const QUOTA_KEY = 'firestore_write_quota_exceeded_until';
 
-const QUOTA_KEY = 'firestore_quota_exceeded_until';
-
-export function markQuotaExceeded(durationMs: number = 24 * 60 * 60 * 1000): void {
+export function markQuotaExceeded(durationMs: number = 5 * 60 * 1000): void {
   const until = Date.now() + durationMs;
   try {
     localStorage.setItem(QUOTA_KEY, String(until));
@@ -74,11 +71,12 @@ export function isCloudQuotaExceeded(): boolean {
 
 /**
  * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
+ * If force is true, ignores temporary quota lockout and attempts the save directly.
  */
-export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<number> {
+export async function saveSessionToCloud(session: TrainingSession, force: boolean = false): Promise<number> {
   const saveTimestamp = Date.now();
 
-  if (isCloudQuotaExceeded()) {
+  if (!force && isCloudQuotaExceeded()) {
     return saveTimestamp;
   }
   
@@ -91,9 +89,9 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
     updatedAt: saveTimestamp
   };
   
-  // Timeout Promise after 5 seconds to prevent hanging when quota is exhausted or network is slow
+  // Timeout Promise after 6 seconds
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Cloud save operation timed out (quota limit or slow network)')), 5000);
+    setTimeout(() => reject(new Error('Cloud save operation timed out')), 6000);
   });
 
   try {
@@ -101,11 +99,13 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
       setDoc(sessionRef, cloudData, { merge: true }),
       timeoutPromise
     ]);
+    clearQuotaExceeded();
     return saveTimestamp;
   } catch (err: any) {
-    markQuotaExceeded();
-    console.warn('Cloud sync temporarily paused (daily quota limit reached). All changes are saved locally in your browser.');
-    return saveTimestamp;
+    // If write quota limit reached, set backoff for 5 minutes (instead of 24 hours)
+    markQuotaExceeded(5 * 60 * 1000);
+    console.warn('Cloud sync temporarily throttled (daily write quota limit reached or network error). Changes are saved locally.');
+    throw err;
   }
 }
 
@@ -113,20 +113,18 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
  * Deletes a session from Firestore
  */
 export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
-  if (isCloudQuotaExceeded()) {
-    return;
-  }
   try {
     const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
     await deleteDoc(sessionRef);
   } catch (err: any) {
-    markQuotaExceeded();
+    markQuotaExceeded(5 * 60 * 1000);
     console.warn('Delete operation paused (daily quota limit reached).');
   }
 }
 
 /**
- * Real-time listener for ALL sessions (unified)
+ * Real-time listener for ALL sessions (unified).
+ * Reads use the read quota (50k/day), so we do NOT block reads even if writes were throttled.
  */
 export function subscribeToSessions(
   typeOrCallback: ('football' | 'fitness') | ((sessions: CloudTrainingSession[]) => void),
@@ -137,13 +135,6 @@ export function subscribeToSessions(
   
   if (!callback) {
     throw new Error('Callback function must be provided to subscribeToSessions');
-  }
-
-  if (isCloudQuotaExceeded()) {
-    if (onError) {
-      onError(new Error('Quota limit exceeded'));
-    }
-    return () => {};
   }
 
   const q = query(
@@ -158,8 +149,7 @@ export function subscribeToSessions(
     });
     callback(sessions);
   }, (error) => {
-    markQuotaExceeded();
-    console.warn('Subscription error (daily quota limit reached or offline).');
+    console.warn('Subscription error:', error);
     if (onError) {
       onError(error);
     }
