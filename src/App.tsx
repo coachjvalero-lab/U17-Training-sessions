@@ -142,18 +142,17 @@ export default function App() {
     }
 
     const activeLogo = getActiveLogo();
-    const saveTimestamp = Date.now();
     const formattedSession: TrainingSession = {
       ...sessionToSave,
       teamLogo: sessionToSave.teamLogo || activeLogo,
       teamName: sessionToSave.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : sessionToSave.teamName
     };
 
-    lastLoadedSessionTimeRef.current = saveTimestamp;
     setIsCloudSaving(true);
     setIsSaving(true);
     try {
-      await saveSessionToCloud(formattedSession);
+      const savedTime = await saveSessionToCloud(formattedSession);
+      lastLoadedSessionTimeRef.current = savedTime;
       lastSavedJsonRef.current = currentJson;
     } catch (err: any) {
       const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
@@ -212,6 +211,12 @@ export default function App() {
             : undefined;
 
           if (!sessionToLoad) {
+            // If targetId was specified in URL, but hasn't reached Firestore yet,
+            // do NOT fall back to sessions[0] if user is already on targetId
+            if (targetId && currentSessionIdRef.current === targetId) {
+              hasInitialCloudLoadedRef.current = true;
+              return;
+            }
             sessionToLoad = sessions[0]; // Pick the latest active session in Firestore
           }
 
@@ -599,11 +604,13 @@ export default function App() {
       setSession(sessionToSave);
 
       try {
-        await saveSessionToCloud(sessionToSave);
-        alert('¡Cambios guardados correctamente!');
+        const savedTime = await saveSessionToCloud(sessionToSave);
+        lastLoadedSessionTimeRef.current = savedTime;
+        lastSavedJsonRef.current = JSON.stringify(sessionToSave);
+        alert('¡Cambios guardados correctamente en la nube y en tu navegador!');
       } catch (cloudErr) {
         console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
-        alert('¡Guardado correctamente en tu navegador! (Nota: la nube de Firebase ha alcanzado su límite de cuota diaria de lecturas/escrituras, pero todos tus cambios están guardados en tu navegador).');
+        alert('¡Guardado correctamente en tu navegador! (Si hubo un corte temporal de red, se sincronizará automáticamente).');
       }
     } catch (error) {
       console.error('Error saving session:', error);
@@ -826,7 +833,9 @@ export default function App() {
 
       // 2. Try Cloud Firestore save
       try {
-        await saveSessionToCloud(sessionToSave);
+        const savedTime = await saveSessionToCloud(sessionToSave);
+        lastLoadedSessionTimeRef.current = savedTime;
+        lastSavedJsonRef.current = JSON.stringify(sessionToSave);
       } catch (cloudErr) {
         console.warn('Cloud save warning on share link:', cloudErr);
       }
@@ -842,6 +851,7 @@ export default function App() {
       await navigator.clipboard.writeText(url.toString());
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
+      alert('¡Enlace copiado al portapapeles! Los demás usuarios verán tus cambios en tiempo real en la nube.');
     } catch (error) {
       console.error('Error copying share link:', error);
       const url = new URL(window.location.href);

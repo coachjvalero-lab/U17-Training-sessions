@@ -36,18 +36,19 @@ export interface CloudTrainingSession extends TrainingSession {
 const SESSIONS_COLLECTION = 'sessions';
 
 /**
- * Saves or updates a session in Firestore
+ * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
  */
-export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<void> {
+export async function saveSessionToCloud(session: TrainingSession, _type?: 'football' | 'fitness'): Promise<number> {
   const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
+  const saveTimestamp = Date.now();
   const cloudData: CloudTrainingSession = {
     ...session,
-    updatedAt: Date.now()
+    updatedAt: saveTimestamp
   };
   
-  // Timeout Promise after 4 seconds to prevent hanging if connection lags or quota is exceeded
+  // Timeout Promise after 25 seconds to prevent infinite hanging while giving Firestore enough time to connect & sync
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Cloud save operation timed out')), 4000);
+    setTimeout(() => reject(new Error('Cloud save operation timed out (network slow)')), 25000);
   });
 
   try {
@@ -55,6 +56,7 @@ export async function saveSessionToCloud(session: TrainingSession, _type?: 'foot
       setDoc(sessionRef, cloudData, { merge: true }),
       timeoutPromise
     ]);
+    return saveTimestamp;
   } catch (err: any) {
     const isQuotaError = err?.code === 'resource-exhausted' || err?.message?.includes('Quota limit exceeded') || err?.message?.includes('resource-exhausted');
     if (isQuotaError) {
