@@ -52,8 +52,24 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const [newPlayerName, setNewPlayerName] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // Filter out excluded players (e.g., Jalila)
+  const isPlayerExcluded = (name: string) => {
+    if (!name) return true;
+    const lower = name.trim().toLowerCase();
+    if (lower === 'jalila') return true;
+    try {
+      const saved = localStorage.getItem('u17_excluded_players');
+      const list: string[] = saved ? JSON.parse(saved) : [];
+      return list.some(p => p.toLowerCase() === lower);
+    } catch {
+      return false;
+    }
+  };
+
+  const cleanRoster = squadRoster.filter(p => !isPlayerExcluded(p));
+
   // Synchronize attendance list with squad roster
-  const effectiveAttendance: PlayerAttendance[] = squadRoster.map(player => {
+  const effectiveAttendance: PlayerAttendance[] = cleanRoster.map(player => {
     const existing = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
     if (existing) return existing;
     return {
@@ -137,6 +153,28 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
     setNewPlayerName('');
     setShowAddModal(false);
+  };
+
+  const handleRemovePlayer = (playerName: string) => {
+    if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla?`)) {
+      const lower = playerName.toLowerCase();
+      try {
+        const saved = localStorage.getItem('u17_excluded_players');
+        const list: string[] = saved ? JSON.parse(saved) : [];
+        if (!list.some(p => p.toLowerCase() === lower)) {
+          list.push(lower);
+          localStorage.setItem('u17_excluded_players', JSON.stringify(list));
+        }
+      } catch (e) {}
+
+      const updatedRoster = squadRoster.filter(p => p.toLowerCase() !== lower);
+      if (onChangeRoster) {
+        onChangeRoster(updatedRoster);
+      }
+
+      const updatedAttendance = effectiveAttendance.filter(a => a.playerName.toLowerCase() !== lower);
+      onChangeAttendance(updatedAttendance);
+    }
   };
 
   const filteredPlayers = effectiveAttendance.filter(a => {
@@ -340,15 +378,27 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                   className={`p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-2.5 shadow-sm ${cardBg}`}
                 >
                   {/* Player Name Box / Header */}
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-[#002142] text-[#a79078] font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
-                      {record.playerName.substring(0, 2).toUpperCase()}
+                  <div className="flex items-center justify-between min-w-0">
+                    <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                      <div className="w-7 h-7 rounded-full bg-[#002142] text-[#a79078] font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                        {record.playerName.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="truncate min-w-0 flex-1">
+                        <span className="text-xs font-black text-slate-900 block truncate">
+                          {record.playerName}
+                        </span>
+                      </div>
                     </div>
-                    <div className="truncate min-w-0 flex-1">
-                      <span className="text-xs font-black text-slate-900 block truncate">
-                        {record.playerName}
-                      </span>
-                    </div>
+                    {onChangeRoster && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePlayer(record.playerName)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                        title="Eliminar jugadora de la plantilla"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Attendance State Dropdown Select */}

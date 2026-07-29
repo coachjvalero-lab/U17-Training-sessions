@@ -25,8 +25,24 @@ import {
   Medal,
   Award,
   BarChart2,
+  Activity,
   Check
 } from 'lucide-react';
+import { 
+  ComposedChart,
+  LineChart, 
+  Line, 
+  AreaChart,
+  Area,
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Cell, 
+  Legend, 
+  ReferenceLine 
+} from 'recharts';
 import { TrainingSession, PlayerAttendance, AbsenceReason } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
@@ -50,6 +66,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [reasonFilter, setReasonFilter] = useState<'all' | AbsenceReason>('all');
   const [chartSort, setChartSort] = useState<'rate' | 'attended' | 'absences'>('rate');
+  const [chartView, setChartView] = useState<'classification' | 'race_progression'>('classification');
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
 
@@ -69,12 +86,34 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     return (b.date || '').localeCompare(a.date || '');
   });
 
-  // Calculate global squad roster (union of squadRoster and any player appearing in attendance)
-  const masterPlayerSet = new Set<string>(squadRoster);
+  // Excluded/deleted players list (persist in localStorage so deletions stick)
+  const [excludedPlayers, setExcludedPlayers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('u17_excluded_players');
+      const list: string[] = saved ? JSON.parse(saved) : [];
+      if (!list.some(p => p.toLowerCase() === 'jalila')) {
+        list.push('jalila');
+      }
+      return list;
+    } catch {
+      return ['jalila'];
+    }
+  });
+
+  const isPlayerExcluded = (name: string) => {
+    if (!name) return true;
+    const lower = name.trim().toLowerCase();
+    return lower === 'jalila' || excludedPlayers.some(e => e.toLowerCase() === lower);
+  };
+
+  // Calculate global squad roster (union of squadRoster and any player appearing in attendance, minus excluded)
+  const masterPlayerSet = new Set<string>(squadRoster.filter(p => !isPlayerExcluded(p)));
   allSessionsList.forEach(s => {
     if (s.attendance && Array.isArray(s.attendance)) {
       s.attendance.forEach(a => {
-        if (a.playerName) masterPlayerSet.add(a.playerName);
+        if (a.playerName && !isPlayerExcluded(a.playerName)) {
+          masterPlayerSet.add(a.playerName);
+        }
       });
     }
   });
@@ -175,13 +214,21 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   };
 
   const handleDeletePlayer = (playerName: string) => {
-    if (confirm(`Are you sure you want to remove "${playerName}" from the squad roster?`)) {
-      const updatedRoster = squadRoster.filter(p => p !== playerName);
+    if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla y de la clasificación?`)) {
+      const lower = playerName.toLowerCase();
+      const updatedExcluded = Array.from(new Set([...excludedPlayers, lower, 'jalila']));
+      setExcludedPlayers(updatedExcluded);
+      try {
+        localStorage.setItem('u17_excluded_players', JSON.stringify(updatedExcluded));
+      } catch (e) {}
+
+      const updatedRoster = squadRoster.filter(p => p.toLowerCase() !== lower);
       if (onChangeRoster) onChangeRoster(updatedRoster);
 
       if (session.attendance) {
         onChangeSession({
-          attendance: session.attendance.filter(a => a.playerName !== playerName)
+          squadRoster: updatedRoster,
+          attendance: session.attendance.filter(a => a.playerName.toLowerCase() !== lower)
         });
       }
     }
@@ -535,7 +582,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         </div>
       </div>
 
-      {/* Attendance Classification & Ranking Chart (Gráfico de Clasificación de Asistencia) */}
+      {/* Attendance Classification & Ranking Chart (Gráfico de Clasificación de Asistencia con Puntos y Líneas) */}
       {(() => {
         const sortedChartPlayers = [...playerStats].sort((a, b) => {
           if (chartSort === 'rate') {
@@ -557,6 +604,41 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         const top2 = sortedChartPlayers[1];
         const top3 = sortedChartPlayers[2];
 
+        // Chronological list of sessions for race progression
+        const chronologicalSessions = [...allSessionsList].sort((a, b) => 
+          (a.date || '').localeCompare(b.date || '')
+        );
+
+        // Build race progression data points
+        const raceProgressionData = chronologicalSessions.map((sess, sIdx) => {
+          const dataPoint: Record<string, any> = {
+            sessionName: `S${sIdx + 1}`,
+            date: sess.date || `S${sIdx + 1}`,
+            fullLabel: `Sesión #${sess.sessionNumber || sIdx + 1}`
+          };
+
+          const pastSessions = chronologicalSessions.slice(0, sIdx + 1);
+          masterPlayerList.forEach(player => {
+            let attended = 0;
+            pastSessions.forEach(ps => {
+              const rec = (ps.attendance || []).find(a => a.playerName.toLowerCase() === player.toLowerCase());
+              if (!rec || rec.status === 'Attending') {
+                attended += 1;
+              }
+            });
+            const cumRate = Math.round((attended / pastSessions.length) * 100);
+            dataPoint[player] = cumRate;
+          });
+
+          return dataPoint;
+        });
+
+        const RACE_COLORS = [
+          '#f59e0b', '#0284c7', '#10b981', '#8b5cf6', '#ec4899', 
+          '#6366f1', '#14b8a6', '#f97316', '#06b6d4', '#84cc16', 
+          '#a855f7', '#e11d48', '#3b82f6', '#10b981', '#64748b'
+        ];
+
         return (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-6">
             
@@ -573,50 +655,83 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                     </h2>
                     <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
                       <Crown className="w-3 h-3 text-amber-600" />
-                      Ranking
+                      Puntos y Líneas
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Clasificación visual por asistencia, sesiones asistidas y ausencias acumuladas.
+                    Clasificación de carrera en gráfico de línea continua y puntos de rendimiento por jugadora.
                   </p>
                 </div>
               </div>
 
-              {/* Sorting Filter */}
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setChartSort('rate')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    chartSort === 'rate' 
-                      ? 'bg-white text-slate-900 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  % Asistencia
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChartSort('attended')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    chartSort === 'attended' 
-                      ? 'bg-white text-slate-900 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Asistencias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChartSort('absences')}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                    chartSort === 'absences' 
-                      ? 'bg-white text-slate-900 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Menos Faltas
-                </button>
+              {/* View Switcher & Sorting Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* View Switcher Tabs */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setChartView('classification')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      chartView === 'classification' 
+                        ? 'bg-[#002142] text-white shadow-sm' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Clasificación General</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartView('race_progression')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      chartView === 'race_progression' 
+                        ? 'bg-[#002142] text-white shadow-sm' 
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Carrera por Sesiones</span>
+                  </button>
+                </div>
+
+                {/* Sorting Filter (for Classification View) */}
+                {chartView === 'classification' && (
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setChartSort('rate')}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        chartSort === 'rate' 
+                          ? 'bg-white text-slate-900 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartSort('attended')}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        chartSort === 'attended' 
+                          ? 'bg-white text-slate-900 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Asistencias
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartSort('absences')}
+                      className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        chartSort === 'absences' 
+                          ? 'bg-white text-slate-900 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Faltas
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -697,80 +812,257 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               </div>
             )}
 
-            {/* Classification Bar Graph Ranking List */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between text-xs font-black uppercase text-slate-400 px-2">
-                <span>Jugador & Posición</span>
-                <span>Barra de Clasificación (% Asistencia)</span>
+            {/* Line & Points Classification Container */}
+            <div className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-black uppercase text-slate-500 pb-2 border-b border-slate-200/80">
+                <span className="flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-[#002142]" />
+                  <span>
+                    {chartView === 'classification' 
+                      ? `Línea de Clasificación por Jugadoras (${sortedChartPlayers.length} Jugadoras)` 
+                      : `Evolución Temporal de Carrera por Sesiones (${chronologicalSessions.length} Sesiones)`}
+                  </span>
+                </span>
+                <div className="flex items-center gap-3 text-[11px] font-bold">
+                  <span className="flex items-center gap-1 text-amber-700">
+                    <span className="w-3 h-3 rounded-full bg-amber-400 border border-amber-600 inline-block" /> Oro / #1
+                  </span>
+                  <span className="flex items-center gap-1 text-slate-700">
+                    <span className="w-3 h-3 rounded-full bg-slate-300 border border-slate-500 inline-block" /> Plata / #2
+                  </span>
+                  <span className="flex items-center gap-1 text-amber-900">
+                    <span className="w-3 h-3 rounded-full bg-amber-600 border border-amber-800 inline-block" /> Bronce / #3
+                  </span>
+                  <span className="flex items-center gap-1 text-emerald-700">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> ≥85%
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-2.5">
-                {sortedChartPlayers.map((stat, idx) => {
-                  const rank = idx + 1;
-                  const isExcellent = stat.rate >= 85;
-                  const isGood = stat.rate >= 70 && stat.rate < 85;
-
-                  return (
-                    <div 
-                      key={stat.player} 
-                      className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        rank === 1 
-                          ? 'bg-amber-50/40 border-amber-300/80 shadow-sm' 
-                          : rank === 2 
-                          ? 'bg-slate-50 border-slate-300/80' 
-                          : rank === 3 
-                          ? 'bg-amber-50/20 border-amber-200' 
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
+              {/* View 1: General Classification Area / Line Chart with Custom Point Badges (Jugadoras en eje Y) */}
+              {chartView === 'classification' ? (
+                <div 
+                  className="w-full pt-4 overflow-x-auto" 
+                  style={{ height: `${Math.max(400, sortedChartPlayers.length * 32 + 60)}px` }}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart 
+                      layout="vertical"
+                      data={sortedChartPlayers.map((p, idx) => ({
+                        name: p.player,
+                        rate: p.rate,
+                        attended: p.attendedCount,
+                        absent: p.absentCount,
+                        total: p.totalSessions,
+                        rank: idx + 1
+                      }))}
+                      margin={{ top: 20, right: 35, left: 15, bottom: 20 }}
                     >
-                      {/* Left: Rank # & Player info */}
-                      <div className="flex items-center space-x-3 min-w-[200px]">
-                        <div className={`w-7 h-7 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${
-                          rank === 1 ? 'bg-amber-400 text-amber-950 border border-amber-500' :
-                          rank === 2 ? 'bg-slate-300 text-slate-800 border border-slate-400' :
-                          rank === 3 ? 'bg-amber-200 text-amber-900 border border-amber-300' :
-                          'bg-slate-100 text-slate-600'
-                        }`}>
-                          #{rank}
-                        </div>
-                        <div>
-                          <h4 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
-                            <span>{stat.player}</span>
-                            {rank === 1 && <Crown className="w-3.5 h-3.5 text-amber-500 inline" />}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-bold">
-                            {stat.attendedCount} de {stat.totalSessions} sesiones asistidas ({stat.absentCount} faltas)
-                          </span>
-                        </div>
-                      </div>
+                      <defs>
+                        <linearGradient id="colorClassification" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="5%" stopColor="#002142" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#002142" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                      <XAxis 
+                        type="number"
+                        domain={[0, 100]} 
+                        tick={{ fontSize: 11, fontWeight: 800, fill: '#64748b' }}
+                        unit="%"
+                      />
+                      <YAxis 
+                        type="category"
+                        dataKey="name" 
+                        tick={{ fontSize: 11, fontWeight: 800, fill: '#1e293b' }}
+                        interval={0}
+                        width={130}
+                      />
+                      <Tooltip 
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1.5 border border-slate-700 min-w-[170px]">
+                                <div className="font-black border-b border-slate-700 pb-1 text-amber-400 flex justify-between items-center">
+                                  <span>#{data.rank} {data.name}</span>
+                                  <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-bold">
+                                    {data.rate}%
+                                  </span>
+                                </div>
+                                <div className="text-[11px] font-medium space-y-0.5 text-slate-300">
+                                  <p className="text-emerald-400 font-bold">✔ Asistencias: {data.attended} sesiones</p>
+                                  <p className="text-rose-400 font-bold">✖ Faltas: {data.absent} ausencias</p>
+                                  <p className="text-slate-400 text-[10px]">Total evaluado: {data.total} sesiones</p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <ReferenceLine 
+                        x={85} 
+                        stroke="#10b981" 
+                        strokeDasharray="4 4" 
+                        label={{ 
+                          value: "Objetivo 85%", 
+                          fill: "#059669", 
+                          fontSize: 10, 
+                          fontWeight: 800, 
+                          position: "top" 
+                        }} 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="rate" 
+                        stroke="#002142" 
+                        strokeWidth={3} 
+                        fillOpacity={1} 
+                        fill="url(#colorClassification)" 
+                        dot={(props: any) => {
+                          const { cx, cy, payload } = props;
+                          if (!cx || !cy) return null;
+                          const rank = payload.rank;
+                          const rate = payload.rate;
 
-                      {/* Right: Graphic Progress Bar */}
-                      <div className="flex-1 max-w-md flex items-center space-x-3">
-                        <div className="flex-1 bg-slate-100 h-4 rounded-full overflow-hidden p-0.5 border border-slate-200 relative flex">
-                          {/* Attended Portion Bar */}
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isExcellent ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
-                              isGood ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                              'bg-gradient-to-r from-rose-500 to-rose-600'
-                            }`}
-                            style={{ width: `${stat.rate}%` }}
+                          let strokeColor = '#002142';
+                          let fillColor = '#ffffff';
+                          let radius = 6;
+
+                          if (rank === 1) {
+                            strokeColor = '#d97706';
+                            fillColor = '#fbbf24';
+                            radius = 9;
+                          } else if (rank === 2) {
+                            strokeColor = '#475569';
+                            fillColor = '#cbd5e1';
+                            radius = 8;
+                          } else if (rank === 3) {
+                            strokeColor = '#92400e';
+                            fillColor = '#d97706';
+                            radius = 7.5;
+                          } else if (rate >= 85) {
+                            strokeColor = '#059669';
+                            fillColor = '#10b981';
+                          } else if (rate < 70) {
+                            strokeColor = '#e11d48';
+                            fillColor = '#f43f5e';
+                          }
+
+                          return (
+                            <g key={`point-${payload.name}-${rank}`}>
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={radius + 3} 
+                                fill={strokeColor} 
+                                fillOpacity={0.2} 
+                              />
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={radius} 
+                                fill={fillColor} 
+                                stroke={strokeColor} 
+                                strokeWidth={2} 
+                              />
+                              <text 
+                                x={cx + radius + 10} 
+                                y={cy + 4} 
+                                textAnchor="start" 
+                                fill={strokeColor} 
+                                fontSize="11" 
+                                fontWeight="900"
+                              >
+                                #{rank} ({rate}%)
+                              </text>
+                            </g>
+                          );
+                        }}
+                        activeDot={{ r: 8, strokeWidth: 2, stroke: '#002142' }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                /* View 2: Race Progression Across All Sessions (Carrera de Asistencia) */
+                <div className="w-full h-[380px] pt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart 
+                      data={raceProgressionData}
+                      margin={{ top: 15, right: 20, left: -20, bottom: 25 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis 
+                        dataKey="sessionName" 
+                        tick={{ fontSize: 11, fontWeight: 800, fill: '#334155' }}
+                      />
+                      <YAxis 
+                        domain={[0, 100]} 
+                        tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
+                        unit="%"
+                      />
+                      <Tooltip 
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1.5 border border-slate-700 max-h-60 overflow-y-auto">
+                                <div className="font-black border-b border-slate-700 pb-1 text-amber-400">
+                                  {payload[0]?.payload?.fullLabel || label}
+                                </div>
+                                <div className="space-y-1">
+                                  {payload
+                                    .slice()
+                                    .sort((a, b) => Number(b.value) - Number(a.value))
+                                    .map((p: any) => (
+                                      <div key={p.name} className="flex justify-between items-center gap-4 text-[11px]">
+                                        <span className="font-bold flex items-center gap-1.5" style={{ color: p.color }}>
+                                          <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color }} />
+                                          {p.name}
+                                        </span>
+                                        <span className="font-black text-slate-200">{p.value}%</span>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <ReferenceLine 
+                        y={85} 
+                        stroke="#10b981" 
+                        strokeDasharray="4 4" 
+                        label={{ 
+                          value: "Objetivo 85%", 
+                          fill: "#059669", 
+                          fontSize: 10, 
+                          fontWeight: 800, 
+                          position: "top" 
+                        }} 
+                      />
+                      {sortedChartPlayers.map((playerStat, idx) => {
+                        const player = playerStat.player;
+                        const strokeColor = RACE_COLORS[idx % RACE_COLORS.length];
+                        return (
+                          <Line
+                            key={player}
+                            type="monotone"
+                            dataKey={player}
+                            name={player}
+                            stroke={strokeColor}
+                            strokeWidth={idx < 3 ? 3 : 2}
+                            dot={{ r: idx < 3 ? 5 : 3, strokeWidth: 1.5, fill: '#ffffff', stroke: strokeColor }}
+                            activeDot={{ r: 7 }}
                           />
-                        </div>
-
-                        {/* Percentage badge */}
-                        <div className={`min-w-[52px] text-right text-xs font-black ${
-                          isExcellent ? 'text-emerald-700' :
-                          isGood ? 'text-amber-700' :
-                          'text-rose-700'
-                        }`}>
-                          {stat.rate}%
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
           </div>
