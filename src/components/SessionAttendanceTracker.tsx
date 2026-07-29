@@ -15,7 +15,8 @@ import {
   ChevronUp, 
   Check, 
   Users, 
-  AlertCircle 
+  AlertCircle,
+  Dumbbell
 } from 'lucide-react';
 import { PlayerAttendance, AbsenceReason } from '../types';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
@@ -48,7 +49,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   compact = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'attending' | 'absent'>('all');
+  const [filter, setFilter] = useState<'all' | 'attending' | 'gym' | 'absent'>('all');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -78,7 +79,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
     };
   });
 
-  const attendingCount = effectiveAttendance.filter(a => a.status === 'Attending').length;
+  const pitchCount = effectiveAttendance.filter(a => a.status === 'Attending').length;
+  const gymCount = effectiveAttendance.filter(a => a.status === 'Gym').length;
+  const attendingCount = pitchCount + gymCount; // Both pitch and gym count as attendance!
   const absentCount = effectiveAttendance.filter(a => a.status === 'Absent').length;
   const totalCount = effectiveAttendance.length;
   const attendanceRate = totalCount > 0 ? Math.round((attendingCount / totalCount) * 100) : 0;
@@ -97,6 +100,12 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
           return {
             ...a,
             status: 'Attending' as const,
+            absenceReason: undefined
+          };
+        } else if (value === 'Gym') {
+          return {
+            ...a,
+            status: 'Gym' as const,
             absenceReason: undefined
           };
         } else {
@@ -175,10 +184,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
       const updatedAttendance = effectiveAttendance.filter(a => a.playerName.toLowerCase() !== lower);
       onChangeAttendance(updatedAttendance);
     }
-  };
-
-  const filteredPlayers = effectiveAttendance.filter(a => {
-    if (filter === 'attending') return a.status === 'Attending';
+  };  const filteredPlayers = effectiveAttendance.filter(a => {
+    if (filter === 'attending') return a.status === 'Attending' || a.status === 'Gym';
+    if (filter === 'gym') return a.status === 'Gym';
     if (filter === 'absent') return a.status === 'Absent';
     return true;
   });
@@ -208,7 +216,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-bold">
-              Mark player attendance and reason for absence for training session analytics.
+              Mark player attendance, gym sessions, and reason for absence for training session analytics.
             </p>
           </div>
         </div>
@@ -255,13 +263,21 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
       </div>
 
       {/* Summary Stat Chips Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs font-bold">
+      <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 text-xs font-bold">
         <div className="bg-emerald-50 border border-emerald-200/80 p-2 rounded-xl flex items-center justify-between text-emerald-900">
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1.5 text-[11px]">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Attending</span>
+            <span>Pitch</span>
           </div>
-          <span className="text-sm font-black">{attendingCount}</span>
+          <span className="text-sm font-black">{pitchCount}</span>
+        </div>
+
+        <div className="bg-cyan-50 border border-cyan-200/80 p-2 rounded-xl flex items-center justify-between text-cyan-900">
+          <div className="flex items-center space-x-1.5 text-[11px]">
+            <Dumbbell className="w-3.5 h-3.5 text-cyan-600" />
+            <span>Gym</span>
+          </div>
+          <span className="text-sm font-black">{gymCount}</span>
         </div>
 
         <div className="bg-amber-50 border border-amber-200/80 p-2 rounded-xl flex items-center justify-between text-amber-900">
@@ -330,6 +346,15 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
               </button>
               <button
                 type="button"
+                onClick={() => setFilter('gym')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  filter === 'gym' ? 'bg-cyan-600 text-white shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Gym ({gymCount})
+              </button>
+              <button
+                type="button"
                 onClick={() => setFilter('absent')}
                 className={`px-3 py-1 rounded-lg transition-all ${
                   filter === 'absent' ? 'bg-rose-600 text-white shadow-sm' : 'hover:text-slate-900'
@@ -348,12 +373,17 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredPlayers.map((record) => {
               const isAttending = record.status === 'Attending';
-              const currentSelectValue = isAttending ? 'Attending' : (record.absenceReason || 'Unknown');
+              const isGym = record.status === 'Gym';
+              const currentSelectValue = isGym ? 'Gym' : (isAttending ? 'Attending' : (record.absenceReason || 'Unknown'));
               
               // Determine card styling based on attendance status
               let cardBg = 'bg-emerald-50/50 border-emerald-200/80 hover:border-emerald-300';
               let selectBg = 'bg-emerald-600 text-white border-emerald-700 focus:ring-emerald-500';
-              if (!isAttending) {
+
+              if (isGym) {
+                cardBg = 'bg-cyan-50/70 border-cyan-200 hover:border-cyan-300';
+                selectBg = 'bg-cyan-700 text-white border-cyan-800 focus:ring-cyan-500';
+              } else if (!isAttending) {
                 if (record.absenceReason === 'Vacation') {
                   cardBg = 'bg-amber-50/60 border-amber-200 hover:border-amber-300';
                   selectBg = 'bg-amber-600 text-white border-amber-700 focus:ring-amber-500';
@@ -412,7 +442,10 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                       className={`w-full text-xs font-black rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 cursor-pointer transition-all border shadow-sm ${selectBg}`}
                     >
                       <option value="Attending" className="bg-white text-emerald-900 font-bold py-1">
-                        ✓ Attending (Present)
+                        ✓ Pitch (Attending)
+                      </option>
+                      <option value="Gym" className="bg-white text-cyan-900 font-bold py-1">
+                        🏋️ Gym (Attending)
                       </option>
                       <option value="Vacation" className="bg-white text-amber-900 font-bold py-1">
                         🏖️ Vacation (Absent)

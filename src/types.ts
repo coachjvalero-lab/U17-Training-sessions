@@ -17,7 +17,7 @@ export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Un
 
 export interface PlayerAttendance {
   playerName: string;
-  status: 'Attending' | 'Absent';
+  status: 'Attending' | 'Absent' | 'Gym';
   absenceReason?: AbsenceReason;
   notes?: string;
 }

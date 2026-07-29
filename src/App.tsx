@@ -344,7 +344,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Debounced Cloud Autosave: automatically sync local changes to Firestore 1 minute (60 seconds) after editing stops
+  // Debounced Cloud Autosave: automatically sync local changes to Firestore 2.5 seconds after editing stops
   useEffect(() => {
     // If this session state update came directly from a Firestore remote snapshot, skip auto-saving
     if (isRemoteUpdateRef.current) {
@@ -356,7 +356,7 @@ export default function App() {
       if (latestSessionRef.current) {
         saveCurrentSessionToCloudNow(latestSessionRef.current);
       }
-    }, 60000); // 1 minute (60,000 ms) instead of 2 seconds
+    }, 2500); // 2.5 seconds debounce for real-time cloud sync
 
     return () => clearTimeout(timer);
   }, [session]);

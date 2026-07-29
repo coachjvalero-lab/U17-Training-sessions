@@ -27,7 +27,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     if (!attendance || attendance.length === 0) return squadRoster;
     return squadRoster.filter(player => {
       const record = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
-      return !record || record.status === 'Attending';
+      return !record || record.status === 'Attending' || record.status === 'Gym';
     });
   }, [attendance, squadRoster]);
 

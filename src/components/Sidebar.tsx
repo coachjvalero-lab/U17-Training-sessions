@@ -16,7 +16,9 @@ import {
   X,
   RefreshCw,
   FileText,
-  UserCheck
+  UserCheck,
+  Link,
+  Globe
 } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { CloudTrainingSession } from '../firebase';
@@ -240,6 +242,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Clear</span>
           </button>
         </div>
+
+        {/* Share Live Permanent Link Button */}
+        <button
+          type="button"
+          onClick={onCopyShareLink}
+          className={`w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl transition-all cursor-pointer border text-xs font-black uppercase tracking-wider ${
+            copiedLink 
+              ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-500/30' 
+              : 'bg-[#a79078]/20 hover:bg-[#a79078]/35 text-[#a79078] hover:text-white border-[#a79078]/40'
+          }`}
+          title="Copiar enlace único en directo para compartir"
+        >
+          {copiedLink ? (
+            <>
+              <Check className="w-4 h-4 text-emerald-200" />
+              <span>¡Enlace Copiado!</span>
+            </>
+          ) : (
+            <>
+              <Share2 className="w-4 h-4 text-[#a79078]" />
+              <span>Compartir Enlace en Vivo</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Cloud Sessions & Storage Panel */}

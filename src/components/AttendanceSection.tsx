@@ -141,7 +141,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
       if (attList.length > 0) {
         totalSessions++;
         if (record) {
-          if (record.status === 'Attending') {
+          if (record.status === 'Attending' || record.status === 'Gym') {
             attendedCount++;
           } else {
             absentCount++;
@@ -622,7 +622,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             let attended = 0;
             pastSessions.forEach(ps => {
               const rec = (ps.attendance || []).find(a => a.playerName.toLowerCase() === player.toLowerCase());
-              if (!rec || rec.status === 'Attending') {
+              if (!rec || rec.status === 'Attending' || rec.status === 'Gym') {
                 attended += 1;
               }
             });
