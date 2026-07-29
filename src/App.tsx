@@ -114,6 +114,28 @@ export default function App() {
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  const [libraryCount, setLibraryCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('u17_custom_exercise_library');
+      if (saved) return JSON.parse(saved).length;
+      return 5;
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  useEffect(() => {
+    const updateCount = () => {
+      try {
+        const saved = localStorage.getItem('u17_custom_exercise_library');
+        if (saved) setLibraryCount(JSON.parse(saved).length);
+      } catch (e) {}
+    };
+    updateCount();
+    window.addEventListener('storage', updateCount);
+    return () => window.removeEventListener('storage', updateCount);
+  }, [activeSection]);
+
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
@@ -977,6 +999,7 @@ export default function App() {
         session={session}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
+        totalLibraryExercisesCount={libraryCount}
         onClearSession={handleClearSession}
         onNewSession={handleCreateNewCloudSession}
         isSaving={isSaving}

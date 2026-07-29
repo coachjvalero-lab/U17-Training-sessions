@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
-  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2, Users
+  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2, Users, BookmarkPlus, Check
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingBlock, PlayerGroup } from '../types';
 import { processUploadedImageFile } from '../utils/heic';
@@ -135,6 +135,30 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+  const [addedToLibId, setAddedToLibId] = useState<string | null>(null);
+
+  const handleAddToLibrary = (ex: Exercise, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const saved = localStorage.getItem('u17_custom_exercise_library');
+      const existingLib: Exercise[] = saved ? JSON.parse(saved) : [];
+
+      const newLibEx: Exercise = {
+        ...ex,
+        id: 'custom-ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)
+      };
+
+      const updatedLib = [newLibEx, ...existingLib];
+      localStorage.setItem('u17_custom_exercise_library', JSON.stringify(updatedLib));
+
+      setAddedToLibId(ex.id);
+      setTimeout(() => {
+        setAddedToLibId(null);
+      }, 2500);
+    } catch (err) {
+      console.error('Failed to save exercise to library:', err);
+    }
+  };
 
   const handleTimingChange = (
     exId: string, 
@@ -473,8 +497,31 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     {ex.gameMoment}
                   </span>
 
-                  {/* Reordering and deleting buttons (Hidden in print) */}
+                  {/* Reordering, library save, and deleting buttons (Hidden in print) */}
                   <div className="flex items-center space-x-1 print:hidden" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddToLibrary(ex, e)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-extrabold transition-all border cursor-pointer flex items-center space-x-1 shadow-xs ${
+                        addedToLibId === ex.id
+                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                          : 'bg-[#002142]/10 hover:bg-[#002142] text-[#002142] hover:text-[#a79078] border-[#002142]/20 hover:border-[#002142]'
+                      }`}
+                      title="Añadir ejercicio a la biblioteca de entrenos"
+                    >
+                      {addedToLibId === ex.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-white shrink-0" />
+                          <span className="hidden sm:inline">¡Guardado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <BookmarkPlus className="w-3.5 h-3.5 shrink-0" />
+                          <span className="hidden sm:inline">Añadir a biblioteca</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       disabled={idx === 0}

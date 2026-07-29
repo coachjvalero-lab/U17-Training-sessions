@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { CloudTrainingSession, saveSessionToCloud } from '../firebase';
+import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
 
@@ -51,13 +52,34 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [customExercises, setCustomExercises] = useState<Exercise[]>(() => {
     try {
       const saved = localStorage.getItem('u17_custom_exercise_library');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) return JSON.parse(saved);
+      // Initialize with default template exercises if first time
+      const def = getDefaultSession();
+      return [
+        ...def.warmUp.exercises,
+        ...def.mainPart.exercises,
+        ...def.coolDown.exercises
+      ];
     } catch (e) {
       return [];
     }
   });
 
-  // Track deleted exercise IDs across all library exercises (custom, sample, cloud, current)
+  // Re-sync library exercises whenever section becomes active
+  useEffect(() => {
+    if (activeSection === 'exercises') {
+      try {
+        const saved = localStorage.getItem('u17_custom_exercise_library');
+        if (saved) {
+          setCustomExercises(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.error('Failed to sync library exercises:', e);
+      }
+    }
+  }, [activeSection]);
+
+  // Track deleted exercise IDs across all library exercises
   const [deletedExerciseIds, setDeletedExerciseIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('u17_deleted_exercise_ids');
@@ -131,12 +153,12 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   }, [deletedExerciseIds]);
 
-  // Extract all exercises across current session, all cloud sessions, and custom library
+  // Extract exercises explicitly saved in user's library
   const allExercises = (() => {
     const list: (Exercise & { sourceSession?: string; sectionCategory?: 'football' | 'fitness' | 'gk'; isCustom?: boolean })[] = [];
     const seenIds = new Set<string>();
 
-    const addEx = (ex: Exercise, source: string, sectionCat: 'football' | 'fitness' | 'gk', isCustom = false) => {
+    const addEx = (ex: Exercise, source: string, sectionCat: 'football' | 'fitness' | 'gk', isCustom = true) => {
       if (!ex || !ex.name) return;
       const uniqueKey = ex.id || `${ex.name}-${(ex.description || '').substring(0, 30)}`;
       if (seenIds.has(uniqueKey)) return;
@@ -153,39 +175,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       });
     };
 
-    // 1. Custom exercises from user library
+    // Only custom exercises saved by the user in their library
     customExercises.forEach(ex => {
       const cat = ex.isFitness ? 'fitness' : (ex.id.includes('gk') ? 'gk' : 'football');
       addEx(ex, 'Personal Library', cat, true);
-    });
-
-    // 2. Current Session Exercises
-    (currentSession.warmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
-    (currentSession.mainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
-    (currentSession.coolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Football)', 'football'));
-
-    (currentSession.fitnessWarmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
-    (currentSession.fitnessMainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
-    (currentSession.fitnessCoolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Fitness)', 'fitness'));
-
-    (currentSession.gkWarmUp?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
-    (currentSession.gkMainPart?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
-    (currentSession.gkCoolDown?.exercises || []).forEach(e => addEx(e, 'Current Session (Goalkeepers)', 'gk'));
-
-    // 3. Cloud Sessions Exercises
-    cloudSessions.forEach(cSess => {
-      const sessLabel = `Session #${cSess.sessionNumber || '1'}`;
-      (cSess.warmUp?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
-      (cSess.mainPart?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
-      (cSess.coolDown?.exercises || []).forEach(e => addEx(e, sessLabel, 'football'));
-
-      (cSess.fitnessWarmUp?.exercises || []).forEach(e => addEx(e, sessLabel, 'fitness'));
-      (cSess.fitnessMainPart?.exercises || []).forEach(e => addEx(e, sessLabel, 'fitness'));
-      (cSess.fitnessCoolDown?.exercises || []).forEach(e => addEx(e, sessLabel, 'fitness'));
-
-      (cSess.gkWarmUp?.exercises || []).forEach(e => addEx(e, sessLabel, 'gk'));
-      (cSess.gkMainPart?.exercises || []).forEach(e => addEx(e, sessLabel, 'gk'));
-      (cSess.gkCoolDown?.exercises || []).forEach(e => addEx(e, sessLabel, 'gk'));
     });
 
     return list;
