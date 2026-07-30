@@ -174,9 +174,9 @@ export const getDefaultSession = (): TrainingSession => {
     },
     squadRoster: [
       'Rimah', 'Rital', 'Lara', 'Batul', 'Sadeem', 'Alba', 
-      'Ghala', 'Auda', 'Lateen', 'Hedaya', 'Ghazal', 'Remas', 
-      'Mayar', 'Maya', 'Asma', 'Rasil', 'Rema', 'Sara', 
-      'Khulud', 'Ransy', 'Ratil'
+      'Ghala', 'Auda', 'Lateen', 'Leen', 'Hedaya', 'Ghazal', 'Remas', 
+      'Mayar', 'Maya', 'Asma', 'Rasil', 'Rema (GK)', 'Sara (GK)', 
+      'Khulud', 'Ransy (GK)', 'Ratil (GK)'
     ],
     attendance: [
       { playerName: 'Rimah', status: 'Attending' },
@@ -188,6 +188,7 @@ export const getDefaultSession = (): TrainingSession => {
       { playerName: 'Ghala', status: 'Attending' },
       { playerName: 'Auda', status: 'Attending' },
       { playerName: 'Lateen', status: 'Absent', absenceReason: 'Injury', notes: 'Ankle sprain' },
+      { playerName: 'Leen', status: 'Attending' },
       { playerName: 'Hedaya', status: 'Attending' },
       { playerName: 'Ghazal', status: 'Attending' },
       { playerName: 'Remas', status: 'Absent', absenceReason: 'Study', notes: 'Exams week' },
@@ -195,11 +196,11 @@ export const getDefaultSession = (): TrainingSession => {
       { playerName: 'Maya', status: 'Attending' },
       { playerName: 'Asma', status: 'Attending' },
       { playerName: 'Rasil', status: 'Attending' },
-      { playerName: 'Rema', status: 'Attending' },
-      { playerName: 'Sara', status: 'Attending' },
+      { playerName: 'Rema (GK)', status: 'Attending' },
+      { playerName: 'Sara (GK)', status: 'Attending' },
       { playerName: 'Khulud', status: 'Attending' },
-      { playerName: 'Ransy', status: 'Attending' },
-      { playerName: 'Ratil', status: 'Attending' }
+      { playerName: 'Ransy (GK)', status: 'Attending' },
+      { playerName: 'Ratil (GK)', status: 'Attending' }
     ],
     playerGroups: [
       {
@@ -214,14 +215,14 @@ export const getDefaultSession = (): TrainingSession => {
         groupNumber: 2,
         bibColor: '#eab308',
         name: 'Group 2',
-        players: 'Lateen, Hedaya, Ghazal, Remas, Mayar, Maya, Asma'
+        players: 'Lateen, Leen, Hedaya, Ghazal, Remas, Mayar, Maya, Asma'
       },
       {
         id: 'group-default-3',
         groupNumber: 3,
         bibColor: '#ef4444',
         name: 'Group 3',
-        players: 'Rasil, Rema, Sara, Khulud, Ransy, Ratil'
+        players: 'Rasil, Rema (GK), Sara (GK), Khulud, Ransy (GK), Ratil (GK)'
       }
     ],
     fitnessWarmUp: {

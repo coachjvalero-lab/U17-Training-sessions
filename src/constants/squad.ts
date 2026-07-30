@@ -8,6 +8,7 @@ export const DEFAULT_SQUAD_PLAYERS = [
   'Ghala',
   'Auda',
   'Lateen',
+  'Leen',
   'Hedaya',
   'Ghazal',
   'Remas',
@@ -15,11 +16,11 @@ export const DEFAULT_SQUAD_PLAYERS = [
   'Maya',
   'Asma',
   'Rasil',
-  'Rema',
-  'Sara',
+  'Rema (GK)',
+  'Sara (GK)',
   'Khulud',
-  'Ransy',
-  'Ratil'
+  'Ransy (GK)',
+  'Ratil (GK)'
 ];
 
 export interface ColorPreset {
