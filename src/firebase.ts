@@ -11,12 +11,6 @@ import {
   setLogLevel
 } from 'firebase/firestore';
 import { TrainingSession } from './types';
-import { 
-  isSupabaseConfigured, 
-  saveSessionToSupabase, 
-  deleteSessionFromSupabase, 
-  subscribeToSupabaseSessions 
-} from './supabase';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUbDCZivcYcg68Hja54tHl0oVC1sPVAgU",
@@ -76,17 +70,10 @@ export function isCloudQuotaExceeded(): boolean {
 }
 
 /**
- * Saves or updates a session in Cloud (Supabase if configured, otherwise Firestore).
+ * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
+ * If force is true, ignores temporary quota lockout and attempts the save directly.
  */
 export async function saveSessionToCloud(session: TrainingSession, force: boolean = false): Promise<number> {
-  if (isSupabaseConfigured()) {
-    try {
-      return await saveSessionToSupabase(session);
-    } catch (err) {
-      console.warn('Supabase save error, attempting Firebase fallback:', err);
-    }
-  }
-
   const saveTimestamp = Date.now();
 
   if (!force && isCloudQuotaExceeded()) {
@@ -123,17 +110,9 @@ export async function saveSessionToCloud(session: TrainingSession, force: boolea
 }
 
 /**
- * Deletes a session from Cloud (Supabase if configured, otherwise Firestore)
+ * Deletes a session from Firestore
  */
 export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    try {
-      await deleteSessionFromCloud(sessionId);
-    } catch (err) {
-      console.warn('Supabase delete error:', err);
-    }
-  }
-
   try {
     const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
     await deleteDoc(sessionRef);
@@ -144,7 +123,8 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
 }
 
 /**
- * Real-time listener for ALL sessions.
+ * Real-time listener for ALL sessions (unified).
+ * Reads use the read quota (50k/day), so we do NOT block reads even if writes were throttled.
  */
 export function subscribeToSessions(
   typeOrCallback: ('football' | 'fitness') | ((sessions: CloudTrainingSession[]) => void),
@@ -155,10 +135,6 @@ export function subscribeToSessions(
   
   if (!callback) {
     throw new Error('Callback function must be provided to subscribeToSessions');
-  }
-
-  if (isSupabaseConfigured()) {
-    return subscribeToSupabaseSessions(callback, onError);
   }
 
   const q = query(
@@ -179,4 +155,3 @@ export function subscribeToSessions(
     }
   });
 }
-

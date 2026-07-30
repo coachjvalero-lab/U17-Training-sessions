@@ -18,14 +18,11 @@ import {
   FileText,
   UserCheck,
   Link,
-  Globe,
-  Database
+  Globe
 } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
-import { SupabaseModal } from './SupabaseModal';
-import { isSupabaseConfigured } from '../supabase';
 
 interface SidebarProps {
   session: TrainingSession;
@@ -64,8 +61,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cloudSessionsOpen, setCloudSessionsOpen] = useState(true);
-  const [isSupabaseOpen, setIsSupabaseOpen] = useState(false);
-  const isSupabaseActive = isSupabaseConfigured();
 
   const handlePrint = () => {
     window.print();
@@ -288,24 +283,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center space-x-1">
             <button
               type="button"
-              onClick={() => setIsSupabaseOpen(true)}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer border text-[10px] font-bold flex items-center space-x-1 ${
-                isSupabaseActive 
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 hover:bg-emerald-500/30' 
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-              }`}
-              title="Configurar Supabase (Sustituto de Firebase)"
-            >
-              <Database className="w-3 h-3 text-emerald-400" />
-              <span className="hidden sm:inline">{isSupabaseActive ? 'Supabase' : 'DB'}</span>
-            </button>
-
-            <button
-              type="button"
               onClick={onSaveToCloud}
               disabled={isCloudSaving}
               className="p-1.5 bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 rounded-lg transition-all cursor-pointer border border-sky-400/30 text-[10px] font-bold flex items-center space-x-1"
-              title="Guardar sesión actual en la nube"
+              title="Save current session to Cloud Firestore"
             >
               {isCloudSaving ? (
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
@@ -468,13 +449,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       )}
-
-      {/* Supabase Integration Modal */}
-      <SupabaseModal 
-        isOpen={isSupabaseOpen} 
-        onClose={() => setIsSupabaseOpen(false)} 
-      />
     </>
   );
 };
-
