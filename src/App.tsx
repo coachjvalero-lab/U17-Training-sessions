@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
+import { normalizeSessionRoster } from './constants/squad';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
 import { PlayerGroupsSection } from './components/PlayerGroupsSection';
@@ -54,13 +55,13 @@ export default function App() {
             parsed.sessionNumber = '001';
           }
           const defaultTemplate = getDefaultSession();
-          return {
+          return normalizeSessionRoster({
             ...parsed,
             gkWarmUp: parsed.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
             gkMainPart: parsed.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
             gkCoolDown: parsed.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
             gkPlayerGroups: parsed.gkPlayerGroups || [],
-          };
+          });
         }
       } catch (e) {
         console.error('Failed to parse saved unified session:', e);
@@ -93,7 +94,7 @@ export default function App() {
     const defaultTemplate = getDefaultSession();
 
     // Merge them into one unified session
-    return {
+    return normalizeSessionRoster({
       ...fbSess,
       fitnessWarmUp: fbSess.fitnessWarmUp || fitSess.warmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
       fitnessMainPart: fbSess.fitnessMainPart || fitSess.mainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
@@ -103,7 +104,7 @@ export default function App() {
       gkMainPart: fbSess.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
       gkCoolDown: fbSess.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
       gkPlayerGroups: fbSess.gkPlayerGroups || [],
-    };
+    });
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -264,7 +265,7 @@ export default function App() {
 
               const defaultTemplate = getDefaultSession();
 
-              const unifiedSession: TrainingSession = {
+              const unifiedSession: TrainingSession = normalizeSessionRoster({
                 ...baseSession,
                 fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
                 fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
@@ -274,7 +275,7 @@ export default function App() {
                 gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
                 gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
                 gkPlayerGroups: baseSession.gkPlayerGroups || [],
-              };
+              });
 
               isRemoteUpdateRef.current = true;
               lastSavedJsonRef.current = JSON.stringify(unifiedSession);
@@ -561,7 +562,7 @@ export default function App() {
   const handleImportSession = (imported: TrainingSession) => {
     // Fill fitness and GK blocks if they are missing from raw JSON import
     const defaultTemplate = getDefaultSession();
-    const unifiedImport: TrainingSession = {
+    const unifiedImport: TrainingSession = normalizeSessionRoster({
       ...imported,
       fitnessWarmUp: imported.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
       fitnessMainPart: imported.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
@@ -571,7 +572,7 @@ export default function App() {
       gkMainPart: imported.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
       gkCoolDown: imported.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
       gkPlayerGroups: imported.gkPlayerGroups || [],
-    };
+    });
     
     setSession(unifiedImport);
     
@@ -632,10 +633,10 @@ export default function App() {
     if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for all section tabs.`)) {
       const activeLogo = getActiveLogo();
       const demo = getDefaultSession();
-      setSession({
+      setSession(normalizeSessionRoster({
         ...demo,
         teamLogo: activeLogo
-      });
+      }));
       setExpandedExercises({});
     }
   };
@@ -720,14 +721,14 @@ export default function App() {
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
 
-    const newSession: TrainingSession = {
+    const newSession: TrainingSession = normalizeSessionRoster({
       ...empty,
       id: newId,
       sessionNumber: newNumber,
       date: today,
       teamName: 'U17 Women Al Ula',
       teamLogo: activeLogo
-    };
+    });
 
     try {
       setIsCloudSaving(true);
@@ -753,7 +754,7 @@ export default function App() {
       const defaultTemplate = getDefaultSession();
       
       // Upgrade fitness and GK fields if missing from loaded old document
-      const unifiedSession: TrainingSession = {
+      const unifiedSession: TrainingSession = normalizeSessionRoster({
         ...baseSession,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
         fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
@@ -764,7 +765,7 @@ export default function App() {
         gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
         gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
         gkPlayerGroups: baseSession.gkPlayerGroups || [],
-      };
+      });
 
       if (unifiedSession.id && window.history.replaceState) {
         const url = new URL(window.location.href);

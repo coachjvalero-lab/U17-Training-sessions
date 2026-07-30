@@ -1,3 +1,5 @@
+import { TrainingSession, PlayerAttendance, PlayerGroup } from '../types';
+
 export const DEFAULT_SQUAD_PLAYERS = [
   'Rimah',
   'Rital',
@@ -147,4 +149,77 @@ export function getColorPreset(colorOrHex: string): ColorPreset {
   );
   if (match) return match;
   return GROUP_COLOR_PRESETS[0];
+}
+
+export function normalizeSessionRoster(sess: TrainingSession): TrainingSession {
+  if (!sess) return sess;
+
+  const renamePlayer = (name: string): string => {
+    if (!name) return name;
+    const trimmed = name.trim();
+    if (trimmed === 'Ransy' || trimmed.toLowerCase() === 'ransy') return 'Ransy (GK)';
+    if (trimmed === 'Ratil' || trimmed.toLowerCase() === 'ratil') return 'Ratil (GK)';
+    if (trimmed === 'Sara' || trimmed.toLowerCase() === 'sara') return 'Sara (GK)';
+    if (trimmed === 'Rema' || trimmed.toLowerCase() === 'rema') return 'Rema (GK)';
+    return name;
+  };
+
+  const currentRoster = Array.isArray(sess.squadRoster) && sess.squadRoster.length > 0
+    ? sess.squadRoster
+    : DEFAULT_SQUAD_PLAYERS;
+
+  let updatedRoster = currentRoster.map(renamePlayer);
+
+  const hasLeen = updatedRoster.some(p => p.trim().toLowerCase() === 'leen');
+  if (!hasLeen) {
+    const lateenIdx = updatedRoster.findIndex(p => p.trim().toLowerCase() === 'lateen');
+    if (lateenIdx !== -1) {
+      updatedRoster.splice(lateenIdx + 1, 0, 'Leen');
+    } else {
+      updatedRoster.push('Leen');
+    }
+  }
+
+  let currentAttendance = Array.isArray(sess.attendance) ? sess.attendance : [];
+  let updatedAttendance: PlayerAttendance[] = currentAttendance.map(a => ({
+    ...a,
+    playerName: renamePlayer(a.playerName)
+  }));
+
+  const hasLeenAtt = updatedAttendance.some(a => a.playerName.trim().toLowerCase() === 'leen');
+  if (!hasLeenAtt) {
+    const lateenIdx = updatedAttendance.findIndex(a => a.playerName.trim().toLowerCase() === 'lateen');
+    const leenObj: PlayerAttendance = { playerName: 'Leen', status: 'Attending' };
+    if (lateenIdx !== -1) {
+      updatedAttendance.splice(lateenIdx + 1, 0, leenObj);
+    } else {
+      updatedAttendance.push(leenObj);
+    }
+  }
+
+  const replaceTextNames = (text: string): string => {
+    if (!text) return text;
+    return text
+      .replace(/\bRema\b(?!\s*\(GK\))/g, 'Rema (GK)')
+      .replace(/\bSara\b(?!\s*\(GK\))/g, 'Sara (GK)')
+      .replace(/\bRansy\b(?!\s*\(GK\))/g, 'Ransy (GK)')
+      .replace(/\bRatil\b(?!\s*\(GK\))/g, 'Ratil (GK)');
+  };
+
+  const normalizeGroups = (groups?: PlayerGroup[]): PlayerGroup[] => {
+    if (!groups) return [];
+    return groups.map(g => ({
+      ...g,
+      players: replaceTextNames(g.players)
+    }));
+  };
+
+  return {
+    ...sess,
+    squadRoster: updatedRoster,
+    attendance: updatedAttendance,
+    playerGroups: normalizeGroups(sess.playerGroups),
+    fitnessPlayerGroups: normalizeGroups(sess.fitnessPlayerGroups),
+    gkPlayerGroups: normalizeGroups(sess.gkPlayerGroups),
+  };
 }
