@@ -1139,6 +1139,8 @@ export default function App() {
         videoSessions={videoSessions}
         currentUser={currentUser}
         onLogout={logoutUser}
+        currentLogo={session.teamLogo || getActiveLogo()}
+        onUpdateLogo={(newLogo) => handleUpdateSession({ teamLogo: newLogo })}
       />
     );
   }
@@ -1165,6 +1167,7 @@ export default function App() {
         onCopyShareLink={handleCopyShareLink}
         currentUser={currentUser}
         onLogout={logoutUser}
+        onUpdateSession={handleUpdateSession}
       />
 
       {/* Main Content Workspace Area */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { 
   Layers, 
@@ -22,10 +22,17 @@ import {
   ChevronRight,
   ClipboardList,
   Flame,
-  Award
+  Award,
+  Upload,
+  Camera,
+  X,
+  RotateCcw,
+  Link,
+  Check
 } from 'lucide-react';
 import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { processUploadedImageFile } from '../utils/heic';
 
 interface PortalHubProps {
   onSelectSection: (section: PortalSection) => void;
@@ -37,6 +44,8 @@ interface PortalHubProps {
   videoSessions?: VideoAnalysis[];
   currentUser?: User | null;
   onLogout?: () => void;
+  currentLogo?: string;
+  onUpdateLogo?: (newLogo: string) => void;
 }
 
 export const PortalHub: React.FC<PortalHubProps> = ({
@@ -48,11 +57,63 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   physioRecords = [],
   videoSessions = [],
   currentUser,
-  onLogout
+  onLogout,
+  currentLogo,
+  onUpdateLogo
 }) => {
+  const [logoUrl, setLogoUrl] = useState<string>(() => {
+    if (currentLogo) return currentLogo;
+    try {
+      return localStorage.getItem('u17_uploaded_team_logo') || OFFICIAL_ALULA_LOGO_DATA_URL;
+    } catch (e) {
+      return OFFICIAL_ALULA_LOGO_DATA_URL;
+    }
+  });
+
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [logoSuccessMessage, setLogoSuccessMessage] = useState('');
+
   const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Fit / Discharged').length;
   const activePlayersCount = squadPlayers.length || squadCount;
   const videoCount = videoSessions.length;
+
+  const handleApplyLogo = (newLogo: string) => {
+    setLogoUrl(newLogo);
+    try {
+      localStorage.setItem('u17_uploaded_team_logo', newLogo);
+    } catch (e) {}
+    if (onUpdateLogo) {
+      onUpdateLogo(newLogo);
+    }
+    setLogoSuccessMessage('¡Logo actualizado con éxito!');
+    setTimeout(() => {
+      setLogoSuccessMessage('');
+      setIsLogoModalOpen(false);
+    }, 1000);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await processUploadedImageFile(file);
+      handleApplyLogo(dataUrl);
+    } catch (err) {
+      alert('Error al procesar la imagen seleccionada. Por favor intenta con otra.');
+    }
+  };
+
+  const handleUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imageUrlInput.trim()) return;
+    handleApplyLogo(imageUrlInput.trim());
+    setImageUrlInput('');
+  };
+
+  const handleResetToDefaultLogo = () => {
+    handleApplyLogo(OFFICIAL_ALULA_LOGO_DATA_URL);
+  };
 
   const modules: {
     id: PortalSection;
@@ -184,12 +245,22 @@ export const PortalHub: React.FC<PortalHubProps> = ({
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           
           <div className="flex items-center space-x-5">
-            <div className="w-16 h-16 rounded-2xl bg-[#002142] p-2.5 flex items-center justify-center shadow-md shrink-0 border border-[#001830]">
-              <img 
-                src={OFFICIAL_ALULA_LOGO_DATA_URL} 
-                alt="Al Ula FC Logo" 
-                className="w-full h-full object-contain"
-              />
+            <div className="relative group">
+              <div className="w-16 h-16 rounded-2xl bg-[#002142] p-2 flex items-center justify-center shadow-md shrink-0 border border-[#001830] overflow-hidden">
+                <img 
+                  src={logoUrl} 
+                  alt="Al Ula FC Logo" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLogoModalOpen(true)}
+                className="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-full shadow-lg border border-white/20 transition-transform hover:scale-110 cursor-pointer"
+                title="Cambiar Logo del Club"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
             </div>
             <div>
               <div className="flex items-center space-x-2.5">
@@ -199,6 +270,14 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                 <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                   Women U17
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setIsLogoModalOpen(true)}
+                  className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-300 hover:border-emerald-300 transition-colors cursor-pointer"
+                >
+                  <Upload className="w-3 h-3 text-emerald-600" />
+                  <span>Cambiar Logo</span>
+                </button>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">
                 Technical Portal • Coaching, Physical, Medical & Video Department
@@ -361,6 +440,114 @@ export const PortalHub: React.FC<PortalHubProps> = ({
             Technical Operations • Authorized Coaching Personnel Only
           </div>
         </div>
+
+        {/* Logo Customization Modal */}
+        {isLogoModalOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden p-6 space-y-5 relative">
+              
+              <button
+                type="button"
+                onClick={() => setIsLogoModalOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Personalizar Logo del Club
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Sube una nueva imagen o pega una URL para actualizar el escudo oficial en todas las pantallas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Logo Preview */}
+              <div className="bg-slate-900 p-4 rounded-xl flex items-center justify-center border border-slate-800">
+                <div className="w-20 h-20 bg-[#002142] p-2.5 rounded-2xl flex items-center justify-center border border-slate-700 shadow-lg">
+                  <img src={logoUrl} alt="Logo preview" className="w-full h-full object-contain" />
+                </div>
+              </div>
+
+              {logoSuccessMessage && (
+                <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold px-3 py-2 rounded-xl flex items-center space-x-2">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>{logoSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* File Upload Option */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Opción 1: Subir Archivo (PNG, JPG, HEIC, SVG)
+                </label>
+                <label className="flex items-center justify-center space-x-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 border border-dashed border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl transition-colors cursor-pointer">
+                  <Upload className="w-4 h-4 text-emerald-600" />
+                  <span>Seleccionar imagen de tu equipo</span>
+                  <input
+                    type="file"
+                    accept="image/*,.heic,.heif"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* URL Input Option */}
+              <form onSubmit={handleUrlSubmit} className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Opción 2: Pegar enlace URL de Imagen
+                </label>
+                <div className="flex space-x-2">
+                  <div className="relative flex-1">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Link className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="url"
+                      value={imageUrlInput}
+                      onChange={(e) => setImageUrlInput(e.target.value)}
+                      placeholder="https://ejemplo.com/escudo.png"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
+                  >
+                    Guardar URL
+                  </button>
+                </div>
+              </form>
+
+              {/* Reset Option */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleResetToDefaultLogo}
+                  className="inline-flex items-center space-x-1.5 text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restablecer Logo Oficial Al Ula FC</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsLogoModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

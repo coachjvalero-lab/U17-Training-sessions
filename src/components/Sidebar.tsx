@@ -49,6 +49,7 @@ interface SidebarProps {
   totalLibraryExercisesCount?: number;
   currentUser?: User | null;
   onLogout?: () => void;
+  onUpdateSession?: (fields: Partial<TrainingSession>) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -68,13 +69,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCopyShareLink,
   totalLibraryExercisesCount = 0,
   currentUser,
-  onLogout
+  onLogout,
+  onUpdateSession
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cloudSessionsOpen, setCloudSessionsOpen] = useState(true);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { processUploadedImageFile } = await import('../utils/heic');
+      const dataUrl = await processUploadedImageFile(file);
+      try {
+        localStorage.setItem('u17_uploaded_team_logo', dataUrl);
+      } catch (err) {}
+      if (onUpdateSession) {
+        onUpdateSession({ teamLogo: dataUrl });
+      }
+    } catch (err) {
+      alert('Error procesando imagen del logo.');
+    }
   };
 
   const navItems: {
@@ -157,7 +177,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand & Autosave Header */}
       <div className="flex items-center justify-between pb-4 border-b border-[#5ea4c5]/20">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-[#001020] border border-[#a79078]/40 flex items-center justify-center p-1 shadow-md shrink-0">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*,.heic,.heif"
+            onChange={handleLogoChange}
+            className="hidden"
+          />
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-10 h-10 rounded-xl bg-[#001020] border border-[#a79078]/40 hover:border-emerald-400 flex items-center justify-center p-1 shadow-md shrink-0 cursor-pointer group relative transition-colors"
+            title="Haz clic para cambiar el logo"
+          >
             <img 
               src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
               alt="Al Ula SC" 
