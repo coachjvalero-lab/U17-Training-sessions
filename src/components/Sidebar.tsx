@@ -18,16 +18,23 @@ import {
   FileText,
   UserCheck,
   Link,
-  Globe
+  Globe,
+  LogOut,
+  User as UserIcon,
+  LayoutGrid,
+  Users,
+  Stethoscope,
+  Video
 } from 'lucide-react';
-import { TrainingSession } from '../types';
+import { User } from 'firebase/auth';
+import { TrainingSession, PortalSection } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 
 interface SidebarProps {
   session: TrainingSession;
-  activeSection: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance';
-  setActiveSection: (section: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance') => void;
+  activeSection: PortalSection;
+  setActiveSection: (section: PortalSection) => void;
   onClearSession: () => void;
   onNewSession: () => void;
   isSaving: boolean;
@@ -40,6 +47,8 @@ interface SidebarProps {
   copiedLink: boolean;
   onCopyShareLink: () => void;
   totalLibraryExercisesCount?: number;
+  currentUser?: User | null;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -57,7 +66,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteCloudSession,
   copiedLink,
   onCopyShareLink,
-  totalLibraryExercisesCount = 0
+  totalLibraryExercisesCount = 0,
+  currentUser,
+  onLogout
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cloudSessionsOpen, setCloudSessionsOpen] = useState(true);
@@ -67,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const navItems: {
-    id: 'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance';
+    id: PortalSection;
     label: string;
     sublabel: string;
     icon: any;
@@ -96,11 +107,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
       color: 'bg-sky-500/20 text-sky-400 border-sky-500/30'
     },
     {
+      id: 'squad',
+      label: 'Squad Roster',
+      sublabel: 'Plantilla & Players',
+      icon: Users,
+      color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+    },
+    {
       id: 'attendance',
-      label: 'Attendance & Roster',
+      label: 'Attendance',
       sublabel: 'Player Absence Tracking',
       icon: UserCheck,
       color: 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+    },
+    {
+      id: 'physio',
+      label: 'Physiotherapist',
+      sublabel: 'Medical & Injuries',
+      icon: Stethoscope,
+      color: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+    },
+    {
+      id: 'video',
+      label: 'Video Analysis',
+      sublabel: 'Tactical Clip Review',
+      icon: Video,
+      color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
     },
     {
       id: 'exercises',
@@ -115,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Planification',
       sublabel: 'Game Moments & Volume',
       icon: BarChart3,
-      color: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+      color: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
     }
   ];
 
@@ -155,12 +187,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Main Navigation Section Tabs (Scrollable & Compact) */}
+      {/* Logged in user profile & Sign Out button */}
+      {currentUser && (
+        <div className="flex items-center justify-between bg-[#001428] border border-emerald-500/30 rounded-2xl p-2.5 shadow-sm">
+          <div className="flex items-center space-x-2 min-w-0 pr-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
+              <UserIcon className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-[11px] font-bold text-slate-100 truncate capitalize">
+                {currentUser.email ? currentUser.email.split('@')[0] : 'admin'}
+              </span>
+              <span className="inline-block bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
+                Admin
+              </span>
+            </div>
+          </div>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="p-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 hover:text-white rounded-xl transition-all border border-rose-500/30 shrink-0"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Navigation Section Tabs */}
       <div className="space-y-1">
-        <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
-          Navigation
+        {/* Navigation Portal Hub Home Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSection('hub');
+            setMobileOpen(false);
+          }}
+          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer text-left border ${
+            activeSection === 'hub'
+              ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold shadow-lg shadow-emerald-950/50'
+              : 'bg-[#001830]/80 hover:bg-[#002447] border-slate-700/50 text-slate-200 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center space-x-2.5">
+            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+              <LayoutGrid className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">Portal Navigation Hub</div>
+              <div className="text-[9px] text-slate-400 font-medium">All Modules Overview</div>
+            </div>
+          </div>
+          <span className="text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+            Hub
+          </span>
+        </button>
+
+        <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 pt-2 mb-1">
+          Modules Navigation
         </p>
-        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+        <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar pr-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;

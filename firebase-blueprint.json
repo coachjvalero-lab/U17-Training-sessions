@@ -1,0 +1,16 @@
+{
+  "entities": {
+    "sessions": {
+      "title": "Training Sessions",
+      "description": "Collection storing training sessions for U17 Women Al Ula team.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "sessionNumber": { "type": "string" },
+        "teamName": { "type": "string" }
+      },
+      "required": ["id", "date"]
+    }
+  }
+}

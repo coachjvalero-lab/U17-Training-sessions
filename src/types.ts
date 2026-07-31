@@ -15,6 +15,62 @@ export type GameMoment =
 
 export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Unknown';
 
+export interface SquadPlayer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  number?: string | number;
+  position: 'GK' | 'CB' | 'LB' | 'RB' | 'CM' | 'CAM' | 'CDM' | 'RW' | 'LW' | 'ST' | 'UTIL';
+  status: 'Active' | 'Injured' | 'Recovering' | 'Absent';
+  notes?: string;
+  joinedDate?: string;
+  photoUrl?: string;
+  age?: number;
+  nationality?: string;
+  preferredFoot?: 'Right' | 'Left' | 'Both';
+  heightCm?: number;
+  weightKg?: number;
+}
+
+export interface PhysioRecord {
+  id: string;
+  playerId: string;
+  playerName: string;
+  injuryDate: string;
+  injuryType: string;
+  severity: 'Mild' | 'Moderate' | 'Severe';
+  status: 'Active Treatment' | 'Rehab / Field Work' | 'Cleared for Training' | 'Closed';
+  treatmentNotes: string;
+  estimatedReturnDate?: string;
+  physioName?: string;
+  updatedAt: string;
+}
+
+export interface VideoAnalysis {
+  id: string;
+  title: string;
+  matchOrSessionDate: string;
+  opponentOrTopic: string;
+  videoUrl: string;
+  gameMoment: GameMoment;
+  tags: string[];
+  keyTimestamps: { time: string; note: string }[];
+  summary: string;
+  createdAt: string;
+}
+
+export type PortalSection = 
+  | 'hub' 
+  | 'football' 
+  | 'fitness' 
+  | 'gk' 
+  | 'squad' 
+  | 'attendance' 
+  | 'physio' 
+  | 'video' 
+  | 'exercises' 
+  | 'planning';
+
 export interface PlayerAttendance {
   playerName: string;
   status: 'Attending' | 'Absent' | 'Gym';

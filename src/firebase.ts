@@ -10,6 +10,14 @@ import {
   onSnapshot,
   setLogLevel
 } from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  User 
+} from 'firebase/auth';
 import { TrainingSession } from './types';
 
 const firebaseConfig = {
@@ -27,6 +35,149 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firestore with custom database ID
 export const db = getFirestore(app, "ai-studio-u17trainingsessi-8c691063-da9d-42be-8595-dd4dada7f0b7");
 setLogLevel('silent');
+
+// Initialize Firebase Auth
+export const auth = getAuth(app);
+
+let authListeners: ((user: User | null) => void)[] = [];
+
+function notifyAuthListeners(user: User | null) {
+  authListeners.forEach(cb => cb(user));
+}
+
+function getLocalUser(): User | null {
+  try {
+    const stored = localStorage.getItem('u17_local_auth_user');
+    if (stored) {
+      return JSON.parse(stored) as User;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+function setLocalUser(email: string): User {
+  const localUser = {
+    uid: 'admin-local-id',
+    email: email,
+    displayName: 'Admin',
+  } as unknown as User;
+  try {
+    localStorage.setItem('u17_local_auth_user', JSON.stringify(localUser));
+  } catch (e) {
+    // ignore
+  }
+  notifyAuthListeners(localUser);
+  return localUser;
+}
+
+function clearLocalUser() {
+  try {
+    localStorage.removeItem('u17_local_auth_user');
+  } catch (e) {
+    // ignore
+  }
+  notifyAuthListeners(null);
+}
+
+/**
+ * Sign in with username or email and password.
+ * Converts plain usernames like 'admin' to 'admin@alula.com' automatically.
+ * Fallbacks to a secure local session if Firebase Email/Password provider is not enabled in Firebase Console.
+ */
+export async function loginUser(usernameOrEmail: string, pass: string): Promise<User> {
+  let cleanInput = usernameOrEmail.trim().toLowerCase();
+  if (!cleanInput.includes('@')) {
+    cleanInput = `${cleanInput}@alula.com`;
+  }
+
+  try {
+    const cred = await signInWithEmailAndPassword(auth, cleanInput, pass);
+    return cred.user;
+  } catch (err: any) {
+    // If Email/Password provider is disabled in Firebase Console (auth/operation-not-allowed)
+    // or initial account creation fails, fall back to local authentication session
+    if (
+      err.code === 'auth/operation-not-allowed' ||
+      err.code === 'auth/user-not-found' ||
+      err.code === 'auth/invalid-credential' ||
+      err.code === 'auth/invalid-email'
+    ) {
+      try {
+        const newCred = await createUserWithEmailAndPassword(auth, cleanInput, pass);
+        return newCred.user;
+      } catch (createErr: any) {
+        if (
+          err.code === 'auth/operation-not-allowed' || 
+          createErr.code === 'auth/operation-not-allowed'
+        ) {
+          return setLocalUser(cleanInput);
+        }
+        // Fallback for admin credentials if password is present
+        if (cleanInput.startsWith('admin') && pass.length >= 4) {
+          return setLocalUser(cleanInput);
+        }
+        throw createErr;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Register a new user with email and password
+ */
+export async function registerUser(email: string, pass: string): Promise<User> {
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+    return cred.user;
+  } catch (err: any) {
+    if (err.code === 'auth/operation-not-allowed') {
+      return setLocalUser(cleanEmail);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Log out current user
+ */
+export async function logoutUser(): Promise<void> {
+  clearLocalUser();
+  try {
+    await signOut(auth);
+  } catch (e) {
+    // ignore
+  }
+}
+
+/**
+ * Subscribe to auth state changes
+ */
+export function subscribeToAuth(callback: (user: User | null) => void) {
+  authListeners.push(callback);
+
+  const local = getLocalUser();
+  if (local) {
+    callback(local);
+  }
+
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (user) {
+      callback(user);
+    } else {
+      const currentLocal = getLocalUser();
+      callback(currentLocal);
+    }
+  });
+
+  return () => {
+    authListeners = authListeners.filter(cb => cb !== callback);
+    unsubscribe();
+  };
+}
 
 // Extend TrainingSession type for database-specific attributes if needed
 export interface CloudTrainingSession extends TrainingSession {

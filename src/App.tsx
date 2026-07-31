@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { User } from 'firebase/auth';
 import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
-import { normalizeSessionRoster } from './constants/squad';
+import { normalizeSessionRoster, DEFAULT_DETAILED_SQUAD } from './constants/squad';
 import { HeaderSection } from './components/HeaderSection';
 import { ExerciseBlock } from './components/ExerciseBlock';
 import { PlayerGroupsSection } from './components/PlayerGroupsSection';
@@ -10,11 +11,28 @@ import { ExercisesLibrary } from './components/ExercisesLibrary';
 import { PlanificationSection } from './components/PlanificationSection';
 import { AttendanceSection } from './components/AttendanceSection';
 import { SessionAttendanceTracker } from './components/SessionAttendanceTracker';
-import { TrainingSession, Exercise, PlayerGroup, TrainingBlock, PlayerAttendance } from './types';
+import { LoginPage } from './components/LoginPage';
+import { PortalHub } from './components/PortalHub';
+import { SquadRosterSection } from './components/SquadRosterSection';
+import { PhysiotherapySection } from './components/PhysiotherapySection';
+import { VideoAnalysisSection } from './components/VideoAnalysisSection';
+import { 
+  TrainingSession, 
+  Exercise, 
+  PlayerGroup, 
+  TrainingBlock, 
+  PlayerAttendance, 
+  PortalSection,
+  SquadPlayer,
+  PhysioRecord,
+  VideoAnalysis 
+} from './types';
 import { 
   saveSessionToCloud, 
   deleteSessionFromCloud, 
   subscribeToSessions, 
+  subscribeToAuth,
+  logoutUser,
   isCloudQuotaExceeded,
   markQuotaExceeded,
   clearQuotaExceeded,
@@ -35,11 +53,80 @@ import {
   Share2,
   Check,
   Link,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 
 export default function App() {
-  const [activeSection, setActiveSection] = useState<'football' | 'fitness' | 'gk' | 'exercises' | 'planning' | 'attendance'>('football');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
+  const [activeSection, setActiveSection] = useState<PortalSection>('hub');
+
+  // Squad Players ("Plantilla")
+  const [squadPlayers, setSquadPlayers] = useState<SquadPlayer[]>(() => {
+    try {
+      const saved = localStorage.getItem('u17_squad_players');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_DETAILED_SQUAD;
+  });
+
+  // Physiotherapy Records
+  const [physioRecords, setPhysioRecords] = useState<PhysioRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('u17_physio_records');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'physio-demo-1',
+        playerId: 'p9',
+        playerName: 'Lateen Al-Sulami',
+        injuryDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
+        injuryType: 'Ankle Sprain Grade II',
+        severity: 'Moderate',
+        status: 'Rehab / Field Work',
+        treatmentNotes: 'Completed ice protocol and light straight-line running. Progressing to ball work.',
+        estimatedReturnDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
+        physioName: 'Dr. Sarah (Physio)',
+        updatedAt: new Date().toISOString().split('T')[0]
+      }
+    ];
+  });
+
+  // Video Analysis Sessions
+  const [videoSessions, setVideoSessions] = useState<VideoAnalysis[]>(() => {
+    try {
+      const saved = localStorage.getItem('u17_video_sessions');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'video-demo-1',
+        title: 'Tactical Build-Up Analysis',
+        matchOrSessionDate: new Date().toISOString().split('T')[0],
+        opponentOrTopic: 'vs Al-Ahli Pressing Block',
+        videoUrl: 'https://youtube.com',
+        gameMoment: 'Attack',
+        tags: ['BuildUp', 'PressingTrigger', '3v2Overload'],
+        keyTimestamps: [
+          { time: '04:12', note: 'Central defender drops deep to create passing angle' },
+          { time: '18:45', note: 'Winger inward cut creates central channel space' }
+        ],
+        summary: 'Review of positional distance between midfield pivots and fullbacks when building out under high press.',
+        createdAt: new Date().toISOString().split('T')[0]
+      }
+    ];
+  });
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth((user) => {
+      setCurrentUser(user);
+      setIsAuthInitializing(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Load and merge into a single unified session
   const [session, setSession] = useState<TrainingSession>(() => {
@@ -545,6 +632,37 @@ export default function App() {
     }));
   };
 
+  const handleUpdateSquadPlayers = (updated: SquadPlayer[]) => {
+    setSquadPlayers(updated);
+    try {
+      localStorage.setItem('u17_squad_players', JSON.stringify(updated));
+    } catch (e) {}
+
+    const formattedRoster = updated.map(p => 
+      p.position === 'GK' ? `${p.firstName} (GK)` : `${p.firstName} ${p.lastName}`
+    );
+    handleUpdateRoster(formattedRoster);
+  };
+
+  const handleUpdatePhysioRecords = (records: PhysioRecord[]) => {
+    setPhysioRecords(records);
+    try {
+      localStorage.setItem('u17_physio_records', JSON.stringify(records));
+    } catch (e) {}
+  };
+
+  const handleUpdateSquadStatusFromPhysio = (playerId: string, newStatus: SquadPlayer['status']) => {
+    const updated = squadPlayers.map(p => p.id === playerId ? { ...p, status: newStatus } : p);
+    handleUpdateSquadPlayers(updated);
+  };
+
+  const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
+    setVideoSessions(sessionsList);
+    try {
+      localStorage.setItem('u17_video_sessions', JSON.stringify(sessionsList));
+    } catch (e) {}
+  };
+
   const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
     setSession(prev => ({
       ...prev,
@@ -992,6 +1110,39 @@ export default function App() {
     setExpandedExercises(nextExpanded);
   };
 
+  // Auth Guard: Show loading indicator or Login Page if unauthenticated
+  if (isAuthInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        <div className="flex flex-col items-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+          <span className="text-sm font-bold text-slate-300">Loading U17 Portal...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPage onSuccess={() => {}} />;
+  }
+
+  // Standalone Portal Navigation Hub View (No sidebar, clean light layout)
+  if (activeSection === 'hub') {
+    return (
+      <PortalHub
+        onSelectSection={setActiveSection}
+        squadCount={squadPlayers.length}
+        activeSessionDate={session.date}
+        totalExercisesCount={libraryCount}
+        squadPlayers={squadPlayers}
+        physioRecords={physioRecords}
+        videoSessions={videoSessions}
+        currentUser={currentUser}
+        onLogout={logoutUser}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
       
@@ -1012,11 +1163,30 @@ export default function App() {
         onDeleteCloudSession={handleDeleteCloudSession}
         copiedLink={copiedLink}
         onCopyShareLink={handleCopyShareLink}
+        currentUser={currentUser}
+        onLogout={logoutUser}
       />
 
       {/* Main Content Workspace Area */}
       <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
-        {activeSection === 'planning' ? (
+        {activeSection === 'squad' ? (
+          <SquadRosterSection
+            players={squadPlayers}
+            onUpdatePlayers={handleUpdateSquadPlayers}
+          />
+        ) : activeSection === 'physio' ? (
+          <PhysiotherapySection
+            records={physioRecords}
+            squadPlayers={squadPlayers}
+            onUpdateRecords={handleUpdatePhysioRecords}
+            onUpdateSquadPlayerStatus={handleUpdateSquadStatusFromPhysio}
+          />
+        ) : activeSection === 'video' ? (
+          <VideoAnalysisSection
+            sessions={videoSessions}
+            onUpdateSessions={handleUpdateVideoSessions}
+          />
+        ) : activeSection === 'planning' ? (
           <PlanificationSection
             session={session}
             cloudSessions={cloudSessions}
