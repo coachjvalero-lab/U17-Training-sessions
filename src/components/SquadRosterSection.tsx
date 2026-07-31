@@ -22,9 +22,14 @@ import {
   Camera,
   Globe,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Upload,
+  Link,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { SquadPlayer } from '../types';
+import { processUploadedImageFile } from '../utils/heic';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -57,6 +62,61 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   // Modal State for Adding/Editing player
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<SquadPlayer | null>(null);
+
+  // Quick Photo Edit Modal State
+  const [quickPhotoPlayer, setQuickPhotoPlayer] = useState<SquadPlayer | null>(null);
+  const [quickPhotoUrl, setQuickPhotoUrl] = useState('');
+  const [quickPhotoSuccess, setQuickPhotoSuccess] = useState('');
+
+  // Batch Photos Editor Modal State
+  const [isBatchPhotosModalOpen, setIsBatchPhotosModalOpen] = useState(false);
+  const [batchPhotoInputs, setBatchPhotoInputs] = useState<Record<string, string>>({});
+
+  const handleOpenQuickPhoto = (player: SquadPlayer) => {
+    setQuickPhotoPlayer(player);
+    setQuickPhotoUrl(player.photoUrl || '');
+    setQuickPhotoSuccess('');
+  };
+
+  const handleSaveQuickPhoto = (newUrl: string) => {
+    if (!quickPhotoPlayer) return;
+    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: newUrl } : p);
+    onUpdatePlayers(updated);
+    setQuickPhotoSuccess('Photo updated successfully!');
+    setTimeout(() => {
+      setQuickPhotoSuccess('');
+      setQuickPhotoPlayer(null);
+    }, 800);
+  };
+
+  const handleQuickPhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await processUploadedImageFile(file);
+      handleSaveQuickPhoto(dataUrl);
+    } catch (err) {
+      alert('Error processing photo file. Please try another image.');
+    }
+  };
+
+  const handleOpenBatchPhotos = () => {
+    const initialMap: Record<string, string> = {};
+    players.forEach(p => {
+      initialMap[p.id] = p.photoUrl || '';
+    });
+    setBatchPhotoInputs(initialMap);
+    setIsBatchPhotosModalOpen(true);
+  };
+
+  const handleSaveBatchPhotos = () => {
+    const updated = players.map(p => ({
+      ...p,
+      photoUrl: batchPhotoInputs[p.id] || p.photoUrl
+    }));
+    onUpdatePlayers(updated);
+    setIsBatchPhotosModalOpen(false);
+  };
 
   const [formData, setFormData] = useState<{
     firstName: string;
@@ -295,6 +355,16 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
           <button
             type="button"
+            onClick={handleOpenBatchPhotos}
+            className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
+            title="Import or update player photo URLs in batch"
+          >
+            <Camera className="w-4 h-4 text-emerald-600" />
+            <span>Import / Batch Photos</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleOpenAddModal}
             className="px-4 py-2.5 bg-[#002142] hover:bg-[#001830] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-slate-900/10 flex items-center space-x-2 shrink-0 cursor-pointer"
           >
@@ -383,7 +453,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
                   {/* Player Avatar & Name Block */}
                   <div className="flex flex-col items-center text-center space-y-2.5 my-2">
-                    <div className="relative">
+                    <div className="relative group/photo">
                       <img
                         src={player.photoUrl || AVATAR_PRESETS[0]}
                         alt={`${player.firstName} ${player.lastName}`}
@@ -393,6 +463,14 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                           (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
                         }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQuickPhoto(player)}
+                        className="absolute -top-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
+                        title="Change player photo URL / image"
+                      >
+                        <Camera className="w-3 h-3" />
+                      </button>
                       <div className="absolute -bottom-2 inset-x-0 flex justify-center">
                         {getPositionBadge(player.position)}
                       </div>
@@ -502,11 +580,16 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-900">
                         <div className="flex items-center space-x-3">
-                          <img
-                            src={player.photoUrl || AVATAR_PRESETS[0]}
-                            alt={player.firstName}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0"
-                          />
+                          <div className="relative group/tblphoto cursor-pointer" onClick={() => handleOpenQuickPhoto(player)} title="Click to change player photo">
+                            <img
+                              src={player.photoUrl || AVATAR_PRESETS[0]}
+                              alt={player.firstName}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0 group-hover/tblphoto:border-emerald-500 transition-colors"
+                            />
+                            <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover/tblphoto:opacity-100 transition-opacity">
+                              <Camera className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
                           <span>{player.firstName} {player.lastName}</span>
                         </div>
                       </td>
@@ -819,6 +902,243 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SINGLE PLAYER QUICK PHOTO UPDATE MODAL */}
+      {quickPhotoPlayer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#002142]">
+                    Update Photo: {quickPhotoPlayer.firstName} {quickPhotoPlayer.lastName}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Upload image file or paste URL from Iterpro / Web
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickPhotoPlayer(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {quickPhotoSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{quickPhotoSuccess}</span>
+              </div>
+            )}
+
+            {/* Current Preview */}
+            <div className="flex flex-col items-center justify-center py-2 space-y-2">
+              <img
+                src={quickPhotoUrl || AVATAR_PRESETS[0]}
+                alt="Preview"
+                className="w-24 h-24 rounded-2xl object-cover border-4 border-slate-100 shadow-md bg-slate-100"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
+                }}
+              />
+              <span className="text-[11px] font-mono text-slate-400 font-bold uppercase">
+                #{quickPhotoPlayer.number || '0'} • {quickPhotoPlayer.position}
+              </span>
+            </div>
+
+            {/* Upload File Option */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Option 1: Upload Image File (PNG, JPG, HEIC)
+              </label>
+              <label className="flex items-center justify-center space-x-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 border border-dashed border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl transition-colors cursor-pointer">
+                <Upload className="w-4 h-4 text-emerald-600" />
+                <span>Select image file for {quickPhotoPlayer.firstName}</span>
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  onChange={handleQuickPhotoFileUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* URL Input Option */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Option 2: Paste Image URL Link
+              </label>
+              <div className="flex space-x-2">
+                <div className="relative flex-1">
+                  <Link className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="url"
+                    value={quickPhotoUrl}
+                    onChange={(e) => setQuickPhotoUrl(e.target.value)}
+                    placeholder="https://app.iterpro.com/player-photo.jpg"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveQuickPhoto(quickPhotoUrl)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
+                >
+                  Save URL
+                </button>
+              </div>
+            </div>
+
+            {/* Presets Option */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Option 3: Quick Preset Avatars
+              </label>
+              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
+                {AVATAR_PRESETS.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setQuickPhotoUrl(url);
+                      handleSaveQuickPhoto(url);
+                    }}
+                    className="w-10 h-10 rounded-xl border-2 border-slate-200 overflow-hidden shrink-0 hover:border-emerald-500 transition-transform hover:scale-105 cursor-pointer"
+                  >
+                    <img src={url} alt={`Preset ${idx}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setQuickPhotoPlayer(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH PHOTOS EDITOR MODAL */}
+      {isBatchPhotosModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-fadeIn max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#002142]">
+                    Batch Squad Photo Manager & Import
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Paste photo URLs or assign images for all {players.length} squad players in one place.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBatchPhotosModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Players Photo List */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {players.map((p) => (
+                <div key={p.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
+                  <img
+                    src={batchPhotoInputs[p.id] || p.photoUrl || AVATAR_PRESETS[0]}
+                    alt={p.firstName}
+                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-200"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
+                    }}
+                  />
+
+                  <div className="w-36 shrink-0">
+                    <h4 className="text-xs font-extrabold text-[#002142]">
+                      #{p.number || '-'} {p.firstName} {p.lastName}
+                    </h4>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
+                      {p.position} • {p.status}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 relative">
+                    <input
+                      type="url"
+                      value={batchPhotoInputs[p.id] || ''}
+                      onChange={(e) => setBatchPhotoInputs({ ...batchPhotoInputs, [p.id]: e.target.value })}
+                      placeholder="Paste image URL..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:border-emerald-500"
+                    />
+                    <Link className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
+
+                  <label className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer shrink-0 flex items-center space-x-1">
+                    <Upload className="w-3 h-3 text-emerald-600" />
+                    <span>Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*,.heic,.heif"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const dataUrl = await processUploadedImageFile(file);
+                          setBatchPhotoInputs({ ...batchPhotoInputs, [p.id]: dataUrl });
+                        } catch (err) {
+                          alert('Error reading file');
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0">
+              <span className="text-xs text-slate-400 font-mono">
+                {Object.values(batchPhotoInputs).filter(Boolean).length} of {players.length} photos assigned
+              </span>
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchPhotosModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveBatchPhotos}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition-colors shadow-md shadow-emerald-600/30 flex items-center space-x-1 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save All Photo Changes</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

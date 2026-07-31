@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { 
   Layers, 
@@ -28,11 +28,14 @@ import {
   X,
   RotateCcw,
   Link,
-  Check
+  Check,
+  Lock
 } from 'lucide-react';
 import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
+import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
+import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface PortalHubProps {
   onSelectSection: (section: PortalSection) => void;
@@ -71,8 +74,23 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   });
 
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [logoSuccessMessage, setLogoSuccessMessage] = useState('');
+
+  const [allowedSections, setAllowedSections] = useState<PortalSection[]>(() => 
+    getUserAllowedSections(currentUser?.email)
+  );
+
+  const userIsAdmin = isUserAdmin(currentUser?.email);
+
+  useEffect(() => {
+    setAllowedSections(getUserAllowedSections(currentUser?.email));
+  }, [currentUser?.email]);
+
+  const refreshPermissions = () => {
+    setAllowedSections(getUserAllowedSections(currentUser?.email));
+  };
 
   const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Fit / Discharged').length;
   const activePlayersCount = squadPlayers.length || squadCount;
@@ -86,7 +104,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
     if (onUpdateLogo) {
       onUpdateLogo(newLogo);
     }
-    setLogoSuccessMessage('¡Logo actualizado con éxito!');
+    setLogoSuccessMessage('Logo updated successfully!');
     setTimeout(() => {
       setLogoSuccessMessage('');
       setIsLogoModalOpen(false);
@@ -100,7 +118,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
       const dataUrl = await processUploadedImageFile(file);
       handleApplyLogo(dataUrl);
     } catch (err) {
-      alert('Error al procesar la imagen seleccionada. Por favor intenta con otra.');
+      alert('Error processing selected image file. Please try a different image.');
     }
   };
 
@@ -257,7 +275,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                 type="button"
                 onClick={() => setIsLogoModalOpen(true)}
                 className="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-full shadow-lg border border-white/20 transition-transform hover:scale-110 cursor-pointer"
-                title="Cambiar Logo del Club"
+                title="Change Club Crest / Logo"
               >
                 <Camera className="w-3.5 h-3.5" />
               </button>
@@ -276,7 +294,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                   className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-300 hover:border-emerald-300 transition-colors cursor-pointer"
                 >
                   <Upload className="w-3 h-3 text-emerald-600" />
-                  <span>Cambiar Logo</span>
+                  <span>Change Logo</span>
                 </button>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">
@@ -285,8 +303,21 @@ export const PortalHub: React.FC<PortalHubProps> = ({
             </div>
           </div>
 
-          {/* Logged in User Bar & Sign Out */}
-          <div className="flex items-center space-x-4 self-end md:self-center border-t md:border-t-0 border-slate-100 pt-4 md:pt-0 w-full md:w-auto justify-between md:justify-end">
+          {/* Logged in User Bar, Admin Control & Sign Out */}
+          <div className="flex flex-wrap items-center gap-3 self-end md:self-center border-t md:border-t-0 border-slate-100 pt-4 md:pt-0 w-full md:w-auto justify-between md:justify-end">
+            
+            {userIsAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsAdminModalOpen(true)}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-colors shadow-sm shadow-emerald-600/30 cursor-pointer"
+                title="Manage user tab access and permissions"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-100" />
+                <span>Admin: Manage Tab Access</span>
+              </button>
+            )}
+
             <div className="flex items-center space-x-3 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200">
               <div className="w-8 h-8 rounded-full bg-[#002142] text-white flex items-center justify-center font-bold text-xs shrink-0">
                 {currentUser?.email?.substring(0, 2).toUpperCase() || 'FC'}
@@ -296,7 +327,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                   {currentUser?.email || 'Head Coach'}
                 </div>
                 <div className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">
-                  Official Technical Staff
+                  {userIsAdmin ? 'Admin Technical Staff' : 'Official Technical Staff'}
                 </div>
               </div>
             </div>
@@ -378,15 +409,29 @@ export const PortalHub: React.FC<PortalHubProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {modules.map((m) => {
             const IconComponent = m.icon;
+            const isPermitted = allowedSections.includes(m.id);
+
             return (
               <button
                 key={m.id}
                 type="button"
-                onClick={() => onSelectSection(m.id)}
-                className="group text-left bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-emerald-500/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer active:scale-[0.99] relative overflow-hidden"
+                onClick={() => {
+                  if (isPermitted) {
+                    onSelectSection(m.id);
+                  } else {
+                    alert(`Access Restricted: The "${m.title}" tab is restricted for your user account. Please contact an Administrator to unlock access.`);
+                  }
+                }}
+                className={`group text-left bg-white border rounded-2xl p-5 shadow-sm transition-all duration-200 flex flex-col justify-between relative overflow-hidden ${
+                  isPermitted 
+                    ? 'hover:bg-slate-50 border-slate-200/90 hover:border-emerald-500/60 hover:shadow-md cursor-pointer active:scale-[0.99]' 
+                    : 'border-slate-200 bg-slate-50/70 opacity-70 cursor-not-allowed'
+                }`}
               >
                 {/* Top Accent Line */}
-                <div className="absolute top-0 inset-x-0 h-1 bg-[#002142] group-hover:bg-emerald-600 transition-colors" />
+                <div className={`absolute top-0 inset-x-0 h-1 transition-colors ${
+                  isPermitted ? 'bg-[#002142] group-hover:bg-emerald-600' : 'bg-slate-300'
+                }`} />
 
                 <div className="space-y-4">
                   {/* Category Tag & Badge */}
@@ -394,18 +439,29 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       {m.category}
                     </span>
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${m.badgeStyle}`}>
-                      {m.badgeText}
-                    </span>
+                    {isPermitted ? (
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${m.badgeStyle}`}>
+                        {m.badgeText}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-slate-100 text-slate-500 border-slate-300 flex items-center space-x-1">
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Restricted Tab</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Icon & Title */}
                   <div className="flex items-start space-x-3.5">
-                    <div className={`p-3 rounded-xl border shrink-0 ${m.iconBg} ${m.iconColor} group-hover:scale-105 transition-transform`}>
+                    <div className={`p-3 rounded-xl border shrink-0 ${
+                      isPermitted ? `${m.iconBg} ${m.iconColor} group-hover:scale-105` : 'bg-slate-100 border-slate-200 text-slate-400'
+                    } transition-transform`}>
                       <IconComponent className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-[#002142] group-hover:text-emerald-700 transition-colors">
+                      <h3 className={`text-base font-bold transition-colors ${
+                        isPermitted ? 'text-[#002142] group-hover:text-emerald-700' : 'text-slate-600'
+                      }`}>
                         {m.title}
                       </h3>
                       <p className="text-xs text-slate-500 font-normal leading-relaxed mt-1">
@@ -416,14 +472,21 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                 </div>
 
                 {/* Footer Link CTA */}
-                <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-500 group-hover:text-emerald-800 transition-colors">
+                <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-500">
                   <span className="text-[11px] font-mono text-slate-400 font-medium">
                     {m.statsText}
                   </span>
-                  <div className="flex items-center space-x-1 text-emerald-600 font-bold group-hover:translate-x-1 transition-transform">
-                    <span>Open Module</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </div>
+                  {isPermitted ? (
+                    <div className="flex items-center space-x-1 text-emerald-600 font-bold group-hover:translate-x-1 transition-transform">
+                      <span>Open Module</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-1 text-slate-400 font-bold">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Locked</span>
+                    </div>
+                  )}
                 </div>
               </button>
             );
@@ -460,10 +523,10 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Personalizar Logo del Club
+                    Customize Club Crest / Logo
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Sube una nueva imagen o pega una URL para actualizar el escudo oficial en todas las pantallas.
+                    Upload a new image or paste a URL to update the official club crest across all screens.
                   </p>
                 </div>
               </div>
@@ -485,11 +548,11 @@ export const PortalHub: React.FC<PortalHubProps> = ({
               {/* File Upload Option */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Opción 1: Subir Archivo (PNG, JPG, HEIC, SVG)
+                  Option 1: Upload File (PNG, JPG, HEIC, SVG)
                 </label>
                 <label className="flex items-center justify-center space-x-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 border border-dashed border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl transition-colors cursor-pointer">
                   <Upload className="w-4 h-4 text-emerald-600" />
-                  <span>Seleccionar imagen de tu equipo</span>
+                  <span>Select image from your device</span>
                   <input
                     type="file"
                     accept="image/*,.heic,.heif"
@@ -502,7 +565,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
               {/* URL Input Option */}
               <form onSubmit={handleUrlSubmit} className="space-y-2 pt-2 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Opción 2: Pegar enlace URL de Imagen
+                  Option 2: Paste Image URL Link
                 </label>
                 <div className="flex space-x-2">
                   <div className="relative flex-1">
@@ -513,7 +576,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                       type="url"
                       value={imageUrlInput}
                       onChange={(e) => setImageUrlInput(e.target.value)}
-                      placeholder="https://ejemplo.com/escudo.png"
+                      placeholder="https://example.com/logo.png"
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -521,7 +584,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                     type="submit"
                     className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
                   >
-                    Guardar URL
+                    Save URL
                   </button>
                 </div>
               </form>
@@ -534,20 +597,27 @@ export const PortalHub: React.FC<PortalHubProps> = ({
                   className="inline-flex items-center space-x-1.5 text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restablecer Logo Oficial Al Ula FC</span>
+                  <span>Reset to Official Al Ula FC Logo</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsLogoModalOpen(false)}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                 >
-                  Cerrar
+                  Close
                 </button>
               </div>
 
             </div>
           </div>
         )}
+
+        {/* Admin Permissions Modal */}
+        <AdminPermissionsModal
+          isOpen={isAdminModalOpen}
+          onClose={() => setIsAdminModalOpen(false)}
+          onPermissionsUpdated={refreshPermissions}
+        />
 
       </div>
     </div>

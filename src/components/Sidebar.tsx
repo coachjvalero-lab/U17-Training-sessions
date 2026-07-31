@@ -30,6 +30,8 @@ import { User } from 'firebase/auth';
 import { TrainingSession, PortalSection } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
+import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface SidebarProps {
   session: TrainingSession;

@@ -14,6 +14,7 @@ import {
   getAuth, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  sendPasswordResetEmail,
   signOut, 
   onAuthStateChanged, 
   User 
@@ -136,6 +137,29 @@ export async function registerUser(email: string, pass: string): Promise<User> {
   } catch (err: any) {
     if (err.code === 'auth/operation-not-allowed') {
       return setLocalUser(cleanEmail);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Send password reset email to user
+ */
+export async function resetPasswordEmail(email: string): Promise<void> {
+  let cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail.includes('@')) {
+    cleanEmail = `${cleanEmail}@alula.com`;
+  }
+  try {
+    await sendPasswordResetEmail(auth, cleanEmail);
+  } catch (err: any) {
+    if (
+      err.code === 'auth/operation-not-allowed' || 
+      err.code === 'auth/user-not-found' ||
+      err.code === 'auth/invalid-email'
+    ) {
+      // Return gracefully for local sessions
+      return;
     }
     throw err;
   }

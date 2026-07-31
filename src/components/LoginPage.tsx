@@ -1,24 +1,25 @@
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, UserPlus, CheckCircle2 } from 'lucide-react';
+import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, UserPlus, CheckCircle2, KeyRound, Mail, RefreshCw } from 'lucide-react';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
-import { loginUser, registerUser } from '../firebase';
+import { loginUser, registerUser, resetPasswordEmail } from '../firebase';
 
 interface LoginPageProps {
   onSuccess: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
   // Logo from localStorage or default
-  const [logoUrl, setLogoUrl] = useState<string>(() => {
+  const [logoUrl] = useState<string>(() => {
     try {
       return localStorage.getItem('u17_uploaded_team_logo') || OFFICIAL_ALULA_LOGO_DATA_URL;
     } catch (e) {
@@ -26,17 +27,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     }
   });
 
-  const toggleMode = () => {
-    setIsRegisterMode(!isRegisterMode);
+  const switchMode = (mode: 'login' | 'register' | 'reset') => {
+    setAuthMode(mode);
     setErrorMessage('');
     setSuccessMessage('');
-    if (!isRegisterMode) {
+    if (mode === 'login') {
+      setUsername('admin');
+      setPassword('');
+    } else if (mode === 'register') {
       setUsername('');
       setPassword('');
       setConfirmPassword('');
-    } else {
-      setUsername('admin');
-      setPassword('');
+    } else if (mode === 'reset') {
+      setResetEmail(username.includes('@') ? username : '');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!resetEmail.trim()) {
+      setErrorMessage('Please enter your registered email address or username.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await resetPasswordEmail(resetEmail);
+      setSuccessMessage('Password reset request processed! If registered, check your email inbox for instructions.');
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setErrorMessage(err.message ? err.message.replace('Firebase: ', '') : 'Failed to send password reset email.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -45,31 +70,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     setErrorMessage('');
     setSuccessMessage('');
 
+    if (authMode === 'reset') {
+      return handleResetPassword(e);
+    }
+
     if (!username.trim() || !password.trim()) {
-      setErrorMessage('Por favor ingresa usuario/email y contraseña.');
+      setErrorMessage('Please enter both username/email and password.');
       return;
     }
 
-    if (isRegisterMode) {
+    if (authMode === 'register') {
       if (password.length < 6) {
-        setErrorMessage('La contraseña debe tener al menos 6 caracteres.');
+        setErrorMessage('Password must be at least 6 characters long.');
         return;
       }
       if (password !== confirmPassword) {
-        setErrorMessage('Las contraseñas no coinciden. Verifícalas nuevamente.');
+        setErrorMessage('Passwords do not match. Please verify and try again.');
         return;
       }
     }
 
     setIsLoading(true);
     try {
-      if (isRegisterMode) {
+      if (authMode === 'register') {
         let cleanEmail = username.trim().toLowerCase();
         if (!cleanEmail.includes('@')) {
           cleanEmail = `${cleanEmail}@alula.com`;
         }
         await registerUser(cleanEmail, password);
-        setSuccessMessage('¡Usuario creado con éxito! Iniciando sesión...');
+        setSuccessMessage('Account created successfully! Logging in...');
         setTimeout(() => {
           onSuccess();
         }, 800);
@@ -80,15 +109,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     } catch (err: any) {
       console.error('Authentication error:', err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setErrorMessage('Usuario o contraseña incorrectos. Por favor intenta de nuevo.');
+        setErrorMessage('Incorrect username or password. Please try again.');
       } else if (err.code === 'auth/email-already-in-use') {
-        setErrorMessage('Este usuario/email ya está registrado. Intenta iniciar sesión.');
+        setErrorMessage('This username/email is already registered. Please sign in.');
       } else if (err.code === 'auth/weak-password') {
-        setErrorMessage('La contraseña es demasiado débil (mínimo 6 caracteres).');
+        setErrorMessage('Password is too weak (minimum 6 characters required).');
       } else if (err.message) {
         setErrorMessage(err.message.replace('Firebase: ', ''));
       } else {
-        setErrorMessage(isRegisterMode ? 'Error al crear usuario.' : 'Error al iniciar sesión.');
+        setErrorMessage(authMode === 'register' ? 'Failed to create account.' : 'Failed to sign in.');
       }
     } finally {
       setIsLoading(false);
@@ -150,12 +179,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100">
-                {isRegisterMode ? 'Crear Nuevo Usuario' : 'Iniciar Sesión'}
+                {authMode === 'register' 
+                  ? 'Create New User Account' 
+                  : authMode === 'reset' 
+                  ? 'Reset or Change Password' 
+                  : 'Sign In to Your Account'}
               </h2>
               <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-                {isRegisterMode 
-                  ? 'Registra una nueva cuenta de entrenador o miembro del staff.' 
-                  : 'Ingresa tus credenciales para acceder al portal técnico.'}
+                {authMode === 'register' 
+                  ? 'Register a new coach or technical staff account.' 
+                  : authMode === 'reset'
+                  ? 'Enter your account email to receive a secure password reset link.'
+                  : 'Enter your credentials to access technical and session plans.'}
               </p>
             </div>
           </div>
@@ -176,116 +211,199 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username / Email Input */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                {isRegisterMode ? 'Correo / Usuario' : 'Usuario o Email'}
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <UserIcon className="w-4 h-4" />
+            {authMode === 'reset' ? (
+              /* Password Reset Mode Form */
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                    Account Email Address / Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="coach@alula.com or admin"
+                      className="w-full pl-10 pr-4 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={isRegisterMode ? 'entrenador@alula.com' : 'admin'}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                />
-              </div>
-            </div>
 
-            {/* Password Input */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Contraseña
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                />
+                <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                  We will send a password reset email link with instructions to update your password securely.
+                </p>
+
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Sending Email...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-4 h-4" />
+                      <span>Send Password Reset Email</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-
-            {/* Confirm Password (only in register mode) */}
-            {isRegisterMode && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                  Confirmar Contraseña
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <Lock className="w-4 h-4" />
+            ) : (
+              /* Standard Login or Register Form */
+              <>
+                {/* Username / Email Input */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                    {authMode === 'register' ? 'Email / Username' : 'Username or Email'}
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder={authMode === 'register' ? 'coach@alula.com' : 'admin'}
+                      className="w-full pl-10 pr-4 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                    />
                   </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                  />
                 </div>
-              </div>
-            )}
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>{isRegisterMode ? 'Creando cuenta...' : 'Autenticando...'}</span>
-                </>
-              ) : (
-                <>
-                  {isRegisterMode ? <UserPlus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                  <span>{isRegisterMode ? 'Crear Cuenta y Entrar' : 'Iniciar Sesión'}</span>
-                </>
-              )}
-            </button>
+                {/* Password Input */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                      Password
+                    </label>
+                    {authMode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => switchMode('reset')}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold focus:outline-none cursor-pointer"
+                      >
+                        Forgot / Change Password?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-10 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password (only in register mode) */}
+                {authMode === 'register' && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-10 pr-10 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>{authMode === 'register' ? 'Creating Account...' : 'Authenticating...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      {authMode === 'register' ? <UserPlus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                      <span>{authMode === 'register' ? 'Create Account & Sign In' : 'Sign In'}</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </form>
 
           {/* Toggle Mode Link */}
-          <div className="pt-2 text-center border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={toggleMode}
-              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors focus:outline-none cursor-pointer"
-            >
-              {isRegisterMode 
-                ? '¿Ya tienes una cuenta? Iniciar Sesión' 
-                : '¿No tienes cuenta? Crear un nuevo usuario / Registrarse'}
-            </button>
+          <div className="pt-2 text-center border-t border-slate-800/80 flex items-center justify-between">
+            {authMode === 'reset' ? (
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors focus:outline-none cursor-pointer mx-auto"
+              >
+                ← Back to Sign In
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => switchMode(authMode === 'register' ? 'login' : 'register')}
+                  className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors focus:outline-none cursor-pointer"
+                >
+                  {authMode === 'register' 
+                    ? 'Already have an account? Sign In' 
+                    : 'Need an account? Register new user'}
+                </button>
+                {authMode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('reset')}
+                    className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors focus:outline-none cursor-pointer"
+                  >
+                    Change Password
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Minimal Footer */}
         <div className="mt-8 text-center text-[11px] text-slate-500 font-mono">
-          U17 Women Al Ula • Sistema de Gestión Técnica
+          U17 Women Al Ula • Technical Management System
         </div>
       </div>
     </div>
   );
 };
+
 
