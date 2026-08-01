@@ -114,14 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setAllowedSections(getUserAllowedSections(currentUser?.email));
   };
 
-  const navItems: {
-    id: PortalSection;
-    label: string;
-    sublabel: string;
-    icon: any;
-    color: string;
-    badge?: string;
-  }[] = [
+  const navItems = ([
     {
       id: 'football',
       label: 'Football',
@@ -186,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: BarChart3,
       color: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
     }
-  ].filter(item => allowedSections.includes(item.id));
+  ] as { id: PortalSection; label: string; sublabel: string; icon: any; color: string; badge?: string }[]).filter(item => allowedSections.includes(item.id));
 
   const sidebarContent = (
     <div className="flex flex-col h-full space-y-5 p-4 md:p-5 text-white">

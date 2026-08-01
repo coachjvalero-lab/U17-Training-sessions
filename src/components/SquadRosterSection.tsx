@@ -28,12 +28,19 @@ import {
   Check,
   RotateCcw
 } from 'lucide-react';
-import { SquadPlayer } from '../types';
+import { SquadPlayer, TrainingSession } from '../types';
+import { CloudTrainingSession } from '../firebase';
+import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
   onUpdatePlayers: (updated: SquadPlayer[]) => void;
+  session?: TrainingSession;
+  cloudSessions?: CloudTrainingSession[];
+  onChangeSession?: (fields: Partial<TrainingSession>) => void;
+  onChangeRoster?: (roster: string[]) => void;
+  initialSubTab?: 'roster' | 'attendance';
 }
 
 // Preset Female Athlete Avatar Options
@@ -52,8 +59,14 @@ const AVATAR_PRESETS = [
 
 export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   players,
-  onUpdatePlayers
+  onUpdatePlayers,
+  session,
+  cloudSessions = [],
+  onChangeSession = () => {},
+  onChangeRoster = () => {},
+  initialSubTab = 'roster'
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'roster' | 'attendance'>(initialSubTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [positionFilter, setPositionFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -309,8 +322,53 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header Banner - Clean Light Al Ula Style */}
-      <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      {/* Squad Hub Navigation Sub-Bar */}
+      <div className="bg-[#002142] p-2 rounded-2xl shadow-md border border-slate-700/60 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('roster')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center space-x-2 cursor-pointer ${
+              activeSubTab === 'roster'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Squad Roster & Profiles ({players.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('attendance')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center space-x-2 cursor-pointer ${
+              activeSubTab === 'attendance'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Attendance & Analytics Hub</span>
+          </button>
+        </div>
+
+        <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-xl hidden sm:inline-block">
+          Squad Hub
+        </span>
+      </div>
+
+      {activeSubTab === 'attendance' && session ? (
+        <AttendanceSection
+          session={session}
+          cloudSessions={cloudSessions}
+          squadRoster={session.squadRoster || players.map(p => `${p.firstName} ${p.lastName}`)}
+          onChangeSession={onChangeSession}
+          onChangeRoster={onChangeRoster}
+        />
+      ) : (
+        <>
+          {/* Header Banner - Clean Light Al Ula Style */}
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2 text-emerald-700 text-xs font-mono font-bold uppercase tracking-widest mb-1">
             <Users className="w-4 h-4 text-emerald-600" />
@@ -1141,6 +1199,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -36,11 +36,23 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 }) => {
   const [users, setUsers] = useState<UserPermission[]>(() => getUserPermissionsList());
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'coach' | 'physio' | 'analyst' | 'custom'>('coach');
+  const [newUserRole, setNewUserRole] = useState<UserPermission['role']>('coach');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
+
+  const getRoleBadgeLabel = (role: UserPermission['role']) => {
+    switch (role) {
+      case 'admin': return 'Admin';
+      case 'coach': return 'Coach';
+      case 'fitness_coach': return 'Fitness Coach';
+      case 'gk_coach': return 'GK Coach';
+      case 'physio': return 'Physio Staff';
+      case 'analyst': return 'Video Analyst';
+      default: return 'Custom';
+    }
+  };
 
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +78,10 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
       defaultAllowed = ALL_SECTIONS_LIST.map(s => s.id);
     } else if (newUserRole === 'coach') {
       defaultAllowed = ['football', 'squad', 'attendance', 'video', 'exercises', 'planning'];
+    } else if (newUserRole === 'fitness_coach') {
+      defaultAllowed = ['fitness', 'squad', 'attendance', 'exercises', 'planning'];
+    } else if (newUserRole === 'gk_coach') {
+      defaultAllowed = ['gk', 'squad', 'attendance', 'exercises', 'planning'];
     } else if (newUserRole === 'physio') {
       defaultAllowed = ['physio', 'squad', 'attendance'];
     } else if (newUserRole === 'analyst') {
@@ -200,9 +216,11 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
             <select
               value={newUserRole}
               onChange={(e) => setNewUserRole(e.target.value as any)}
-              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500"
+              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
               <option value="coach">Role: Coach</option>
+              <option value="fitness_coach">Role: Fitness Coach</option>
+              <option value="gk_coach">Role: GK Coach</option>
               <option value="physio">Role: Physio Staff</option>
               <option value="analyst">Role: Video Analyst</option>
               <option value="admin">Role: Admin</option>
@@ -243,13 +261,51 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
                         <span className="text-sm font-extrabold text-[#002142]">
                           {user.email}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                          isAdminUser 
-                            ? 'bg-slate-100 text-slate-800 border-slate-300' 
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        }`}>
-                          {user.role}
-                        </span>
+                        
+                        {/* Role Selector / Badge */}
+                        {isAdminUser ? (
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border bg-slate-100 text-slate-800 border-slate-300">
+                            {getRoleBadgeLabel(user.role)}
+                          </span>
+                        ) : (
+                          <select
+                            value={user.role}
+                            onChange={(e) => {
+                              const newRole = e.target.value as UserPermission['role'];
+                              let defaultAllowed: PortalSection[] = [];
+                              if (newRole === 'coach') {
+                                defaultAllowed = ['football', 'squad', 'attendance', 'video', 'exercises', 'planning'];
+                              } else if (newRole === 'fitness_coach') {
+                                defaultAllowed = ['fitness', 'squad', 'attendance', 'exercises', 'planning'];
+                              } else if (newRole === 'gk_coach') {
+                                defaultAllowed = ['gk', 'squad', 'attendance', 'exercises', 'planning'];
+                              } else if (newRole === 'physio') {
+                                defaultAllowed = ['physio', 'squad', 'attendance'];
+                              } else if (newRole === 'analyst') {
+                                defaultAllowed = ['video', 'exercises', 'football', 'planning'];
+                              } else if (newRole === 'admin') {
+                                defaultAllowed = ALL_SECTIONS_LIST.map(s => s.id);
+                              } else {
+                                defaultAllowed = ['football', 'squad'];
+                              }
+
+                              setUsers(users.map(u => 
+                                u.email.toLowerCase() === user.email.toLowerCase()
+                                  ? { ...u, role: newRole, allowedSections: defaultAllowed }
+                                  : u
+                              ));
+                            }}
+                            className="bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg px-2 py-0.5 text-[11px] font-bold focus:outline-none cursor-pointer"
+                          >
+                            <option value="coach">Role: Coach</option>
+                            <option value="fitness_coach">Role: Fitness Coach</option>
+                            <option value="gk_coach">Role: GK Coach</option>
+                            <option value="physio">Role: Physio Staff</option>
+                            <option value="analyst">Role: Video Analyst</option>
+                            <option value="admin">Role: Admin</option>
+                            <option value="custom">Role: Custom</option>
+                          </select>
+                        )}
                       </div>
                       <span className="text-[11px] text-slate-400 font-mono">
                         {isAdminUser 

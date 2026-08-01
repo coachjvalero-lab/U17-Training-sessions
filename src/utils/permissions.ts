@@ -2,7 +2,7 @@ import { PortalSection } from '../types';
 
 export interface UserPermission {
   email: string;
-  role: 'admin' | 'coach' | 'physio' | 'analyst' | 'custom';
+  role: 'admin' | 'coach' | 'fitness_coach' | 'gk_coach' | 'physio' | 'analyst' | 'custom';
   allowedSections: PortalSection[];
 }
 
@@ -30,6 +30,21 @@ export const DEFAULT_USER_PERMISSIONS: UserPermission[] = [
     allowedSections: ['football', 'squad', 'attendance', 'video', 'exercises', 'planning']
   },
   {
+    email: 'coachmarta@alula.com',
+    role: 'coach',
+    allowedSections: ['football', 'squad', 'attendance', 'video', 'exercises', 'planning']
+  },
+  {
+    email: 'fitness@alula.com',
+    role: 'fitness_coach',
+    allowedSections: ['fitness', 'squad', 'attendance', 'exercises', 'planning']
+  },
+  {
+    email: 'gkcoach@alula.com',
+    role: 'gk_coach',
+    allowedSections: ['gk', 'squad', 'attendance', 'exercises', 'planning']
+  },
+  {
     email: 'physio@alula.com',
     role: 'physio',
     allowedSections: ['physio', 'squad', 'attendance']
@@ -44,18 +59,30 @@ export const DEFAULT_USER_PERMISSIONS: UserPermission[] = [
 const PERMISSIONS_STORAGE_KEY = 'u17_user_permissions_config';
 
 export function getUserPermissionsList(): UserPermission[] {
+  let list: UserPermission[] = [...DEFAULT_USER_PERMISSIONS];
   try {
     const stored = localStorage.getItem(PERMISSIONS_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        list = parsed;
+        // Merge missing default users so CoachMarta and other default roles are guaranteed to appear
+        DEFAULT_USER_PERMISSIONS.forEach(defUser => {
+          const exists = list.some(u => {
+            const uEmail = u.email.toLowerCase();
+            const defEmail = defUser.email.toLowerCase();
+            return uEmail === defEmail || uEmail.split('@')[0] === defEmail.split('@')[0];
+          });
+          if (!exists) {
+            list.push(defUser);
+          }
+        });
       }
     }
   } catch (e) {
     // ignore
   }
-  return DEFAULT_USER_PERMISSIONS;
+  return list;
 }
 
 export function saveUserPermissionsList(list: UserPermission[]): void {
@@ -71,7 +98,10 @@ export function isUserAdmin(userEmail?: string | null): boolean {
   const clean = userEmail.trim().toLowerCase();
   if (clean.startsWith('admin') || clean.includes('admin')) return true;
   const list = getUserPermissionsList();
-  const match = list.find(u => u.email.toLowerCase() === clean);
+  const match = list.find(u => {
+    const uEmail = u.email.toLowerCase();
+    return uEmail === clean || uEmail.split('@')[0] === clean.split('@')[0];
+  });
   return match?.role === 'admin';
 }
 
@@ -89,7 +119,12 @@ export function getUserAllowedSections(userEmail?: string | null): PortalSection
   }
 
   const list = getUserPermissionsList();
-  const found = list.find(u => u.email.toLowerCase() === clean || clean.startsWith(u.email.toLowerCase().split('@')[0]));
+  const found = list.find(u => {
+    const uEmail = u.email.toLowerCase();
+    const uUser = uEmail.split('@')[0];
+    const cleanUser = clean.split('@')[0];
+    return uEmail === clean || uUser === cleanUser || clean.startsWith(uUser);
+  });
 
   if (found && found.allowedSections && found.allowedSections.length > 0) {
     return found.allowedSections;

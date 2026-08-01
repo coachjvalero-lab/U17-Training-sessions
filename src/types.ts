@@ -110,6 +110,25 @@ export interface PlayerGroup {
   name?: string; // e.g., "Peto Azul", "Grupo A"
 }
 
+export interface MatchFixture {
+  id: string;
+  opponent: string;
+  opponentLogo?: string;
+  date: string;
+  time: string;
+  location: 'Home' | 'Away' | 'Neutral';
+  venue?: string;
+  competitionName: string;
+  matchday?: string;
+  status: 'Scheduled' | 'Played' | 'Postponed' | 'Cancelled';
+  result?: {
+    ourGoals: number;
+    opponentGoals: number;
+  };
+  tacticalNotes?: string;
+  lineup?: string[];
+}
+
 export interface TrainingSession {
   id: string;
   teamName: string;
