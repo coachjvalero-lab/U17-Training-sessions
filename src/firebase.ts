@@ -50,38 +50,9 @@ function notifyAuthListeners(user: User | null) {
   authListeners.forEach(cb => cb(user));
 }
 
-function getLocalUser(): User | null {
-  return null;
-}
-
-function setLocalUser(email: string): User {
-  const localUser = {
-    uid: 'admin-local-id',
-    email: email,
-    displayName: 'Admin',
-  } as unknown as User;
-  try {
-    localStorage.setItem('u17_local_auth_user', JSON.stringify(localUser));
-  } catch (e) {
-    // ignore
-  }
-  notifyAuthListeners(localUser);
-  return localUser;
-}
-
-function clearLocalUser() {
-  try {
-    localStorage.removeItem('u17_local_auth_user');
-  } catch (e) {
-    // ignore
-  }
-  notifyAuthListeners(null);
-}
-
 /**
  * Sign in with username or email and password.
  * Converts plain usernames like 'admin' to 'admin@alula.com' automatically.
- * Fallbacks to a secure local session if Firebase Email/Password provider is not enabled in Firebase Console.
  */
 export async function loginUser(usernameOrEmail: string, pass: string): Promise<User> {
   let cleanInput = usernameOrEmail.trim().toLowerCase();
@@ -89,37 +60,8 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
     cleanInput = `${cleanInput}@alula.com`;
   }
 
-  try {
-    const cred = await signInWithEmailAndPassword(auth, cleanInput, pass);
-    return cred.user;
-  } catch (err: any) {
-    // If Email/Password provider is disabled in Firebase Console (auth/operation-not-allowed)
-    // or initial account creation fails, fall back to local authentication session
-    if (
-      err.code === 'auth/operation-not-allowed' ||
-      err.code === 'auth/user-not-found' ||
-      err.code === 'auth/invalid-credential' ||
-      err.code === 'auth/invalid-email'
-    ) {
-      try {
-        const newCred = await createUserWithEmailAndPassword(auth, cleanInput, pass);
-        return newCred.user;
-      } catch (createErr: any) {
-        if (
-          err.code === 'auth/operation-not-allowed' || 
-          createErr.code === 'auth/operation-not-allowed'
-        ) {
-          return setLocalUser(cleanInput);
-        }
-        // Fallback for admin credentials if password is present
-        if (cleanInput.startsWith('admin') && pass.length >= 4) {
-          return setLocalUser(cleanInput);
-        }
-        throw createErr;
-      }
-    }
-    throw err;
-  }
+  const cred = await signInWithEmailAndPassword(auth, cleanInput, pass);
+  return cred.user;
 }
 
 /**
@@ -127,15 +69,8 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
  */
 export async function registerUser(email: string, pass: string): Promise<User> {
   const cleanEmail = email.trim().toLowerCase();
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-    return cred.user;
-  } catch (err: any) {
-    if (err.code === 'auth/operation-not-allowed') {
-      return setLocalUser(cleanEmail);
-    }
-    throw err;
-  }
+  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+  return cred.user;
 }
 
 /**
@@ -146,26 +81,14 @@ export async function resetPasswordEmail(email: string): Promise<void> {
   if (!cleanEmail.includes('@')) {
     cleanEmail = `${cleanEmail}@alula.com`;
   }
-  try {
-    await sendPasswordResetEmail(auth, cleanEmail);
-  } catch (err: any) {
-    if (
-      err.code === 'auth/operation-not-allowed' || 
-      err.code === 'auth/user-not-found' ||
-      err.code === 'auth/invalid-email'
-    ) {
-      // Return gracefully for local sessions
-      return;
-    }
-    throw err;
-  }
+
+  await sendPasswordResetEmail(auth, cleanEmail);
 }
 
 /**
  * Log out current user
  */
 export async function logoutUser(): Promise<void> {
-  clearLocalUser();
   try {
     await signOut(auth);
   } catch (e) {
@@ -179,14 +102,11 @@ export async function logoutUser(): Promise<void> {
 export function subscribeToAuth(callback: (user: User | null) => void) {
   authListeners.push(callback);
 
-  callback(null);
+  const initialUser = auth.currentUser;
+  callback(initialUser ?? null);
 
   const unsubscribe = onAuthStateChanged(auth, (user) => {
-    if (user) {
-      callback(user);
-    } else {
-      callback(null);
-    }
+    callback(user ?? null);
   });
 
   return () => {
