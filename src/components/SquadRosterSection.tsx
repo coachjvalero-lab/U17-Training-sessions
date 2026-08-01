@@ -359,7 +359,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             onClick={() => setActiveSubTab('roster')}
             className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
               activeSubTab === 'roster'
-                ? 'bg-slate-900 border-emerald-500 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
                 : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
             }`}
           >
@@ -417,7 +417,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             onClick={() => setActiveSubTab('attendance')}
             className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
               activeSubTab === 'attendance'
-                ? 'bg-slate-900 border-emerald-500 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
                 : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
             }`}
           >

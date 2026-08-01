@@ -290,7 +290,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-xl transition-all cursor-pointer text-left border ${
                   isActive 
-                    ? 'bg-[#002b54] border-[#a79078] shadow-md shadow-[#001020]/60 ring-1 ring-[#a79078]/40' 
+                    ? 'bg-[#0f5981] border-[#5ea4c5] shadow-md shadow-[#001020]/60 ring-1 ring-[#5ea4c5]/40 text-white' 
                     : 'bg-[#001830]/60 hover:bg-[#002447] border-transparent hover:border-[#5ea4c5]/20 text-slate-300 hover:text-white'
                 }`}
               >

@@ -495,6 +495,11 @@ export default function App() {
       return;
     }
 
+    // Firestore is the source of truth: never push local/cached data until the initial cloud response (success or error) has been received
+    if (!hasInitialCloudLoadedRef.current) {
+      return;
+    }
+
     const timer = setTimeout(() => {
       if (latestSessionRef.current) {
         saveCurrentSessionToCloudNow(latestSessionRef.current);

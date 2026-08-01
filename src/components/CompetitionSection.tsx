@@ -289,7 +289,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             onClick={() => setActiveTab('fixtures')}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'fixtures'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                ? 'bg-[#5ea4c5] text-slate-950 shadow-md shadow-[#5ea4c5]/20'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
             }`}
           >
@@ -302,7 +302,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             onClick={() => setActiveTab('standings')}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'standings'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                ? 'bg-[#5ea4c5] text-slate-950 shadow-md shadow-[#5ea4c5]/20'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
             }`}
           >
@@ -315,7 +315,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             onClick={() => setActiveTab('callup')}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'callup'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                ? 'bg-[#5ea4c5] text-slate-950 shadow-md shadow-[#5ea4c5]/20'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
             }`}
           >
