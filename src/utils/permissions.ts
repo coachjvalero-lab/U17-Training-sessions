@@ -1,4 +1,9 @@
 import { PortalSection } from '../types';
+import {
+  subscribeToUserPermissions,
+  saveUserPermissionsListCloud,
+  migrateLocalPermissionsIfNeeded
+} from '../firebase';
 
 export interface UserPermission {
   email: string;
@@ -91,6 +96,33 @@ export function saveUserPermissionsList(list: UserPermission[]): void {
   } catch (e) {
     // ignore
   }
+}
+
+/**
+ * Pushes the full permissions list to Firestore so every device sees the update in real time.
+ * Call this alongside saveUserPermissionsList() whenever an admin explicitly saves changes.
+ */
+export function saveUserPermissionsListToCloud(list: UserPermission[]): void {
+  saveUserPermissionsListCloud(list).catch(err => console.warn('Cloud save failed for permissions:', err));
+}
+
+/**
+ * Migrates any locally-cached permissions list to Firestore (once) and subscribes to live
+ * updates, keeping the localStorage cache in sync so getUserPermissionsList() stays fresh.
+ * Returns an unsubscribe function.
+ */
+export function initPermissionsCloudSync(onUpdate?: () => void): () => void {
+  migrateLocalPermissionsIfNeeded(getUserPermissionsList()).catch(() => {});
+
+  const unsubscribe = subscribeToUserPermissions((list) => {
+    if (list.length === 0) return;
+    saveUserPermissionsList(list);
+    if (onUpdate) onUpdate();
+  }, () => {
+    // Offline or subscription error: keep working with whatever is cached locally
+  });
+
+  return unsubscribe;
 }
 
 export function isUserAdmin(userEmail?: string | null): boolean {

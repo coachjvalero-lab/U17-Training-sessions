@@ -41,6 +41,8 @@ interface SquadRosterSectionProps {
   onChangeSession?: (fields: Partial<TrainingSession>) => void;
   onChangeRoster?: (roster: string[]) => void;
   initialSubTab?: 'roster' | 'attendance';
+  excludedPlayers?: string[];
+  onExcludePlayer?: (name: string) => void;
 }
 
 // Preset Female Athlete Avatar Options
@@ -64,7 +66,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   cloudSessions = [],
   onChangeSession = () => {},
   onChangeRoster = () => {},
-  initialSubTab = 'roster'
+  initialSubTab = 'roster',
+  excludedPlayers,
+  onExcludePlayer
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'roster' | 'attendance'>(initialSubTab);
   const [searchTerm, setSearchTerm] = useState('');
@@ -479,6 +483,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           squadRoster={session.squadRoster || players.map(p => `${p.firstName} ${p.lastName}`)}
           onChangeSession={onChangeSession}
           onChangeRoster={onChangeRoster}
+          excludedPlayers={excludedPlayers}
+          onExcludePlayer={onExcludePlayer}
         />
       ) : (
         <>

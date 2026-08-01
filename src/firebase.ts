@@ -5,9 +5,11 @@ import {
   doc, 
   setDoc, 
   deleteDoc, 
+  getDoc,
   query, 
   orderBy, 
   onSnapshot,
+  arrayUnion,
   setLogLevel
 } from 'firebase/firestore';
 import { 
@@ -19,7 +21,9 @@ import {
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { TrainingSession } from './types';
+import { TrainingSession, Exercise, SquadPlayer, PhysioRecord } from './types';
+import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
+import type { UserPermission } from './utils/permissions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
@@ -47,14 +51,6 @@ function notifyAuthListeners(user: User | null) {
 }
 
 function getLocalUser(): User | null {
-  try {
-    const stored = localStorage.getItem('u17_local_auth_user');
-    if (stored) {
-      return JSON.parse(stored) as User;
-    }
-  } catch (e) {
-    // ignore
-  }
   return null;
 }
 
@@ -183,17 +179,13 @@ export async function logoutUser(): Promise<void> {
 export function subscribeToAuth(callback: (user: User | null) => void) {
   authListeners.push(callback);
 
-  const local = getLocalUser();
-  if (local) {
-    callback(local);
-  }
+  callback(null);
 
   const unsubscribe = onAuthStateChanged(auth, (user) => {
     if (user) {
       callback(user);
     } else {
-      const currentLocal = getLocalUser();
-      callback(currentLocal);
+      callback(null);
     }
   });
 
@@ -334,4 +326,399 @@ export function subscribeToSessions(
       onError(error);
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Team logo (shared badge/logo — Firestore is the source of truth,
+// localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const TEAM_LOGO_COLLECTION = 'teamLogoConfig';
+
+export function subscribeToTeamLogo(
+  callback: (logo: string) => void,
+  onError?: (error: any) => void
+) {
+  const docRef = doc(db, TEAM_LOGO_COLLECTION, 'current');
+  return onSnapshot(docRef, (docSnap) => {
+    callback((docSnap.data()?.logoUrl as string | undefined) || '');
+  }, (error) => {
+    console.warn('Team logo subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+export async function saveTeamLogoToCloud(logoUrl: string): Promise<void> {
+  const docRef = doc(db, TEAM_LOGO_COLLECTION, 'current');
+  await setDoc(docRef, { logoUrl, updatedAt: Date.now() }, { merge: true });
+}
+
+export async function migrateLocalTeamLogoIfNeeded(localLogo: string): Promise<void> {
+  const metaRef = doc(db, TEAM_LOGO_COLLECTION, 'meta');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localLogo && localLogo !== OFFICIAL_ALULA_LOGO_DATA_URL) {
+      await saveTeamLogoToCloud(localLogo);
+    }
+  } catch (e) {
+    console.warn('Team logo migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exercise Library (shared team drill library — Firestore is the source of truth,
+// localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const EXERCISE_LIBRARY_COLLECTION = 'exerciseLibrary';
+const EXERCISE_LIBRARY_META_COLLECTION = 'exerciseLibraryMeta';
+
+export interface CloudExercise extends Exercise {
+  updatedAt: number;
+}
+
+/**
+ * Real-time listener for the shared exercise library.
+ */
+export function subscribeToExerciseLibrary(
+  callback: (exercises: CloudExercise[]) => void,
+  onError?: (error: any) => void
+) {
+  return onSnapshot(collection(db, EXERCISE_LIBRARY_COLLECTION), (querySnapshot) => {
+    const exercises: CloudExercise[] = [];
+    querySnapshot.forEach((docSnap) => {
+      exercises.push(docSnap.data() as CloudExercise);
+    });
+    callback(exercises);
+  }, (error) => {
+    console.warn('Exercise library subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Saves or updates a single exercise in the shared cloud library.
+ */
+export async function saveExerciseToLibraryCloud(exercise: Exercise): Promise<number> {
+  const saveTimestamp = Date.now();
+  const exerciseRef = doc(db, EXERCISE_LIBRARY_COLLECTION, exercise.id);
+  const cleanExercise = JSON.parse(JSON.stringify(exercise));
+  await setDoc(exerciseRef, { ...cleanExercise, updatedAt: saveTimestamp }, { merge: true });
+  return saveTimestamp;
+}
+
+/**
+ * Deletes a single exercise from the shared cloud library.
+ */
+export async function deleteExerciseFromLibraryCloud(exerciseId: string): Promise<void> {
+  const exerciseRef = doc(db, EXERCISE_LIBRARY_COLLECTION, exerciseId);
+  await deleteDoc(exerciseRef);
+}
+
+/**
+ * One-time migration: uploads whatever exercises are cached in this browser's localStorage
+ * to the shared cloud library, but only the very first time (guarded by a meta flag) so that
+ * later, intentional deletions by the team are never resurrected by a stale local cache.
+ */
+export async function migrateLocalExerciseLibraryIfNeeded(localExercises: Exercise[]): Promise<void> {
+  const metaRef = doc(db, EXERCISE_LIBRARY_META_COLLECTION, 'status');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    // Mark as initialized first to minimize the race window with other clients migrating concurrently
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localExercises.length > 0) {
+      await Promise.all(localExercises.map(ex => saveExerciseToLibraryCloud(ex)));
+    }
+  } catch (e) {
+    console.warn('Exercise library migration skipped:', e);
+  }
+}
+
+/**
+ * Real-time listener for the shared list of hidden/deleted sample exercise IDs.
+ */
+export function subscribeToDeletedExerciseIds(
+  callback: (ids: string[]) => void,
+  onError?: (error: any) => void
+) {
+  const metaRef = doc(db, EXERCISE_LIBRARY_META_COLLECTION, 'deletedIds');
+  return onSnapshot(metaRef, (docSnap) => {
+    callback((docSnap.data()?.ids as string[]) || []);
+  }, (error) => {
+    console.warn('Deleted exercise IDs subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Adds IDs to the shared deleted-exercise-IDs list without overwriting concurrent additions.
+ */
+export async function addDeletedExerciseIdsCloud(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const metaRef = doc(db, EXERCISE_LIBRARY_META_COLLECTION, 'deletedIds');
+  await setDoc(metaRef, { ids: arrayUnion(...ids), updatedAt: Date.now() }, { merge: true });
+}
+
+// ---------------------------------------------------------------------------
+// Squad Roster (shared team player list — Firestore is the source of truth,
+// localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const SQUAD_COLLECTION = 'squadPlayers';
+const SQUAD_META_COLLECTION = 'squadMeta';
+
+export interface CloudSquadPlayer extends SquadPlayer {
+  updatedAt: number;
+}
+
+/**
+ * Real-time listener for the shared squad roster.
+ */
+export function subscribeToSquadPlayers(
+  callback: (players: CloudSquadPlayer[]) => void,
+  onError?: (error: any) => void
+) {
+  return onSnapshot(collection(db, SQUAD_COLLECTION), (querySnapshot) => {
+    const players: CloudSquadPlayer[] = [];
+    querySnapshot.forEach((docSnap) => {
+      players.push(docSnap.data() as CloudSquadPlayer);
+    });
+    callback(players);
+  }, (error) => {
+    console.warn('Squad roster subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Saves or updates a single squad player in the shared cloud roster.
+ */
+export async function saveSquadPlayerToCloud(player: SquadPlayer): Promise<number> {
+  const saveTimestamp = Date.now();
+  const playerRef = doc(db, SQUAD_COLLECTION, player.id);
+  const cleanPlayer = JSON.parse(JSON.stringify(player));
+  await setDoc(playerRef, { ...cleanPlayer, updatedAt: saveTimestamp }, { merge: true });
+  return saveTimestamp;
+}
+
+/**
+ * Deletes a single squad player from the shared cloud roster.
+ */
+export async function deleteSquadPlayerFromCloud(playerId: string): Promise<void> {
+  const playerRef = doc(db, SQUAD_COLLECTION, playerId);
+  await deleteDoc(playerRef);
+}
+
+/**
+ * One-time migration: uploads whatever squad roster is cached in this browser's localStorage
+ * to the shared cloud roster, but only the very first time (guarded by a meta flag) so that
+ * later, intentional deletions by the team are never resurrected by a stale local cache.
+ */
+export async function migrateLocalSquadIfNeeded(localPlayers: SquadPlayer[]): Promise<void> {
+  const metaRef = doc(db, SQUAD_META_COLLECTION, 'status');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localPlayers.length > 0) {
+      await Promise.all(localPlayers.map(p => saveSquadPlayerToCloud(p)));
+    }
+  } catch (e) {
+    console.warn('Squad roster migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Physiotherapy Records (shared team injury/rehab log — Firestore is the source
+// of truth, localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const PHYSIO_COLLECTION = 'physioRecords';
+const PHYSIO_META_COLLECTION = 'physioMeta';
+
+export interface CloudPhysioRecord extends PhysioRecord {
+  cloudUpdatedAt: number;
+}
+
+/**
+ * Real-time listener for the shared physiotherapy records.
+ */
+export function subscribeToPhysioRecords(
+  callback: (records: CloudPhysioRecord[]) => void,
+  onError?: (error: any) => void
+) {
+  return onSnapshot(collection(db, PHYSIO_COLLECTION), (querySnapshot) => {
+    const records: CloudPhysioRecord[] = [];
+    querySnapshot.forEach((docSnap) => {
+      records.push(docSnap.data() as CloudPhysioRecord);
+    });
+    callback(records);
+  }, (error) => {
+    console.warn('Physio records subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Saves or updates a single physio record in the shared cloud log.
+ */
+export async function savePhysioRecordToCloud(record: PhysioRecord): Promise<number> {
+  const saveTimestamp = Date.now();
+  const recordRef = doc(db, PHYSIO_COLLECTION, record.id);
+  const cleanRecord = JSON.parse(JSON.stringify(record));
+  await setDoc(recordRef, { ...cleanRecord, cloudUpdatedAt: saveTimestamp }, { merge: true });
+  return saveTimestamp;
+}
+
+/**
+ * Deletes a single physio record from the shared cloud log.
+ */
+export async function deletePhysioRecordFromCloud(recordId: string): Promise<void> {
+  const recordRef = doc(db, PHYSIO_COLLECTION, recordId);
+  await deleteDoc(recordRef);
+}
+
+/**
+ * One-time migration: uploads whatever physio records are cached in this browser's localStorage
+ * to the shared cloud log, but only the very first time (guarded by a meta flag) so that later,
+ * intentional deletions by the team are never resurrected by a stale local cache.
+ */
+export async function migrateLocalPhysioRecordsIfNeeded(localRecords: PhysioRecord[]): Promise<void> {
+  const metaRef = doc(db, PHYSIO_META_COLLECTION, 'status');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localRecords.length > 0) {
+      await Promise.all(localRecords.map(r => savePhysioRecordToCloud(r)));
+    }
+  } catch (e) {
+    console.warn('Physio records migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Attendance — excluded players list (shared team setting — Firestore is the
+// source of truth, localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const ATTENDANCE_META_COLLECTION = 'attendanceMeta';
+
+/**
+ * Real-time listener for the shared list of excluded/removed player names.
+ */
+export function subscribeToExcludedPlayers(
+  callback: (names: string[]) => void,
+  onError?: (error: any) => void
+) {
+  const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayers');
+  return onSnapshot(metaRef, (docSnap) => {
+    callback((docSnap.data()?.names as string[]) || []);
+  }, (error) => {
+    console.warn('Excluded players subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Adds names to the shared excluded-players list without overwriting concurrent additions.
+ */
+export async function addExcludedPlayersCloud(names: string[]): Promise<void> {
+  if (names.length === 0) return;
+  const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayers');
+  await setDoc(metaRef, { names: arrayUnion(...names), updatedAt: Date.now() }, { merge: true });
+}
+
+/**
+ * One-time migration: uploads whatever excluded-players list is cached in this browser's
+ * localStorage to the shared cloud list, guarded by a meta flag so it only runs once.
+ */
+export async function migrateLocalExcludedPlayersIfNeeded(localNames: string[]): Promise<void> {
+  const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayersStatus');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localNames.length > 0) {
+      await addExcludedPlayersCloud(localNames);
+    }
+  } catch (e) {
+    console.warn('Excluded players migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// User permissions config (shared team setting — Firestore is the source of
+// truth so an admin's changes on one device apply to everyone immediately)
+// ---------------------------------------------------------------------------
+
+const PERMISSIONS_COLLECTION = 'permissionsConfig';
+
+/**
+ * Real-time listener for the shared user-permissions list.
+ */
+export function subscribeToUserPermissions(
+  callback: (list: UserPermission[]) => void,
+  onError?: (error: any) => void
+) {
+  const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
+  return onSnapshot(docRef, (docSnap) => {
+    callback((docSnap.data()?.users as UserPermission[]) || []);
+  }, (error) => {
+    console.warn('User permissions subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+/**
+ * Overwrites the shared permissions list. Used only when an admin explicitly saves
+ * changes from the Admin Permissions modal (a single, deliberate batch edit).
+ */
+export async function saveUserPermissionsListCloud(list: UserPermission[]): Promise<void> {
+  const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
+  await setDoc(docRef, { users: list, updatedAt: Date.now() }, { merge: true });
+}
+
+/**
+ * One-time migration: uploads whatever permissions list is cached in this browser's
+ * localStorage to the shared cloud config, guarded so it only runs once.
+ */
+export async function migrateLocalPermissionsIfNeeded(localList: UserPermission[]): Promise<void> {
+  const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
+  try {
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists() && docSnap.data()?.users) {
+      return;
+    }
+    await setDoc(docRef, { users: localList, updatedAt: Date.now() }, { merge: true });
+  } catch (e) {
+    console.warn('User permissions migration skipped:', e);
+  }
 }

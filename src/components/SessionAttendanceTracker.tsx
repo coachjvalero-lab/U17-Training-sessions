@@ -27,6 +27,8 @@ interface SessionAttendanceTrackerProps {
   onChangeAttendance: (attendance: PlayerAttendance[]) => void;
   onChangeRoster?: (roster: string[]) => void;
   compact?: boolean;
+  excludedPlayers?: string[];
+  onExcludePlayer?: (name: string) => void;
 }
 
 export const ABSENCE_REASONS: { key: AbsenceReason; label: string; icon: any; color: string; bg: string }[] = [
@@ -46,25 +48,21 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   squadRoster = DEFAULT_SQUAD_PLAYERS,
   onChangeAttendance,
   onChangeRoster,
-  compact = false
+  compact = false,
+  excludedPlayers = [],
+  onExcludePlayer
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [filter, setFilter] = useState<'all' | 'attending' | 'gym' | 'absent'>('all');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Filter out excluded players (e.g., Jalila)
+  // Filter out excluded players (e.g., Jalila) — the exclusion list is shared across the whole staff via Firestore (see App.tsx)
   const isPlayerExcluded = (name: string) => {
     if (!name) return true;
     const lower = name.trim().toLowerCase();
     if (lower === 'jalila') return true;
-    try {
-      const saved = localStorage.getItem('u17_excluded_players');
-      const list: string[] = saved ? JSON.parse(saved) : [];
-      return list.some(p => p.toLowerCase() === lower);
-    } catch {
-      return false;
-    }
+    return excludedPlayers.some(p => p.toLowerCase() === lower);
   };
 
   const cleanRoster = squadRoster.filter(p => !isPlayerExcluded(p));
@@ -167,14 +165,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const handleRemovePlayer = (playerName: string) => {
     if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla?`)) {
       const lower = playerName.toLowerCase();
-      try {
-        const saved = localStorage.getItem('u17_excluded_players');
-        const list: string[] = saved ? JSON.parse(saved) : [];
-        if (!list.some(p => p.toLowerCase() === lower)) {
-          list.push(lower);
-          localStorage.setItem('u17_excluded_players', JSON.stringify(list));
-        }
-      } catch (e) {}
+      if (onExcludePlayer) {
+        onExcludePlayer(lower);
+      }
 
       const updatedRoster = squadRoster.filter(p => p.toLowerCase() !== lower);
       if (onChangeRoster) {

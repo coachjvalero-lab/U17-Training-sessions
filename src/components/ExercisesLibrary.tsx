@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   Filter, 
@@ -22,7 +22,16 @@ import {
   Edit3
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
-import { CloudTrainingSession, saveSessionToCloud } from '../firebase';
+import { 
+  CloudTrainingSession, 
+  saveSessionToCloud, 
+  subscribeToExerciseLibrary, 
+  saveExerciseToLibraryCloud, 
+  deleteExerciseFromLibraryCloud, 
+  migrateLocalExerciseLibraryIfNeeded, 
+  subscribeToDeletedExerciseIds, 
+  addDeletedExerciseIdsCloud 
+} from '../firebase';
 import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
@@ -48,36 +57,48 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'football' | 'fitness' | 'gk'>('all');
   const [momentFilter, setMomentFilter] = useState<string>('all');
   
-  // Custom exercises saved specifically by the user in the library
+  // Custom exercises saved specifically by the user in the library.
+  // Initial value is only a local cache used for instant paint / offline; Firestore is the source of truth (see subscription effect below).
+  const initialLocalExercisesRef = useRef<Exercise[]>([]);
   const [customExercises, setCustomExercises] = useState<Exercise[]>(() => {
-    try {
-      const saved = localStorage.getItem('u17_custom_exercise_library');
-      if (saved) return JSON.parse(saved);
-      // Initialize with default template exercises if first time
-      const def = getDefaultSession();
-      return [
-        ...def.warmUp.exercises,
-        ...def.mainPart.exercises,
-        ...def.coolDown.exercises
-      ];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  // Re-sync library exercises whenever section becomes active
-  useEffect(() => {
-    if (activeSection === 'exercises') {
+    const computed = (() => {
       try {
         const saved = localStorage.getItem('u17_custom_exercise_library');
-        if (saved) {
-          setCustomExercises(JSON.parse(saved));
-        }
+        if (saved) return JSON.parse(saved);
+        // Initialize with default template exercises if first time
+        const def = getDefaultSession();
+        return [
+          ...def.warmUp.exercises,
+          ...def.mainPart.exercises,
+          ...def.coolDown.exercises
+        ];
       } catch (e) {
-        console.error('Failed to sync library exercises:', e);
+        return [];
       }
-    }
-  }, [activeSection]);
+    })();
+    initialLocalExercisesRef.current = computed;
+    return computed;
+  });
+
+  // Subscribe to the shared cloud exercise library in real time so every coach sees the same drills.
+  // Also migrates whatever was cached locally (once) so no existing custom exercises get lost.
+  useEffect(() => {
+    migrateLocalExerciseLibraryIfNeeded(initialLocalExercisesRef.current).catch(() => {});
+
+    const unsubscribe = subscribeToExerciseLibrary((cloudExercises) => {
+      const list: Exercise[] = cloudExercises.map(({ updatedAt, ...ex }) => ex);
+      setCustomExercises(list);
+      try {
+        localStorage.setItem('u17_custom_exercise_library', JSON.stringify(list));
+      } catch (e) {
+        console.warn('Exercise library local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Track deleted exercise IDs across all library exercises
   const [deletedExerciseIds, setDeletedExerciseIds] = useState<string[]>(() => {
@@ -88,6 +109,22 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       return [];
     }
   });
+
+  // Subscribe to the shared list of hidden/deleted exercise IDs so deletions apply for every coach
+  useEffect(() => {
+    const unsubscribe = subscribeToDeletedExerciseIds((ids) => {
+      setDeletedExerciseIds(ids);
+      try {
+        localStorage.setItem('u17_deleted_exercise_ids', JSON.stringify(ids));
+      } catch (e) {
+        console.warn('Deleted exercise IDs local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Modal for creating a new exercise
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -275,6 +312,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     };
 
     setCustomExercises(prev => [created, ...prev]);
+    saveExerciseToLibraryCloud(created).catch(err => console.warn('Cloud save failed for duplicated exercise:', err));
     setAddedToast(`Duplicated "${ex.name}" to your library!`);
     setTimeout(() => setAddedToast(null), 3000);
   };
@@ -302,6 +340,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     };
 
     setCustomExercises(prev => [created, ...prev]);
+    saveExerciseToLibraryCloud(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
     setShowCreateModal(false);
     setIsDuplicatingModal(false);
     setNewEx({
@@ -331,6 +370,10 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       const uniqueKey = ex.id || `${ex.name}-${(ex.description || '').substring(0, 30)}`;
       setDeletedExerciseIds(prev => [...prev, uniqueKey]);
       setCustomExercises(prev => prev.filter(item => item.id !== ex.id));
+      addDeletedExerciseIdsCloud([ex.id, uniqueKey].filter(Boolean)).catch(err => console.warn('Cloud save failed for deleted exercise ID:', err));
+      if (ex.id) {
+        deleteExerciseFromLibraryCloud(ex.id).catch(err => console.warn('Cloud delete failed for exercise:', err));
+      }
       setAddedToast(`Deleted "${ex.name}" from library.`);
       setTimeout(() => setAddedToast(null), 3000);
     }

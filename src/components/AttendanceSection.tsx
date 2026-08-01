@@ -54,6 +54,8 @@ interface AttendanceSectionProps {
   squadRoster?: string[];
   onChangeSession: (fields: Partial<TrainingSession>) => void;
   onChangeRoster?: (roster: string[]) => void;
+  excludedPlayers?: string[];
+  onExcludePlayer?: (name: string) => void;
 }
 
 export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
@@ -61,7 +63,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   cloudSessions = [],
   squadRoster = DEFAULT_SQUAD_PLAYERS,
   onChangeSession,
-  onChangeRoster
+  onChangeRoster,
+  excludedPlayers = [],
+  onExcludePlayer
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [reasonFilter, setReasonFilter] = useState<'all' | AbsenceReason>('all');
@@ -86,20 +90,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     return (b.date || '').localeCompare(a.date || '');
   });
 
-  // Excluded/deleted players list (persist in localStorage so deletions stick)
-  const [excludedPlayers, setExcludedPlayers] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('u17_excluded_players');
-      const list: string[] = saved ? JSON.parse(saved) : [];
-      if (!list.some(p => p.toLowerCase() === 'jalila')) {
-        list.push('jalila');
-      }
-      return list;
-    } catch {
-      return ['jalila'];
-    }
-  });
-
+  // Excluded/deleted players list is shared across the whole staff via Firestore (see App.tsx)
   const isPlayerExcluded = (name: string) => {
     if (!name) return true;
     const lower = name.trim().toLowerCase();
@@ -216,11 +207,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const handleDeletePlayer = (playerName: string) => {
     if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla y de la clasificación?`)) {
       const lower = playerName.toLowerCase();
-      const updatedExcluded = Array.from(new Set([...excludedPlayers, lower, 'jalila']));
-      setExcludedPlayers(updatedExcluded);
-      try {
-        localStorage.setItem('u17_excluded_players', JSON.stringify(updatedExcluded));
-      } catch (e) {}
+      if (onExcludePlayer) {
+        onExcludePlayer(lower);
+      }
 
       const updatedRoster = squadRoster.filter(p => p.toLowerCase() !== lower);
       if (onChangeRoster) onChangeRoster(updatedRoster);

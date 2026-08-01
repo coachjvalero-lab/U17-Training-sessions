@@ -20,7 +20,8 @@ import {
   UserPermission, 
   ALL_SECTIONS_LIST, 
   getUserPermissionsList, 
-  saveUserPermissionsList 
+  saveUserPermissionsList,
+  saveUserPermissionsListToCloud
 } from '../utils/permissions';
 
 interface AdminPermissionsModalProps {
@@ -141,6 +142,7 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 
   const handleSaveAll = () => {
     saveUserPermissionsList(users);
+    saveUserPermissionsListToCloud(users);
     setSuccessMsg('User tab permissions saved successfully!');
     if (onPermissionsUpdated) {
       onPermissionsUpdated();

@@ -38,6 +38,20 @@ import {
   isCloudQuotaExceeded,
   markQuotaExceeded,
   clearQuotaExceeded,
+  subscribeToSquadPlayers,
+  saveSquadPlayerToCloud,
+  deleteSquadPlayerFromCloud,
+  migrateLocalSquadIfNeeded,
+  subscribeToPhysioRecords,
+  savePhysioRecordToCloud,
+  deletePhysioRecordFromCloud,
+  migrateLocalPhysioRecordsIfNeeded,
+  subscribeToExcludedPlayers,
+  addExcludedPlayersCloud,
+  migrateLocalExcludedPlayersIfNeeded,
+  subscribeToTeamLogo,
+  saveTeamLogoToCloud,
+  migrateLocalTeamLogoIfNeeded,
   CloudTrainingSession 
 } from './firebase';
 import { 
@@ -100,39 +114,217 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<PortalSection>('hub');
   const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition'>('sessions');
 
-  // Squad Players ("Plantilla")
+  // Squad Players ("Plantilla") — initial value is only a local cache for instant paint/offline;
+  // Firestore is the source of truth (see subscription effect below).
+  const initialSquadPlayersRef = useRef<SquadPlayer[]>([]);
   const [squadPlayers, setSquadPlayers] = useState<SquadPlayer[]>(() => {
-    try {
-      const saved = localStorage.getItem('u17_squad_players');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_DETAILED_SQUAD;
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_squad_players');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return DEFAULT_DETAILED_SQUAD;
+    })();
+    initialSquadPlayersRef.current = computed;
+    return computed;
   });
 
-  // Physiotherapy Records
-  const [physioRecords, setPhysioRecords] = useState<PhysioRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('u17_physio_records');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'physio-demo-1',
-        playerId: 'p9',
-        playerName: 'Lateen Al-Sulami',
-        injuryDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-        injuryType: 'Ankle Sprain Grade II',
-        severity: 'Moderate',
-        status: 'Rehab / Field Work',
-        treatmentNotes: 'Completed ice protocol and light straight-line running. Progressing to ball work.',
-        estimatedReturnDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
-        physioName: 'Dr. Sarah (Physio)',
-        updatedAt: new Date().toISOString().split('T')[0]
+  // Track whether the one-time squad roster migration attempt has settled, so an empty
+  // cloud collection while it's still in flight doesn't briefly flash an empty roster.
+  const hasSquadMigrationSettledRef = useRef(false);
+
+  // Subscribe to the shared cloud squad roster in real time so every coach sees the same players.
+  // Also migrates whatever was cached locally (once) so no existing roster data gets lost.
+  useEffect(() => {
+    migrateLocalSquadIfNeeded(initialSquadPlayersRef.current)
+      .catch(() => {})
+      .finally(() => { hasSquadMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToSquadPlayers((cloudPlayers) => {
+      if (cloudPlayers.length === 0 && !hasSquadMigrationSettledRef.current) {
+        return;
       }
-    ];
+      const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
+      setSquadPlayers(list);
+      try {
+        localStorage.setItem('u17_squad_players', JSON.stringify(list));
+      } catch (e) {
+        console.warn('Squad roster local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Physiotherapy Records — initial value is only a local cache for instant paint/offline;
+  // Firestore is the source of truth (see subscription effect below).
+  const initialPhysioRecordsRef = useRef<PhysioRecord[]>([]);
+  const [physioRecords, setPhysioRecords] = useState<PhysioRecord[]>(() => {
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_physio_records');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return [
+        {
+          id: 'physio-demo-1',
+          playerId: 'p9',
+          playerName: 'Lateen Al-Sulami',
+          injuryDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
+          injuryType: 'Ankle Sprain Grade II',
+          severity: 'Moderate',
+          status: 'Rehab / Field Work',
+          treatmentNotes: 'Completed ice protocol and light straight-line running. Progressing to ball work.',
+          estimatedReturnDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
+          physioName: 'Dr. Sarah (Physio)',
+          updatedAt: new Date().toISOString().split('T')[0]
+        }
+      ];
+    })();
+    initialPhysioRecordsRef.current = computed;
+    return computed;
   });
 
-  // Video Analysis Sessions
+  // Track whether the one-time physio records migration attempt has settled, so an empty
+  // cloud collection while it's still in flight doesn't briefly flash an empty log.
+  const hasPhysioMigrationSettledRef = useRef(false);
+
+  // Subscribe to the shared cloud physio records in real time so every coach/physio sees the same log.
+  // Also migrates whatever was cached locally (once) so no existing records get lost.
+  useEffect(() => {
+    migrateLocalPhysioRecordsIfNeeded(initialPhysioRecordsRef.current)
+      .catch(() => {})
+      .finally(() => { hasPhysioMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToPhysioRecords((cloudRecords) => {
+      if (cloudRecords.length === 0 && !hasPhysioMigrationSettledRef.current) {
+        return;
+      }
+      const list: PhysioRecord[] = cloudRecords.map(({ cloudUpdatedAt, ...r }) => r);
+      setPhysioRecords(list);
+      try {
+        localStorage.setItem('u17_physio_records', JSON.stringify(list));
+      } catch (e) {
+        console.warn('Physio records local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Excluded/removed players list ("Plantilla" deletions) — shared across the whole staff so a
+  // deletion made by one coach applies for everyone, not just their own browser.
+  const initialExcludedPlayersRef = useRef<string[]>([]);
+  const [excludedPlayers, setExcludedPlayers] = useState<string[]>(() => {
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_excluded_players');
+        const list: string[] = saved ? JSON.parse(saved) : [];
+        if (!list.some(p => p.toLowerCase() === 'jalila')) {
+          list.push('jalila');
+        }
+        return list;
+      } catch {
+        return ['jalila'];
+      }
+    })();
+    initialExcludedPlayersRef.current = computed;
+    return computed;
+  });
+
+  const hasExcludedPlayersMigrationSettledRef = useRef(false);
+
+  // Subscribe to the shared cloud excluded-players list in real time.
+  // Also migrates whatever was cached locally (once) so no existing exclusions get lost.
+  useEffect(() => {
+    migrateLocalExcludedPlayersIfNeeded(initialExcludedPlayersRef.current)
+      .catch(() => {})
+      .finally(() => { hasExcludedPlayersMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToExcludedPlayers((names) => {
+      if (names.length === 0 && !hasExcludedPlayersMigrationSettledRef.current) {
+        return;
+      }
+      const merged = names.some(n => n.toLowerCase() === 'jalila') ? names : [...names, 'jalila'];
+      setExcludedPlayers(merged);
+      try {
+        localStorage.setItem('u17_excluded_players', JSON.stringify(merged));
+      } catch (e) {
+        console.warn('Excluded players local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleExcludePlayer = (playerName: string) => {
+    const lower = playerName.trim().toLowerCase();
+    const updated = Array.from(new Set([...excludedPlayers, lower, 'jalila']));
+    setExcludedPlayers(updated);
+    try {
+      localStorage.setItem('u17_excluded_players', JSON.stringify(updated));
+    } catch (e) {}
+    addExcludedPlayersCloud([lower, 'jalila']).catch(err => console.warn('Cloud save failed for excluded player:', err));
+  };
+
+  const initialTeamLogoRef = useRef('');
+  const [teamLogo, setTeamLogo] = useState<string>(() => {
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_uploaded_team_logo');
+        if (saved) return saved;
+      } catch (e) {}
+      return OFFICIAL_ALULA_LOGO_DATA_URL;
+    })();
+    initialTeamLogoRef.current = computed;
+    return computed;
+  });
+
+  const hasTeamLogoMigrationSettledRef = useRef(false);
+
+  useEffect(() => {
+    migrateLocalTeamLogoIfNeeded(initialTeamLogoRef.current)
+      .catch(() => {})
+      .finally(() => { hasTeamLogoMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToTeamLogo((cloudLogo) => {
+      if (!cloudLogo && !hasTeamLogoMigrationSettledRef.current) {
+        return;
+      }
+      const nextLogo = cloudLogo || teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
+      setTeamLogo(nextLogo);
+      try {
+        localStorage.setItem('u17_uploaded_team_logo', nextLogo);
+      } catch (e) {
+        console.warn('Team logo local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('u17_uploaded_team_logo', teamLogo);
+    } catch (e) {}
+  }, [teamLogo]);
+
+  const handleUpdateTeamLogo = (newLogo: string) => {
+    setTeamLogo(newLogo);
+    try {
+      localStorage.setItem('u17_uploaded_team_logo', newLogo);
+    } catch (e) {}
+    saveTeamLogoToCloud(newLogo).catch(err => console.warn('Cloud save failed for team logo:', err));
+  };
+
   const [videoSessions, setVideoSessions] = useState<VideoAnalysis[]>(() => {
     try {
       const saved = localStorage.getItem('u17_video_sessions');
@@ -510,6 +702,9 @@ export default function App() {
   }, [session]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
+    if (typeof fields.teamLogo === 'string') {
+      handleUpdateTeamLogo(fields.teamLogo);
+    }
     setSession(prev => ({
       ...prev,
       ...fields
@@ -671,10 +866,29 @@ export default function App() {
   };
 
   const handleUpdateSquadPlayers = (updated: SquadPlayer[]) => {
+    const previous = squadPlayers;
     setSquadPlayers(updated);
     try {
       localStorage.setItem('u17_squad_players', JSON.stringify(updated));
     } catch (e) {}
+
+    // Sync only what changed to Firestore (per-player docs), so simultaneous edits by different
+    // coaches never overwrite each other's changes to a different player.
+    const previousById = new Map(previous.map(p => [p.id, p]));
+    const updatedIds = new Set(updated.map(p => p.id));
+
+    updated.forEach(player => {
+      const prevPlayer = previousById.get(player.id);
+      if (!prevPlayer || JSON.stringify(prevPlayer) !== JSON.stringify(player)) {
+        saveSquadPlayerToCloud(player).catch(err => console.warn('Cloud save failed for squad player:', err));
+      }
+    });
+
+    previous.forEach(player => {
+      if (!updatedIds.has(player.id)) {
+        deleteSquadPlayerFromCloud(player.id).catch(err => console.warn('Cloud delete failed for squad player:', err));
+      }
+    });
 
     const formattedRoster = updated.map(p => 
       p.position === 'GK' ? `${p.firstName} (GK)` : `${p.firstName} ${p.lastName}`
@@ -683,10 +897,29 @@ export default function App() {
   };
 
   const handleUpdatePhysioRecords = (records: PhysioRecord[]) => {
+    const previous = physioRecords;
     setPhysioRecords(records);
     try {
       localStorage.setItem('u17_physio_records', JSON.stringify(records));
     } catch (e) {}
+
+    // Sync only what changed to Firestore (per-record docs), so simultaneous edits by different
+    // staff members never overwrite each other's changes to a different record.
+    const previousById = new Map(previous.map(r => [r.id, r]));
+    const updatedIds = new Set(records.map(r => r.id));
+
+    records.forEach(record => {
+      const prevRecord = previousById.get(record.id);
+      if (!prevRecord || JSON.stringify(prevRecord) !== JSON.stringify(record)) {
+        savePhysioRecordToCloud(record).catch(err => console.warn('Cloud save failed for physio record:', err));
+      }
+    });
+
+    previous.forEach(record => {
+      if (!updatedIds.has(record.id)) {
+        deletePhysioRecordFromCloud(record.id).catch(err => console.warn('Cloud delete failed for physio record:', err));
+      }
+    });
   };
 
   const handleUpdateSquadStatusFromPhysio = (playerId: string, newStatus: SquadPlayer['status']) => {
@@ -745,13 +978,8 @@ export default function App() {
   };
 
   const getActiveLogo = () => {
-    let savedLogo = '';
-    try {
-      savedLogo = localStorage.getItem('u17_uploaded_team_logo') || '';
-    } catch (e) {}
-
-    if (savedLogo) {
-      return savedLogo;
+    if (teamLogo) {
+      return teamLogo;
     }
 
     if (session && session.teamLogo && !session.teamLogo.includes('%230f172a') && !session.teamLogo.includes('COACH') && !session.teamLogo.includes('default-u17')) {
@@ -1174,8 +1402,8 @@ export default function App() {
           videoSessions={videoSessions}
           currentUser={currentUser}
           onLogout={logoutUser}
-          currentLogo={session.teamLogo || getActiveLogo()}
-          onUpdateLogo={(newLogo) => handleUpdateSession({ teamLogo: newLogo })}
+          currentLogo={teamLogo}
+          onUpdateLogo={handleUpdateTeamLogo}
         />
         {renderThemeToggle()}
       </>
@@ -1219,6 +1447,8 @@ export default function App() {
             onChangeSession={handleUpdateSession}
             onChangeRoster={handleUpdateRoster}
             initialSubTab={activeSection === 'attendance' ? 'attendance' : 'roster'}
+            excludedPlayers={excludedPlayers}
+            onExcludePlayer={handleExcludePlayer}
           />
         ) : activeSection === 'physio' ? (
           <PhysiotherapySection
@@ -1268,6 +1498,8 @@ export default function App() {
                   squadRoster={session.squadRoster}
                   onChangeAttendance={handleUpdateAttendance}
                   onChangeRoster={handleUpdateRoster}
+                  excludedPlayers={excludedPlayers}
+                  onExcludePlayer={handleExcludePlayer}
                 />
 
                 {/* Section: Player Groups Manager */}
@@ -1359,6 +1591,8 @@ export default function App() {
               squadRoster={session.squadRoster}
               onChangeAttendance={handleUpdateAttendance}
               onChangeRoster={handleUpdateRoster}
+              excludedPlayers={excludedPlayers}
+              onExcludePlayer={handleExcludePlayer}
             />
 
             {/* Section: Player Groups Manager */}
