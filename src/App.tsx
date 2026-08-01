@@ -1218,6 +1218,7 @@ export default function App() {
             session={session}
             cloudSessions={cloudSessions}
             onChangeSession={handleUpdateSession}
+            onAddExerciseToSession={handleAddExerciseFromLibrary}
             squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
             renderActiveSessionEditor={() => (
               <main className="space-y-6 md:space-y-8 print:space-y-1.5">

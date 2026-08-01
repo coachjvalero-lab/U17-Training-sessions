@@ -23,12 +23,14 @@ import {
   Clock, 
   Target,
   XCircle,
-  FolderOpen
+  FolderOpen,
+  BookOpen
 } from 'lucide-react';
-import { TrainingSession } from '../types';
+import { TrainingSession, Exercise } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
+import { ExercisesLibrary } from './ExercisesLibrary';
 
 export interface DrillCard {
   id: string;
@@ -150,6 +152,11 @@ interface FootballHubSectionProps {
   onChangeSession: (updatedSession: Partial<TrainingSession>) => void;
   renderActiveSessionEditor: () => React.ReactNode;
   squadRoster?: string[];
+  onAddExerciseToSession?: (
+    blockKey: 'warmUp' | 'mainPart' | 'coolDown', 
+    exercise: Exercise,
+    targetSection?: 'football' | 'fitness' | 'gk'
+  ) => void;
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -157,10 +164,11 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   cloudSessions,
   onChangeSession,
   renderActiveSessionEditor,
-  squadRoster = []
+  squadRoster = [],
+  onAddExerciseToSession
 }) => {
-  // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition'
-  const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition'>('sessions');
+  // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition' | 'library'
+  const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition' | 'library'>('sessions');
 
   // Sub-navigation inside 'sessions': 'cards' | 'editor'
   const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>('cards');
@@ -412,8 +420,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
           </div>
         </div>
 
-        {/* TOP 3 MODULE NAVIGATION CARDS (PortalHub Grid Style) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* TOP 4 MODULE NAVIGATION CARDS (PortalHub Grid Style) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Card 1: Training Sessions */}
           <button
@@ -464,7 +472,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
               <span className="text-[11px] font-mono text-slate-400">
-                {drillCards.length} Session Cards Available
+                {drillCards.length} Session Cards
               </span>
               <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
                 <span>Open Module</span>
@@ -589,6 +597,64 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
             </div>
           </button>
 
+          {/* Card 4: Exercises & Session Library */}
+          <button
+            type="button"
+            onClick={() => setFootballSubTab('library')}
+            className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
+              footballSubTab === 'library'
+                ? 'bg-slate-900 border-emerald-500 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]'
+                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+            }`}
+          >
+            <div className={`absolute top-0 inset-x-0 h-1 transition-colors ${
+              footballSubTab === 'library' ? 'bg-emerald-500' : 'bg-slate-800 group-hover:bg-emerald-600'
+            }`} />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  DRILLS & EXERCISES
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  footballSubTab === 'library' 
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black' 
+                    : 'bg-purple-950/60 text-purple-400 border-purple-800/60'
+                }`}>
+                  Librería Hub
+                </span>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <div className={`p-3 rounded-xl border shrink-0 transition-transform ${
+                  footballSubTab === 'library'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 scale-105'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 group-hover:text-emerald-400'
+                }`}>
+                  <BookOpen className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-emerald-300 transition-colors">
+                    Librería de Ejercicios
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
+                    Buscador y repositorio de ejercicios y tareas tácticas por momento de juego, dimensiones y roles.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span className="text-[11px] font-mono text-slate-400">
+                Drill Repository
+              </span>
+              <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
+                <span>Open Library</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </button>
+
         </div>
       </div>
 
@@ -597,6 +663,13 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         <PlanificationSection session={session} cloudSessions={cloudSessions} />
       ) : footballSubTab === 'competition' ? (
         <CompetitionSection session={session} squadRoster={squadRoster} />
+      ) : footballSubTab === 'library' ? (
+        <ExercisesLibrary
+          currentSession={session}
+          cloudSessions={cloudSessions}
+          onAddExerciseToSession={onAddExerciseToSession || (() => {})}
+          activeSection="football"
+        />
       ) : (
         /* TRAINING SESSIONS SUB MODULE WORKSPACE */
         <div className="space-y-6">

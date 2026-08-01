@@ -183,27 +183,15 @@ export const PortalHub: React.FC<PortalHubProps> = ({
     },
     {
       id: 'squad',
-      title: 'Squad Roster (Plantilla)',
+      title: 'Squad Roster & Attendance (Plantilla)',
       category: 'ROSTER & PLAYERS',
-      description: 'Centralized squad management: full player names, jersey numbers, positions, notes, and individual statuses.',
+      description: 'Centralized squad management: player profiles, dorsals, positions, and integrated attendance analytics hub.',
       icon: Users,
       iconBg: 'bg-indigo-100 border-indigo-200',
       iconColor: 'text-indigo-700',
-      badgeText: 'Roster Hub',
+      badgeText: 'Roster & Attendance',
       badgeStyle: 'bg-indigo-50 text-indigo-700 border-indigo-200',
       statsText: `${activePlayersCount} Registered Players`
-    },
-    {
-      id: 'attendance',
-      title: 'Attendance & Analytics',
-      category: 'ANALYTICS & ABSENCE',
-      description: 'Live player attendance rates, gym participation, study/injury absence tracking, and session logs.',
-      icon: UserCheck,
-      iconBg: 'bg-teal-100 border-teal-200',
-      iconColor: 'text-teal-700',
-      badgeText: 'Absence Tracking',
-      badgeStyle: 'bg-teal-50 text-teal-700 border-teal-200',
-      statsText: 'Individual & Team Rates'
     },
     {
       id: 'physio',
@@ -228,18 +216,6 @@ export const PortalHub: React.FC<PortalHubProps> = ({
       badgeText: 'Video Dept',
       badgeStyle: 'bg-cyan-50 text-cyan-700 border-cyan-200',
       statsText: `${videoCount} Video Analyses`
-    },
-    {
-      id: 'exercises',
-      title: 'Exercises Library',
-      category: 'DATABASE & SEARCH',
-      description: 'Filterable drill repository categorized by Game Moment, field dimensions, series, duration, and roles.',
-      icon: BookOpen,
-      iconBg: 'bg-purple-100 border-purple-200',
-      iconColor: 'text-purple-700',
-      badgeText: 'Drill Database',
-      badgeStyle: 'bg-purple-50 text-purple-700 border-purple-200',
-      statsText: `${totalExercisesCount} Saved Drills`
     },
     {
       id: 'planning',

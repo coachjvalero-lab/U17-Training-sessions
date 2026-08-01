@@ -139,16 +139,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: 'squad',
       label: 'Squad Roster',
-      sublabel: 'Plantilla & Players',
+      sublabel: 'Plantilla & Attendance',
       icon: Users,
       color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
-    },
-    {
-      id: 'attendance',
-      label: 'Attendance',
-      sublabel: 'Player Absence Tracking',
-      icon: UserCheck,
-      color: 'bg-teal-500/20 text-teal-300 border-teal-500/30'
     },
     {
       id: 'physio',
@@ -163,14 +156,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Tactical Clip Review',
       icon: Video,
       color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-    },
-    {
-      id: 'exercises',
-      label: 'Exercises Library',
-      sublabel: 'Library & Database',
-      icon: BookOpen,
-      color: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-      badge: totalLibraryExercisesCount > 0 ? String(totalLibraryExercisesCount) : undefined
     },
     {
       id: 'planning',
