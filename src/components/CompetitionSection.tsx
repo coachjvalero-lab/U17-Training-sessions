@@ -28,9 +28,11 @@ import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 interface CompetitionSectionProps {
   session?: TrainingSession;
   squadRoster?: string[];
+  fixtures?: MatchFixture[];
+  onUpdateFixtures?: (fixtures: MatchFixture[]) => void;
 }
 
-const DEFAULT_MATCHES: MatchFixture[] = [
+export const DEFAULT_MATCHES: MatchFixture[] = [
   {
     id: 'match-1',
     opponent: 'Al Ittihad U17',
@@ -103,9 +105,11 @@ const INITIAL_STANDINGS = [
 
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   session,
-  squadRoster = []
+  squadRoster = [],
+  fixtures: fixturesProp,
+  onUpdateFixtures
 }) => {
-  const [fixtures, setFixtures] = useState<MatchFixture[]>(() => {
+  const [localFixtures, setLocalFixtures] = useState<MatchFixture[]>(() => {
     try {
       const stored = localStorage.getItem('u17_competition_fixtures');
       if (stored) {
@@ -116,6 +120,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     }
     return DEFAULT_MATCHES;
   });
+
+  const fixtures = fixturesProp ?? localFixtures;
 
   const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup'>('fixtures');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'Scheduled' | 'Played'>('ALL');
@@ -144,11 +150,15 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const [selectedCallup, setSelectedCallup] = useState<string[]>(() => squadRoster.slice(0, 18));
 
   const saveFixtures = (updated: MatchFixture[]) => {
-    setFixtures(updated);
-    try {
-      localStorage.setItem('u17_competition_fixtures', JSON.stringify(updated));
-    } catch (e) {
-      // fallback
+    if (onUpdateFixtures) {
+      onUpdateFixtures(updated);
+    } else {
+      setLocalFixtures(updated);
+      try {
+        localStorage.setItem('u17_competition_fixtures', JSON.stringify(updated));
+      } catch (e) {
+        // fallback
+      }
     }
   };
 

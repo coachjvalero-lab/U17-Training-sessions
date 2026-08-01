@@ -26,7 +26,7 @@ import {
   FolderOpen,
   BookOpen
 } from 'lucide-react';
-import { TrainingSession, Exercise } from '../types';
+import { TrainingSession, Exercise, MatchFixture } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
@@ -152,6 +152,8 @@ interface FootballHubSectionProps {
   onChangeSession: (updatedSession: Partial<TrainingSession>) => void;
   renderActiveSessionEditor: () => React.ReactNode;
   squadRoster?: string[];
+  fixtures?: MatchFixture[];
+  onUpdateFixtures?: (fixtures: MatchFixture[]) => void;
   onAddExerciseToSession?: (
     blockKey: 'warmUp' | 'mainPart' | 'coolDown', 
     exercise: Exercise,
@@ -165,6 +167,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onChangeSession,
   renderActiveSessionEditor,
   squadRoster = [],
+  fixtures,
+  onUpdateFixtures,
   onAddExerciseToSession
 }) => {
   // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition' | 'library'
@@ -662,7 +666,12 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       {footballSubTab === 'planning' ? (
         <PlanificationSection session={session} cloudSessions={cloudSessions} />
       ) : footballSubTab === 'competition' ? (
-        <CompetitionSection session={session} squadRoster={squadRoster} />
+        <CompetitionSection
+          session={session}
+          squadRoster={squadRoster}
+          fixtures={fixtures}
+          onUpdateFixtures={onUpdateFixtures}
+        />
       ) : footballSubTab === 'library' ? (
         <ExercisesLibrary
           currentSession={session}

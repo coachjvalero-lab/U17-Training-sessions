@@ -16,7 +16,7 @@ import { PortalHub } from './components/PortalHub';
 import { SquadRosterSection } from './components/SquadRosterSection';
 import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
-import { CompetitionSection } from './components/CompetitionSection';
+import { CompetitionSection, DEFAULT_MATCHES } from './components/CompetitionSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { 
   TrainingSession, 
@@ -27,7 +27,8 @@ import {
   PortalSection,
   SquadPlayer,
   PhysioRecord,
-  VideoAnalysis 
+  VideoAnalysis,
+  MatchFixture 
 } from './types';
 import { 
   saveSessionToCloud, 
@@ -52,6 +53,14 @@ import {
   subscribeToTeamLogo,
   saveTeamLogoToCloud,
   migrateLocalTeamLogoIfNeeded,
+  subscribeToVideoAnalysis,
+  saveVideoAnalysisToCloud,
+  deleteVideoAnalysisFromCloud,
+  migrateLocalVideoAnalysisIfNeeded,
+  subscribeToCompetitionFixtures,
+  saveCompetitionFixtureToCloud,
+  deleteCompetitionFixtureFromCloud,
+  migrateLocalCompetitionFixturesIfNeeded,
   CloudTrainingSession 
 } from './firebase';
 import { 
@@ -325,29 +334,97 @@ export default function App() {
     saveTeamLogoToCloud(newLogo).catch(err => console.warn('Cloud save failed for team logo:', err));
   };
 
+  const initialVideoSessionsRef = useRef<VideoAnalysis[]>([]);
   const [videoSessions, setVideoSessions] = useState<VideoAnalysis[]>(() => {
-    try {
-      const saved = localStorage.getItem('u17_video_sessions');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'video-demo-1',
-        title: 'Tactical Build-Up Analysis',
-        matchOrSessionDate: new Date().toISOString().split('T')[0],
-        opponentOrTopic: 'vs Al-Ahli Pressing Block',
-        videoUrl: 'https://youtube.com',
-        gameMoment: 'Attack',
-        tags: ['BuildUp', 'PressingTrigger', '3v2Overload'],
-        keyTimestamps: [
-          { time: '04:12', note: 'Central defender drops deep to create passing angle' },
-          { time: '18:45', note: 'Winger inward cut creates central channel space' }
-        ],
-        summary: 'Review of positional distance between midfield pivots and fullbacks when building out under high press.',
-        createdAt: new Date().toISOString().split('T')[0]
-      }
-    ];
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_video_sessions');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return [
+        {
+          id: 'video-demo-1',
+          title: 'Tactical Build-Up Analysis',
+          matchOrSessionDate: new Date().toISOString().split('T')[0],
+          opponentOrTopic: 'vs Al-Ahli Pressing Block',
+          videoUrl: 'https://youtube.com',
+          gameMoment: 'Attack',
+          tags: ['BuildUp', 'PressingTrigger', '3v2Overload'],
+          keyTimestamps: [
+            { time: '04:12', note: 'Central defender drops deep to create passing angle' },
+            { time: '18:45', note: 'Winger inward cut creates central channel space' }
+          ],
+          summary: 'Review of positional distance between midfield pivots and fullbacks when building out under high press.',
+          createdAt: new Date().toISOString().split('T')[0]
+        }
+      ];
+    })();
+    initialVideoSessionsRef.current = computed;
+    return computed;
   });
+
+  const hasVideoMigrationSettledRef = useRef(false);
+
+  useEffect(() => {
+    migrateLocalVideoAnalysisIfNeeded(initialVideoSessionsRef.current)
+      .catch(() => {})
+      .finally(() => { hasVideoMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToVideoAnalysis((cloudSessions) => {
+      if (cloudSessions.length === 0 && !hasVideoMigrationSettledRef.current) {
+        return;
+      }
+      const list: VideoAnalysis[] = cloudSessions.map(({ updatedAt, ...session }) => session);
+      setVideoSessions(list);
+      try {
+        localStorage.setItem('u17_video_sessions', JSON.stringify(list));
+      } catch (e) {
+        console.warn('Video sessions local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const initialCompetitionFixturesRef = useRef<MatchFixture[]>([]);
+  const [competitionFixtures, setCompetitionFixtures] = useState<MatchFixture[]>(() => {
+    const computed = (() => {
+      try {
+        const saved = localStorage.getItem('u17_competition_fixtures');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return DEFAULT_MATCHES;
+    })();
+    initialCompetitionFixturesRef.current = computed;
+    return computed;
+  });
+
+  const hasCompetitionFixturesMigrationSettledRef = useRef(false);
+
+  useEffect(() => {
+    migrateLocalCompetitionFixturesIfNeeded(initialCompetitionFixturesRef.current)
+      .catch(() => {})
+      .finally(() => { hasCompetitionFixturesMigrationSettledRef.current = true; });
+
+    const unsubscribe = subscribeToCompetitionFixtures((cloudFixtures) => {
+      if (cloudFixtures.length === 0 && !hasCompetitionFixturesMigrationSettledRef.current) {
+        return;
+      }
+      const list: MatchFixture[] = cloudFixtures.map(({ updatedAt, ...fixture }) => fixture);
+      setCompetitionFixtures(list);
+      try {
+        localStorage.setItem('u17_competition_fixtures', JSON.stringify(list));
+      } catch (e) {
+        console.warn('Competition fixtures local cache warning:', e);
+      }
+    }, () => {
+      // Offline or subscription error: keep working with whatever is cached locally
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Listen to Firebase Auth state
   useEffect(() => {
@@ -928,10 +1005,57 @@ export default function App() {
   };
 
   const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
-    setVideoSessions(sessionsList);
-    try {
-      localStorage.setItem('u17_video_sessions', JSON.stringify(sessionsList));
-    } catch (e) {}
+    setVideoSessions(prev => {
+      const previous = prev;
+      try {
+        localStorage.setItem('u17_video_sessions', JSON.stringify(sessionsList));
+      } catch (e) {}
+
+      const previousById = new Map(previous.map(session => [session.id, session]));
+      const updatedIds = new Set(sessionsList.map(session => session.id));
+
+      sessionsList.forEach(session => {
+        const previousSession = previousById.get(session.id);
+        if (!previousSession || JSON.stringify(previousSession) !== JSON.stringify(session)) {
+          saveVideoAnalysisToCloud(session).catch(err => console.warn('Cloud save failed for video analysis:', err));
+        }
+      });
+
+      previous.forEach(session => {
+        if (!updatedIds.has(session.id)) {
+          deleteVideoAnalysisFromCloud(session.id).catch(err => console.warn('Cloud delete failed for video analysis:', err));
+        }
+      });
+
+      return sessionsList;
+    });
+  };
+
+  const handleUpdateCompetitionFixtures = (fixturesList: MatchFixture[]) => {
+    setCompetitionFixtures(prev => {
+      const previous = prev;
+      try {
+        localStorage.setItem('u17_competition_fixtures', JSON.stringify(fixturesList));
+      } catch (e) {}
+
+      const previousById = new Map(previous.map(fixture => [fixture.id, fixture]));
+      const updatedIds = new Set(fixturesList.map(fixture => fixture.id));
+
+      fixturesList.forEach(fixture => {
+        const previousFixture = previousById.get(fixture.id);
+        if (!previousFixture || JSON.stringify(previousFixture) !== JSON.stringify(fixture)) {
+          saveCompetitionFixtureToCloud(fixture).catch(err => console.warn('Cloud save failed for competition fixture:', err));
+        }
+      });
+
+      previous.forEach(fixture => {
+        if (!updatedIds.has(fixture.id)) {
+          deleteCompetitionFixtureFromCloud(fixture.id).catch(err => console.warn('Cloud delete failed for competition fixture:', err));
+        }
+      });
+
+      return fixturesList;
+    });
   };
 
   const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
@@ -1481,6 +1605,8 @@ export default function App() {
             onChangeSession={handleUpdateSession}
             onAddExerciseToSession={handleAddExerciseFromLibrary}
             squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            fixtures={competitionFixtures}
+            onUpdateFixtures={handleUpdateCompetitionFixtures}
             renderActiveSessionEditor={() => (
               <main className="space-y-6 md:space-y-8 print:space-y-1.5">
                 

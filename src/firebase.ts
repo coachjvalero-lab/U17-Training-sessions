@@ -21,7 +21,7 @@ import {
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { TrainingSession, Exercise, SquadPlayer, PhysioRecord } from './types';
+import { TrainingSession, Exercise, SquadPlayer, PhysioRecord, VideoAnalysis, MatchFixture } from './types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
 
@@ -362,6 +362,124 @@ export async function migrateLocalExerciseLibraryIfNeeded(localExercises: Exerci
     }
   } catch (e) {
     console.warn('Exercise library migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Video Analysis (shared tactical review sessions — Firestore is the source of truth,
+// localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const VIDEO_ANALYSIS_COLLECTION = 'videoAnalysis';
+const VIDEO_ANALYSIS_META_COLLECTION = 'videoAnalysisMeta';
+
+export interface CloudVideoAnalysis extends VideoAnalysis {
+  updatedAt: number;
+}
+
+export function subscribeToVideoAnalysis(
+  callback: (sessions: CloudVideoAnalysis[]) => void,
+  onError?: (error: any) => void
+) {
+  return onSnapshot(collection(db, VIDEO_ANALYSIS_COLLECTION), (querySnapshot) => {
+    const sessions: CloudVideoAnalysis[] = [];
+    querySnapshot.forEach((docSnap) => {
+      sessions.push(docSnap.data() as CloudVideoAnalysis);
+    });
+    callback(sessions);
+  }, (error) => {
+    console.warn('Video analysis subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+export async function saveVideoAnalysisToCloud(session: VideoAnalysis): Promise<number> {
+  const saveTimestamp = Date.now();
+  const sessionRef = doc(db, VIDEO_ANALYSIS_COLLECTION, session.id);
+  const cleanSession = JSON.parse(JSON.stringify(session));
+  await setDoc(sessionRef, { ...cleanSession, updatedAt: saveTimestamp }, { merge: true });
+  return saveTimestamp;
+}
+
+export async function deleteVideoAnalysisFromCloud(sessionId: string): Promise<void> {
+  const sessionRef = doc(db, VIDEO_ANALYSIS_COLLECTION, sessionId);
+  await deleteDoc(sessionRef);
+}
+
+export async function migrateLocalVideoAnalysisIfNeeded(localSessions: VideoAnalysis[]): Promise<void> {
+  const metaRef = doc(db, VIDEO_ANALYSIS_META_COLLECTION, 'status');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localSessions.length > 0) {
+      await Promise.all(localSessions.map(session => saveVideoAnalysisToCloud(session)));
+    }
+  } catch (e) {
+    console.warn('Video analysis migration skipped:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Competition Fixtures (shared match calendar — Firestore is the source of truth,
+// localStorage is only a temporary cache/offline fallback)
+// ---------------------------------------------------------------------------
+
+const COMPETITION_FIXTURES_COLLECTION = 'competitionFixtures';
+const COMPETITION_FIXTURES_META_COLLECTION = 'competitionFixturesMeta';
+
+export interface CloudCompetitionFixture extends MatchFixture {
+  updatedAt: number;
+}
+
+export function subscribeToCompetitionFixtures(
+  callback: (fixtures: CloudCompetitionFixture[]) => void,
+  onError?: (error: any) => void
+) {
+  return onSnapshot(collection(db, COMPETITION_FIXTURES_COLLECTION), (querySnapshot) => {
+    const fixtures: CloudCompetitionFixture[] = [];
+    querySnapshot.forEach((docSnap) => {
+      fixtures.push(docSnap.data() as CloudCompetitionFixture);
+    });
+    callback(fixtures);
+  }, (error) => {
+    console.warn('Competition fixtures subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
+export async function saveCompetitionFixtureToCloud(fixture: MatchFixture): Promise<number> {
+  const saveTimestamp = Date.now();
+  const fixtureRef = doc(db, COMPETITION_FIXTURES_COLLECTION, fixture.id);
+  const cleanFixture = JSON.parse(JSON.stringify(fixture));
+  await setDoc(fixtureRef, { ...cleanFixture, updatedAt: saveTimestamp }, { merge: true });
+  return saveTimestamp;
+}
+
+export async function deleteCompetitionFixtureFromCloud(fixtureId: string): Promise<void> {
+  const fixtureRef = doc(db, COMPETITION_FIXTURES_COLLECTION, fixtureId);
+  await deleteDoc(fixtureRef);
+}
+
+export async function migrateLocalCompetitionFixturesIfNeeded(localFixtures: MatchFixture[]): Promise<void> {
+  const metaRef = doc(db, COMPETITION_FIXTURES_META_COLLECTION, 'status');
+  try {
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      return;
+    }
+    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    if (localFixtures.length > 0) {
+      await Promise.all(localFixtures.map(fixture => saveCompetitionFixtureToCloud(fixture)));
+    }
+  } catch (e) {
+    console.warn('Competition fixtures migration skipped:', e);
   }
 }
 
