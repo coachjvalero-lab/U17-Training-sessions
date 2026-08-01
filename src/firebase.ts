@@ -22,19 +22,19 @@ import {
 import { TrainingSession } from './types';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBUbDCZivcYcg68Hja54tHl0oVC1sPVAgU",
-  authDomain: "gen-lang-client-0299867129.firebaseapp.com",
-  projectId: "gen-lang-client-0299867129",
-  storageBucket: "gen-lang-client-0299867129.firebasestorage.app",
-  messagingSenderId: "42565623033",
-  appId: "1:42565623033:web:d7e9c92f05052029361628"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with custom database ID
-export const db = getFirestore(app, "ai-studio-u17trainingsessi-8c691063-da9d-42be-8595-dd4dada7f0b7");
+export const db = getFirestore(app, import.meta.env.VITE_FIREBASE_DATABASE_ID);
 setLogLevel('silent');
 
 // Initialize Firebase Auth
@@ -257,8 +257,9 @@ export async function saveSessionToCloud(session: TrainingSession, force: boolea
   
   const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
   
-  // Clean object via JSON cycle to strip any undefined properties that Firestore setDoc rejects
-  const cleanSession = JSON.parse(JSON.stringify(session));
+  // Strip teamLogo (base64 can exceed Firestore's 1MB document limit); stored only in localStorage
+  const { teamLogo: _logo, ...sessionWithoutLogo } = session;
+  const cleanSession = JSON.parse(JSON.stringify(sessionWithoutLogo));
   const cloudData: CloudTrainingSession = {
     ...cleanSession,
     updatedAt: saveTimestamp
@@ -277,9 +278,10 @@ export async function saveSessionToCloud(session: TrainingSession, force: boolea
     clearQuotaExceeded();
     return saveTimestamp;
   } catch (err: any) {
-    // If write quota limit reached, set backoff for 5 minutes (instead of 24 hours)
-    markQuotaExceeded(5 * 60 * 1000);
-    console.warn('Cloud sync temporarily throttled (daily write quota limit reached or network error). Changes are saved locally.');
+    if (err?.code === 'resource-exhausted') {
+      markQuotaExceeded(5 * 60 * 1000);
+    }
+    console.warn('Cloud sync failed:', err?.code || err?.message);
     throw err;
   }
 }
@@ -292,8 +294,11 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
     const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
     await deleteDoc(sessionRef);
   } catch (err: any) {
-    markQuotaExceeded(5 * 60 * 1000);
-    console.warn('Delete operation paused (daily quota limit reached).');
+    if (err?.code === 'resource-exhausted') {
+      markQuotaExceeded(5 * 60 * 1000);
+    }
+    console.warn('Delete operation failed:', err?.code || err?.message);
+    throw err;
   }
 }
 

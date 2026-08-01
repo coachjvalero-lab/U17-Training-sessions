@@ -60,10 +60,41 @@ import {
   Trophy,
   Calendar,
   Swords,
-  Users
+  Users,
+  Moon,
+  Sun
 } from 'lucide-react';
 
+// Fills missing fitness/GK blocks and normalizes the squad roster
+function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
+  const gkTemplate = getDefaultSession();
+  return normalizeSessionRoster({
+    ...base,
+    fitnessWarmUp: base.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
+    fitnessMainPart: base.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
+    fitnessCoolDown: base.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
+    fitnessPlayerGroups: base.fitnessPlayerGroups || [],
+    gkWarmUp: base.gkWarmUp || gkTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+    gkMainPart: base.gkMainPart || gkTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+    gkCoolDown: base.gkCoolDown || gkTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+    gkPlayerGroups: base.gkPlayerGroups || [],
+  } as TrainingSession);
+}
+
 export default function App() {
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('u17_theme_mode');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch (e) {}
+
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    return 'light';
+  });
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
   const [activeSection, setActiveSection] = useState<PortalSection>('hub');
@@ -148,14 +179,7 @@ export default function App() {
           if (parsed.sessionNumber === '42') {
             parsed.sessionNumber = '001';
           }
-          const defaultTemplate = getDefaultSession();
-          return normalizeSessionRoster({
-            ...parsed,
-            gkWarmUp: parsed.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-            gkMainPart: parsed.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-            gkCoolDown: parsed.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-            gkPlayerGroups: parsed.gkPlayerGroups || [],
-          });
+          return buildUnifiedSession(parsed);
         }
       } catch (e) {
         console.error('Failed to parse saved unified session:', e);
@@ -220,6 +244,15 @@ export default function App() {
   });
 
   useEffect(() => {
+    const isDark = themeMode === 'dark';
+    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+    try {
+      localStorage.setItem('u17_theme_mode', themeMode);
+    } catch (e) {}
+  }, [themeMode]);
+
+  useEffect(() => {
     const updateCount = () => {
       try {
         const saved = localStorage.getItem('u17_custom_exercise_library');
@@ -238,7 +271,6 @@ export default function App() {
   const currentSessionIdRef = useRef<string>('');
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
-  const cloudQuotaExceededUntilRef = useRef<number>(0);
 
   // Keep latest session ref in sync for window unload / visibilitychange handlers
   useEffect(() => {
@@ -273,7 +305,6 @@ export default function App() {
       lastLoadedSessionTimeRef.current = savedTime;
       lastSavedJsonRef.current = currentJson;
       clearQuotaExceeded();
-      cloudQuotaExceededUntilRef.current = 0;
     } catch (_err) {
       console.warn('Cloud save skipped or throttled. All progress remains safely saved locally.');
     } finally {
@@ -282,7 +313,7 @@ export default function App() {
     }
   };
 
-  // Immediate flush on page hide or tab close so no pending edits are lost
+  // Flush to cloud when tab is hidden/backgrounded
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && latestSessionRef.current) {
@@ -290,19 +321,8 @@ export default function App() {
       }
     };
 
-    const handleBeforeUnload = () => {
-      if (latestSessionRef.current) {
-        saveCurrentSessionToCloudNow(latestSessionRef.current);
-      }
-    };
-
     window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
@@ -357,18 +377,12 @@ export default function App() {
                 baseSession.sessionNumber = '001';
               }
 
-              const defaultTemplate = getDefaultSession();
+              const restoredLogo = latestSessionRef.current?.teamLogo ||
+                localStorage.getItem('u17_uploaded_team_logo') || '';
 
-              const unifiedSession: TrainingSession = normalizeSessionRoster({
+              const unifiedSession: TrainingSession = buildUnifiedSession({
                 ...baseSession,
-                fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-                fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-                fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-                fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
-                gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-                gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-                gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-                gkPlayerGroups: baseSession.gkPlayerGroups || [],
+                teamLogo: restoredLogo,
               });
 
               isRemoteUpdateRef.current = true;
@@ -430,35 +444,47 @@ export default function App() {
     }
   }, [session]);
 
-  // Scheduled Daily Sync at 0:30 AM (after Firestore daily write quota resets)
+  // Scheduled Daily Sync at 0:30 AM — fires once, then reschedules 24 h later
   useEffect(() => {
-    const checkDailyReset = () => {
+    let timerId: ReturnType<typeof setTimeout>;
+
+    const runDailyReset = () => {
       const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const todayStr = `${year}-${month}-${day}`;
-
-      // Check if current local time is at or past 0:30 AM (00:30)
-      const isPast030 = now.getHours() > 0 || (now.getHours() === 0 && now.getMinutes() >= 30);
-
+      const todayStr = now.toISOString().slice(0, 10);
       const lastResetDate = localStorage.getItem('u17_last_030_reset_date');
 
-      if (isPast030 && lastResetDate !== todayStr) {
-        console.log('Resetting daily Firestore quota lock at 0:30 AM and performing initial daily save...');
+      if (lastResetDate !== todayStr) {
         clearQuotaExceeded();
-        cloudQuotaExceededUntilRef.current = 0;
         localStorage.setItem('u17_last_030_reset_date', todayStr);
-
         if (latestSessionRef.current) {
           saveCurrentSessionToCloudNow(latestSessionRef.current);
         }
       }
+
+      // Schedule next check for exactly 24 hours later
+      timerId = setTimeout(runDailyReset, 24 * 60 * 60 * 1000);
     };
 
-    checkDailyReset();
-    const interval = setInterval(checkDailyReset, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
+    // Calculate ms until next 0:30 AM
+    const scheduleFirst = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setHours(0, 30, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      timerId = setTimeout(runDailyReset, next.getTime() - now.getTime());
+    };
+
+    // Run immediately if today's reset hasn't happened yet, then schedule
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const isPast030 = now.getHours() > 0 || (now.getHours() === 0 && now.getMinutes() >= 30);
+    if (isPast030 && localStorage.getItem('u17_last_030_reset_date') !== todayStr) {
+      runDailyReset();
+    } else {
+      scheduleFirst();
+    }
+
+    return () => clearTimeout(timerId);
   }, []);
 
   // Debounced Cloud Autosave: automatically sync local changes to Firestore 2.5 seconds after editing stops
@@ -685,19 +711,7 @@ export default function App() {
   };
 
   const handleImportSession = (imported: TrainingSession) => {
-    // Fill fitness and GK blocks if they are missing from raw JSON import
-    const defaultTemplate = getDefaultSession();
-    const unifiedImport: TrainingSession = normalizeSessionRoster({
-      ...imported,
-      fitnessWarmUp: imported.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-      fitnessMainPart: imported.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-      fitnessCoolDown: imported.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-      fitnessPlayerGroups: imported.fitnessPlayerGroups || [],
-      gkWarmUp: imported.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-      gkMainPart: imported.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-      gkCoolDown: imported.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-      gkPlayerGroups: imported.gkPlayerGroups || [],
-    });
+    const unifiedImport: TrainingSession = buildUnifiedSession(imported);
     
     setSession(unifiedImport);
     
@@ -786,7 +800,6 @@ export default function App() {
         lastLoadedSessionTimeRef.current = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
         clearQuotaExceeded();
-        cloudQuotaExceededUntilRef.current = 0;
         alert('¡Cambios guardados en la nube y sincronizados en todos tus dispositivos!');
       } catch (cloudErr) {
         console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
@@ -876,20 +889,14 @@ export default function App() {
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
       const { updatedAt, ...baseSession } = loadedSession;
-      const defaultTemplate = getDefaultSession();
-      
+      const restoredLogo = latestSessionRef.current?.teamLogo ||
+        localStorage.getItem('u17_uploaded_team_logo') || '';
+
       // Upgrade fitness and GK fields if missing from loaded old document
-      const unifiedSession: TrainingSession = normalizeSessionRoster({
+      const unifiedSession: TrainingSession = buildUnifiedSession({
         ...baseSession,
+        teamLogo: restoredLogo,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
-        fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-        fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-        fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-        fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
-        gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-        gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-        gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-        gkPlayerGroups: baseSession.gkPlayerGroups || [],
       });
 
       if (unifiedSession.id && window.history.replaceState) {
@@ -943,20 +950,14 @@ export default function App() {
           if (remaining.length > 0) {
             const nextSession = remaining[0];
             const { updatedAt, ...baseSession } = nextSession;
-            const defaultTemplate = getDefaultSession();
-            
-            const unifiedSession: TrainingSession = {
+            const restoredLogo = latestSessionRef.current?.teamLogo ||
+              localStorage.getItem('u17_uploaded_team_logo') || '';
+
+            const unifiedSession: TrainingSession = buildUnifiedSession({
               ...baseSession,
+              teamLogo: restoredLogo,
               teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
-              fitnessWarmUp: baseSession.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-              fitnessMainPart: baseSession.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-              fitnessCoolDown: baseSession.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-              fitnessPlayerGroups: baseSession.fitnessPlayerGroups || [],
-              gkWarmUp: baseSession.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-              gkMainPart: baseSession.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-              gkCoolDown: baseSession.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-              gkPlayerGroups: baseSession.gkPlayerGroups || [],
-            };
+            });
 
             isRemoteUpdateRef.current = true;
             setSession(unifiedSession);
@@ -1117,10 +1118,26 @@ export default function App() {
     setExpandedExercises(nextExpanded);
   };
 
+  const renderThemeToggle = () => (
+    <div className="fixed top-4 right-4 z-[90] print:hidden">
+      <button
+        type="button"
+        onClick={() => setThemeMode((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+        className="inline-flex items-center gap-2 rounded-xl bg-[#002142] hover:bg-[#0f5981] text-white border border-white/20 px-3 py-2 text-xs font-extrabold tracking-wide shadow-lg transition-colors"
+        aria-label="Cambiar modo oscuro"
+        title={themeMode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+      >
+        {themeMode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        <span>{themeMode === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+      </button>
+    </div>
+  );
+
   // Auth Guard: Show loading indicator or Login Page if unauthenticated
   if (isAuthInitializing) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        {renderThemeToggle()}
         <div className="flex flex-col items-center space-y-3">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
           <span className="text-sm font-bold text-slate-300">Loading U17 Portal...</span>
@@ -1130,30 +1147,39 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <LoginPage onSuccess={() => {}} />;
+    return (
+      <>
+        <LoginPage onSuccess={() => {}} />
+        {renderThemeToggle()}
+      </>
+    );
   }
 
   // Standalone Portal Navigation Hub View (No sidebar, clean light layout)
   if (activeSection === 'hub') {
     return (
-      <PortalHub
-        onSelectSection={setActiveSection}
-        squadCount={squadPlayers.length}
-        activeSessionDate={session.date}
-        totalExercisesCount={libraryCount}
-        squadPlayers={squadPlayers}
-        physioRecords={physioRecords}
-        videoSessions={videoSessions}
-        currentUser={currentUser}
-        onLogout={logoutUser}
-        currentLogo={session.teamLogo || getActiveLogo()}
-        onUpdateLogo={(newLogo) => handleUpdateSession({ teamLogo: newLogo })}
-      />
+      <>
+        <PortalHub
+          onSelectSection={setActiveSection}
+          squadCount={squadPlayers.length}
+          activeSessionDate={session.date}
+          totalExercisesCount={libraryCount}
+          squadPlayers={squadPlayers}
+          physioRecords={physioRecords}
+          videoSessions={videoSessions}
+          currentUser={currentUser}
+          onLogout={logoutUser}
+          currentLogo={session.teamLogo || getActiveLogo()}
+          onUpdateLogo={(newLogo) => handleUpdateSession({ teamLogo: newLogo })}
+        />
+        {renderThemeToggle()}
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
+      {renderThemeToggle()}
       
       {/* Lateral Dark Blue Navigation Sidebar */}
       <Sidebar
