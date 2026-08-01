@@ -4,7 +4,7 @@ import {
   Trash2, 
   Plus, 
   CloudUpload, 
-  Share2, 
+  Save, 
   Check, 
   FolderOpen, 
   Layers, 
@@ -375,26 +375,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Share Live Permanent Link Button */}
+        {/* Primary Save Session Button */}
         <button
           type="button"
-          onClick={onCopyShareLink}
-          className={`w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl transition-all cursor-pointer border text-xs font-black uppercase tracking-wider ${
-            copiedLink 
-              ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-500/30' 
-              : 'bg-[#a79078]/20 hover:bg-[#a79078]/35 text-[#a79078] hover:text-white border-[#a79078]/40'
+          onClick={onSaveToCloud}
+          disabled={isCloudSaving}
+          className={`w-full flex items-center justify-center space-x-2 py-3 px-3 rounded-xl transition-all cursor-pointer border text-xs font-black uppercase tracking-wider shadow-md ${
+            isCloudSaving 
+              ? 'bg-amber-600/30 text-amber-300 border-amber-500/50 cursor-wait' 
+              : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 shadow-emerald-500/20 hover:shadow-emerald-500/30'
           }`}
-          title="Copiar enlace único en directo para compartir"
+          title="Guardar sesión actual en la nube y en local"
         >
-          {copiedLink ? (
+          {isCloudSaving ? (
             <>
-              <Check className="w-4 h-4 text-emerald-200" />
-              <span>¡Enlace Copiado!</span>
+              <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
+              <span>Guardando...</span>
             </>
           ) : (
             <>
-              <Share2 className="w-4 h-4 text-[#a79078]" />
-              <span>Compartir Enlace en Vivo</span>
+              <Save className="w-4 h-4 text-slate-950" />
+              <span>Guardar Sesión</span>
             </>
           )}
         </button>
@@ -417,24 +418,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={onSaveToCloud}
               disabled={isCloudSaving}
-              className="p-1.5 bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 rounded-lg transition-all cursor-pointer border border-sky-400/30 text-[10px] font-bold flex items-center space-x-1"
-              title="Save current session to Cloud Firestore"
+              className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 rounded-lg transition-all cursor-pointer border border-emerald-400/30 text-[10px] font-bold flex items-center space-x-1"
+              title="Guardar sesión actual"
             >
               {isCloudSaving ? (
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
               ) : (
-                <CloudUpload className="w-3 h-3 text-sky-300" />
+                <Save className="w-3 h-3 text-emerald-300" />
               )}
-              <span className="hidden sm:inline">Save</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onCopyShareLink}
-              className="p-1.5 bg-[#a79078]/20 hover:bg-[#a79078]/40 text-[#a79078] rounded-lg transition-all cursor-pointer border border-[#a79078]/30"
-              title="Copy shareable link to current session"
-            >
-              {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Share2 className="w-3 h-3" />}
+              <span className="hidden sm:inline">Guardar</span>
             </button>
           </div>
         </div>

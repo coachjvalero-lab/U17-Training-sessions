@@ -1253,6 +1253,8 @@ export default function App() {
                 <HeaderSection 
                   session={session}
                   onChange={handleUpdateSession}
+                  onSave={handleSaveActiveToCloud}
+                  isSaving={isCloudSaving}
                 />
 
                 {/* Section: Session Attendance Quick Tracker */}
@@ -1342,6 +1344,8 @@ export default function App() {
             <HeaderSection 
               session={session}
               onChange={handleUpdateSession}
+              onSave={handleSaveActiveToCloud}
+              isSaving={isCloudSaving}
             />
 
             {/* Section: Session Attendance Quick Tracker */}
