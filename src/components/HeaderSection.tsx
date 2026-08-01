@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity, Loader2, Save } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
@@ -8,10 +8,12 @@ import { SmartImage } from './SmartImage';
 interface HeaderSectionProps {
   session: TrainingSession;
   onChange: (fields: Partial<TrainingSession>) => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 }
 
 
-export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange }) => {
+export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
@@ -127,19 +129,43 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange 
 
         {/* Column 2: Main Info Fields (Span 9) */}
         <div className="md:col-span-9 space-y-4 print:col-span-10 print:space-y-1">
-          {/* Team Name Title */}
-          <div>
-            <label className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 block mb-1 print:hidden">
-              Team or Club Name
-            </label>
-            <input
-              id="header-team-name"
-              type="text"
-              value={session.teamName}
-              onChange={(e) => onChange({ teamName: e.target.value })}
-              placeholder="e.g., A.D. San Pedro U17"
-              className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-sm print:font-black print:pb-0 print:text-[#002142]"
-            />
+          {/* Team Name Title & Quick Save Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1">
+              <label className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-600 block mb-1 print:hidden">
+                Team or Club Name
+              </label>
+              <input
+                id="header-team-name"
+                type="text"
+                value={session.teamName}
+                onChange={(e) => onChange({ teamName: e.target.value })}
+                placeholder="e.g., A.D. San Pedro U17"
+                className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-sm print:font-black print:pb-0 print:text-[#002142]"
+              />
+            </div>
+
+            {onSave && (
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving}
+                className="print:hidden flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer border border-emerald-400 shrink-0 hover:shadow-emerald-500/20"
+                title="Guardar cambios de la sesión"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 text-slate-950" />
+                    <span>Guardar Sesión</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
