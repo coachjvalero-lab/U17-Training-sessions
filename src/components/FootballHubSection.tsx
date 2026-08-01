@@ -32,12 +32,13 @@ import { CompetitionSection } from './CompetitionSection';
 
 export interface DrillCard {
   id: string;
+  sessionNumber: number;
   title: string;
-  coachName: string;
+  coachName?: string;
   coachAvatar?: string;
   date: string;
   category: 'Rondo' | 'Game' | 'Speed' | 'Build-Up' | 'Finishing' | 'Tactical';
-  drillType: 'rondo5v2' | 'game7v7' | 'speed3v0' | 'buildup4v3' | 'finishing2v1';
+  drillType?: 'rondo5v2' | 'game7v7' | 'speed3v0' | 'buildup4v3' | 'finishing2v1';
   likesCount: number;
   isBookmarked: boolean;
   groupCount: number;
@@ -52,58 +53,26 @@ export interface DrillCard {
 
 const DEFAULT_DRILL_CARDS: DrillCard[] = [
   {
-    id: 'card-1',
-    title: 'Rondo 5vs2 con cambio de orientación',
+    id: 'card-5',
+    sessionNumber: 5,
+    title: 'Circuito de Finalización 2v1 & Remate',
     coachName: 'Javi Valero',
     coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
     date: '30 de julio de 2026',
-    category: 'Rondo',
-    drillType: 'rondo5v2',
-    likesCount: 12,
-    isBookmarked: true,
-    groupCount: 7,
-    rating: '0,0 (0)',
-    status: 'active',
-    duration: '15 min',
-    intensity: 'High',
-    description: 'Possession drill in 2 connected squares. 5 attackers maintain ball against 2 defenders, shifting play to opposite grid when open.'
-  },
-  {
-    id: 'card-2',
-    title: '7 vs 7 game',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '30 de julio de 2026',
-    category: 'Game',
-    drillType: 'game7v7',
-    likesCount: 18,
-    isBookmarked: false,
-    groupCount: 14,
-    rating: '0,0 (0)',
-    status: 'active',
-    duration: '25 min',
-    intensity: 'Match Max',
-    description: 'Reduced pitch 7v7 match with tactical constraints. Focus on quick midfield transition and defensive compact lines.'
-  },
-  {
-    id: 'card-3',
-    title: 'Speed 3 vs 0',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '30 de julio de 2026',
-    category: 'Speed',
-    drillType: 'speed3v0',
-    likesCount: 9,
+    category: 'Finishing',
+    drillType: 'finishing2v1',
+    likesCount: 11,
     isBookmarked: false,
     groupCount: 6,
-    rating: '0,0 (0)',
+    rating: '4,9 (8)',
     status: 'completed',
-    duration: '12 min',
-    intensity: 'Explosive',
-    description: 'High-speed 3-player counterattack combinations ending with direct shot on goal under strict time limits.'
+    duration: '18 min',
+    intensity: 'Alta Intensidad',
+    description: 'Ataque rápido por bandas con desmarque de apoyo en 2v1 y disparo a puerta en transición veloz.'
   },
   {
     id: 'card-4',
+    sessionNumber: 4,
     title: 'Salida de Balón 4v3 + Portero',
     coachName: 'Javi Valero',
     coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
@@ -116,25 +85,62 @@ const DEFAULT_DRILL_CARDS: DrillCard[] = [
     rating: '4,8 (5)',
     status: 'active',
     duration: '20 min',
-    intensity: 'Medium-High',
-    description: 'Defensive line build-up against high opponent pressing block. Finding free pivot or full-back advance.'
+    intensity: 'Medio-Alta',
+    description: 'Iniciación desde línea defensiva superando presión alta rival buscando al pivote o lateral libre.'
   },
   {
-    id: 'card-5',
-    title: 'Circuito de Finalización 2v1',
+    id: 'card-3',
+    sessionNumber: 3,
+    title: 'Speed 3 vs 0 Counterattack',
     coachName: 'Javi Valero',
     coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
     date: '28 de julio de 2026',
-    category: 'Finishing',
-    drillType: 'finishing2v1',
-    likesCount: 11,
+    category: 'Speed',
+    drillType: 'speed3v0',
+    likesCount: 9,
     isBookmarked: false,
     groupCount: 6,
-    rating: '0,0 (0)',
+    rating: '4,5 (3)',
     status: 'completed',
-    duration: '18 min',
-    intensity: 'High',
-    description: 'Fast wing overlap into 2v1 box penetration and dynamic finishing against active central defender.'
+    duration: '12 min',
+    intensity: 'Explosiva',
+    description: 'Sprint en combinación de 3 atacantes con pared directa y finalización con límite de tiempo.'
+  },
+  {
+    id: 'card-2',
+    sessionNumber: 2,
+    title: 'Partido Aplicado 7 vs 7 Reducido',
+    coachName: 'Javi Valero',
+    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
+    date: '27 de julio de 2026',
+    category: 'Game',
+    drillType: 'game7v7',
+    likesCount: 18,
+    isBookmarked: false,
+    groupCount: 14,
+    rating: '5,0 (12)',
+    status: 'active',
+    duration: '25 min',
+    intensity: 'Máxima Competitiva',
+    description: 'Juego de aplicación táctica en campo reducido con norma de gol triple tras pérdida en campo rival.'
+  },
+  {
+    id: 'card-1',
+    sessionNumber: 1,
+    title: 'Rondo 5vs2 con cambio de orientación',
+    coachName: 'Javi Valero',
+    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
+    date: '26 de julio de 2026',
+    category: 'Rondo',
+    drillType: 'rondo5v2',
+    likesCount: 12,
+    isBookmarked: true,
+    groupCount: 7,
+    rating: '4,7 (6)',
+    status: 'active',
+    duration: '15 min',
+    intensity: 'Alta',
+    description: 'Mantenimiento de posesión en cuadrantes conectados orientando el juego tras 4 pases consecutivos.'
   }
 ];
 
@@ -179,24 +185,26 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
   // Add new session card
   const handleAddNewCard = () => {
-    const title = prompt('Enter Training Session / Drill Title:', 'Nuevo Rondo 4v2 Adaptativo');
+    const title = prompt('Enter Training Session Title:', 'Nueva Sesión Táctica');
     if (!title || !title.trim()) return;
+
+    const maxNum = drillCards.length > 0 ? Math.max(...drillCards.map(c => c.sessionNumber || 0)) : 0;
+    const nextSessionNum = maxNum + 1;
 
     const newCard: DrillCard = {
       id: `card-${Date.now()}`,
+      sessionNumber: nextSessionNum,
       title: title.trim(),
-      coachName: 'Javi Valero',
-      coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
       date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
-      category: 'Rondo',
-      drillType: 'rondo5v2',
+      category: 'Tactical',
       likesCount: 0,
       isBookmarked: false,
       groupCount: 8,
       rating: '0,0 (0)',
       status: 'active',
-      duration: '15 min',
-      intensity: 'High'
+      duration: '20 min',
+      intensity: 'Alta',
+      description: 'Sesión de trabajo táctico de campo registrada en la librería de sesiones.'
     };
 
     setDrillCards([newCard, ...drillCards]);
@@ -209,18 +217,21 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     onChangeSession({
       mainObjective: card.title,
       sessionType: card.category === 'Rondo' ? 'Possession / Rondo' : card.category === 'Game' ? 'Match Play' : 'Tactical Drills',
-      observations: card.description || `Tactical session: ${card.title} loaded from Session Cards Hub.`
+      observations: card.description || `Tactical session: ${card.title} (Session #${String(card.sessionNumber).padStart(3, '0')}) loaded from Session Library.`
     });
     setSessionSubNav('editor');
   };
 
-  // Filter cards
-  const filteredCards = drillCards.filter(card => {
-    const matchesSearch = card.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          card.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = selectedCategory === 'All' || card.category === selectedCategory;
-    return matchesSearch && matchesCat;
-  });
+  // Filter and sort cards inversely (Session #005, Session #004, Session #003...)
+  const filteredCards = drillCards
+    .filter(card => {
+      const matchesSearch = card.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            card.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            `session #${card.sessionNumber}`.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCat = selectedCategory === 'All' || card.category === selectedCategory;
+      return matchesSearch && matchesCat;
+    })
+    .sort((a, b) => b.sessionNumber - a.sessionNumber);
 
   // Render tactical field SVG diagram matching card drill type
   const renderTacticalFieldSvg = (type: DrillCard['drillType']) => {
@@ -681,21 +692,20 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                           : 'border-slate-200/90 hover:border-slate-300'
                       }`}
                     >
-                      {/* CARD TOP HEADER (COACH AVATAR, NAME, DATE, TOP RIGHT CIRCLE) */}
-                      <div className="p-3.5 flex items-center justify-between border-b border-slate-100 bg-white">
+                      {/* CARD TOP HEADER (SESSION NUMBER, DATE, TOP RIGHT CIRCLE) */}
+                      <div className="p-4 flex items-center justify-between border-b border-slate-100 bg-white">
                         <div className="flex items-center space-x-3">
-                          {/* Coach Avatar */}
-                          <img
-                            src={card.coachAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150"}
-                            alt={card.coachName}
-                            className="w-9 h-9 rounded-full object-cover border border-slate-200 shadow-sm shrink-0"
-                          />
+                          {/* Session Badge Avatar */}
+                          <div className="w-10 h-10 rounded-xl bg-[#002142] text-emerald-400 font-mono font-black text-xs flex items-center justify-center shadow-sm shrink-0 border border-slate-800">
+                            #{String(card.sessionNumber).padStart(3, '0')}
+                          </div>
                           <div>
-                            <h4 className="text-xs font-bold text-slate-800 leading-none">
-                              {card.coachName}
+                            <h4 className="text-xs font-black text-slate-900 leading-none tracking-tight">
+                              Session #{String(card.sessionNumber).padStart(3, '0')}
                             </h4>
-                            <p className="text-[11px] font-medium text-slate-400 mt-1">
-                              {card.date}
+                            <p className="text-[11px] font-semibold text-slate-400 mt-1 flex items-center space-x-1">
+                              <Clock className="w-3 h-3 text-slate-400 inline" />
+                              <span>{card.date}</span>
                             </p>
                           </div>
                         </div>
@@ -715,79 +725,90 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                         </button>
                       </div>
 
-                      {/* CENTER TACTICAL FIELD DIAGRAM BOX */}
-                      <div 
-                        onClick={() => handleSelectCardToEdit(card)}
-                        className="bg-[#4f9a2b] relative overflow-hidden h-52 sm:h-56 cursor-pointer group-hover:brightness-105 transition-all flex items-center justify-center"
-                      >
-                        {/* Tactical SVG pitch rendering */}
-                        {renderTacticalFieldSvg(card.drillType)}
+                      {/* CARD BODY / CATEGORY TAG, TITLE, METADATA & CONTROL BUTTONS */}
+                      <div className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between">
+                        <div className="space-y-2.5">
+                          {/* Tags row */}
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                              {card.category}
+                            </span>
+                            <div className="flex items-center space-x-2 text-[11px] text-slate-500 font-semibold">
+                              {card.duration && (
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                  {card.duration}
+                                </span>
+                              )}
+                              {card.intensity && (
+                                <span className="bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                  {card.intensity}
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-                        {/* Hover load overlay */}
-                        <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                          {/* Title & Controls */}
+                          <div className="flex items-start justify-between gap-2 pt-1">
+                            <h3 
+                              onClick={() => handleSelectCardToEdit(card)}
+                              className="text-sm font-black text-slate-900 leading-snug line-clamp-2 cursor-pointer hover:text-emerald-700 transition-colors"
+                            >
+                              {card.title}
+                            </h3>
+
+                            {/* Control action icons matching screenshot */}
+                            <div className="flex items-center space-x-1 shrink-0 text-slate-400">
+                              <button
+                                type="button"
+                                title="Verified Drill"
+                                className="p-1 hover:text-emerald-600 transition-colors cursor-pointer"
+                              >
+                                <CheckCheck className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Settings"
+                                className="p-1 hover:text-slate-600 transition-colors cursor-pointer"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Options"
+                                className="p-1 hover:text-slate-600 transition-colors cursor-pointer"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectCardToEdit(card)}
+                                title="Expand Session"
+                                className="p-1 hover:text-emerald-600 transition-colors cursor-pointer"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Description */}
+                          {card.description && (
+                            <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3 font-medium bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                              {card.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Open in Editor Quick Button */}
+                        <div className="pt-2">
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectCardToEdit(card);
-                            }}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shadow-lg flex items-center space-x-1.5 cursor-pointer transform translate-y-2 group-hover:translate-y-0 transition-all"
+                            onClick={() => handleSelectCardToEdit(card)}
+                            className="w-full bg-[#002142] hover:bg-emerald-600 text-white hover:text-slate-950 font-bold text-xs py-2 px-3 rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-sm group-hover:shadow-md"
                           >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>Cargar Sesión</span>
+                            <Play className="w-3.5 h-3.5 fill-current text-emerald-400 group-hover:text-slate-950" />
+                            <span>Cargar Sesión en Editor</span>
                           </button>
                         </div>
-                      </div>
-
-                      {/* CARD BODY / TITLE & CONTROL BUTTONS */}
-                      <div className="p-4 bg-white space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 
-                            onClick={() => handleSelectCardToEdit(card)}
-                            className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 cursor-pointer hover:text-emerald-700 transition-colors"
-                          >
-                            {card.title}
-                          </h3>
-
-                          {/* Control action icons matching screenshot */}
-                          <div className="flex items-center space-x-1 shrink-0 text-slate-400">
-                            <button
-                              type="button"
-                              title="Verified Drill"
-                              className="p-1 hover:text-emerald-600 transition-colors"
-                            >
-                              <CheckCheck className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Settings"
-                              className="p-1 hover:text-slate-600 transition-colors"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Options"
-                              className="p-1 hover:text-slate-600 transition-colors"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectCardToEdit(card)}
-                              title="Expand Session"
-                              className="p-1 hover:text-emerald-600 transition-colors"
-                            >
-                              <ChevronDown className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {card.description && (
-                          <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
-                            {card.description}
-                          </p>
-                        )}
                       </div>
 
                       {/* CARD FOOTER ROW (LIKES, BOOKMARK, GROUP, STAR RATING MATCHING SCREENSHOT) */}
