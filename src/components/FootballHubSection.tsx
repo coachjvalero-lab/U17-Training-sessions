@@ -7,9 +7,6 @@ import {
   Plus, 
   Search, 
   Filter, 
-  CheckCheck, 
-  Settings, 
-  MoreVertical, 
   ChevronDown, 
   ThumbsUp, 
   Bookmark, 
@@ -18,7 +15,6 @@ import {
   Sparkles, 
   Check, 
   Edit3, 
-  Play, 
   ArrowRight, 
   Clock, 
   Target,
@@ -838,29 +834,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                               {card.title}
                             </h3>
 
-                            {/* Control action icons matching screenshot */}
+                            {/* Control action icons */}
                             <div className="flex items-center space-x-1 shrink-0 text-slate-400">
-                              <button
-                                type="button"
-                                title="Verified Drill"
-                                className="p-1 hover:text-emerald-600 transition-colors cursor-pointer"
-                              >
-                                <CheckCheck className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Settings"
-                                className="p-1 hover:text-slate-600 transition-colors cursor-pointer"
-                              >
-                                <Settings className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Options"
-                                className="p-1 hover:text-slate-600 transition-colors cursor-pointer"
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleSelectCardToEdit(card)}
@@ -878,18 +853,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                               {card.description}
                             </p>
                           )}
-                        </div>
-
-                        {/* Open in Editor Quick Button */}
-                        <div className="pt-2">
-                          <button
-                            type="button"
-                            onClick={() => handleSelectCardToEdit(card)}
-                            className="w-full bg-[#002142] hover:bg-emerald-600 text-white hover:text-slate-950 font-bold text-xs py-2 px-3 rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-sm group-hover:shadow-md"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current text-emerald-400 group-hover:text-slate-950" />
-                            <span>Cargar Sesión en Editor</span>
-                          </button>
                         </div>
                       </div>
 
