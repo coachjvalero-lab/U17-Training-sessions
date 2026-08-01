@@ -99,6 +99,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [allowedSections, setAllowedSections] = useState<PortalSection[]>(() => 
+    getUserAllowedSections(currentUser?.email)
+  );
+
+  const userIsAdmin = isUserAdmin(currentUser?.email);
+
+  React.useEffect(() => {
+    setAllowedSections(getUserAllowedSections(currentUser?.email));
+  }, [currentUser?.email]);
+
+  const refreshPermissions = () => {
+    setAllowedSections(getUserAllowedSections(currentUser?.email));
+  };
+
   const navItems: {
     id: PortalSection;
     label: string;
@@ -171,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: BarChart3,
       color: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
     }
-  ];
+  ].filter(item => allowedSections.includes(item.id));
 
   const sidebarContent = (
     <div className="flex flex-col h-full space-y-5 p-4 md:p-5 text-white">
@@ -231,8 +246,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="block text-[11px] font-bold text-slate-100 truncate capitalize">
                 {currentUser.email ? currentUser.email.split('@')[0] : 'admin'}
               </span>
-              <span className="inline-block bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
-                Admin
+              <span className={`inline-block text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                userIsAdmin ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+              }`}>
+                {userIsAdmin ? 'Admin' : 'Coach'}
               </span>
             </div>
           </div>
@@ -328,6 +345,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <p className="text-[10px] font-black uppercase tracking-wider text-sky-200/50 px-1 mb-1">
           Actions
         </p>
+
+        {userIsAdmin && (
+          <button
+            type="button"
+            onClick={() => setIsAdminModalOpen(true)}
+            className="w-full flex items-center space-x-2.5 p-2.5 rounded-xl transition-all cursor-pointer text-left border bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 mb-2"
+          >
+            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">Admin Management</div>
+              <div className="text-[9px] text-emerald-300/70 font-medium">Manage User Tab Access</div>
+            </div>
+          </button>
+        )}
 
         {/* Print / PDF Button */}
         <button
@@ -499,6 +532,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           Al Ula SC U17 • Technical Staff Platform
         </p>
       </div>
+
+      <AdminPermissionsModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        onPermissionsUpdated={refreshPermissions}
+      />
 
     </div>
   );

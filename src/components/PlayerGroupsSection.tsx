@@ -27,9 +27,14 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     if (!attendance || attendance.length === 0) return squadRoster;
     return squadRoster.filter(player => {
       const record = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
-      return !record || record.status === 'Attending' || record.status === 'Gym';
+      return !record || record.status === 'Attending';
     });
   }, [attendance, squadRoster]);
+
+  const gymPlayers = useMemo(() => {
+    if (!attendance || attendance.length === 0) return [];
+    return attendance.filter(a => a.status === 'Gym');
+  }, [attendance]);
 
   const absentPlayers = useMemo(() => {
     if (!attendance || attendance.length === 0) return [];
@@ -377,13 +382,25 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           </p>
         )}
 
-        {/* Absent Players Notice */}
-        {absentPlayers.length > 0 && (
-          <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 text-[11px] font-bold text-rose-700 bg-rose-50/50 p-2 rounded-xl">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-            <span>
-              Absent ({absentPlayers.length}): {absentPlayers.map(a => `${a.playerName} (${a.absenceReason || 'Absent'})`).join(', ')}
-            </span>
+        {/* Absent & Gym Players Notice */}
+        {(absentPlayers.length > 0 || gymPlayers.length > 0) && (
+          <div className="pt-2 border-t border-slate-200/60 space-y-2">
+            {absentPlayers.length > 0 && (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-rose-700 bg-rose-50/50 p-2 rounded-xl">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                <span>
+                  Absent ({absentPlayers.length}): {absentPlayers.map(a => `${a.playerName} (${a.absenceReason || 'Absent'})`).join(', ')}
+                </span>
+              </div>
+            )}
+            {gymPlayers.length > 0 && (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-blue-700 bg-blue-50/50 p-2 rounded-xl border border-blue-100">
+                <Users className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+                <span>
+                  En Gym ({gymPlayers.length}): {gymPlayers.map(a => a.playerName).join(', ')}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
