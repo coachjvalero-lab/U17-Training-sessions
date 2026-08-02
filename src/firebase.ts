@@ -4,7 +4,6 @@ import {
   collection, 
   doc, 
   setDoc, 
-  updateDoc,
   deleteDoc, 
   getDoc,
   getDocs,
@@ -391,7 +390,7 @@ export async function saveSessionFieldsByRole(
     fieldsToUpdate.gkPlayerGroups = session.gkPlayerGroups;
   }
 
-  // Use updateDoc to only modify specific fields, not replace the entire document
+  // Use setDoc with merge to only modify specific fields (creates document if it doesn't exist)
   let attempt = 0;
   while (true) {
     emitSyncStatus({ status: attempt === 0 ? 'saving' : 'retrying', scope: SESSIONS_COLLECTION });
@@ -401,7 +400,7 @@ export async function saveSessionFieldsByRole(
 
     try {
       await Promise.race([
-        updateDoc(ref, fieldsToUpdate),
+        setDoc(ref, fieldsToUpdate, { merge: true }),
         timeoutPromise
       ]);
       clearQuotaExceeded(SESSIONS_COLLECTION);
