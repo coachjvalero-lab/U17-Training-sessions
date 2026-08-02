@@ -646,7 +646,12 @@ export default function App() {
 
   // Mirror low-level cloud save activity (saving/retrying/queued/saved) into visible UI state.
   useEffect(() => {
+    const SESSION_SYNC_SCOPE = 'sessions';
     const unsubscribe = subscribeSyncStatus((event) => {
+      // Keep this banner focused on training session saves; other collections
+      // (permissions, fixtures, etc.) should not surface as a global save warning on load.
+      if (event.scope !== SESSION_SYNC_SCOPE) return;
+
       if (event.status === 'saved') {
         setCloudSyncStatus({ status: 'saved' });
         setTimeout(() => {
