@@ -516,8 +516,8 @@ export async function saveSessionFieldsByRole(
       return saveTimestamp;
     } catch (err: any) {
       attempt++;
-      const isQuota = err?.code === 'resource-exhausted';
-      const isTransient = isQuota || err?.code === 'unavailable' || err?.message === 'Cloud save operation timed out';
+      const isQuota = err?.code === 'resource-exhausted' || err?.code === 'quota-exceeded';
+      const isTransient = err?.code === 'unavailable' || err?.message === 'Cloud save operation timed out';
 
       if (isTransient && attempt <= MAX_WRITE_RETRIES) {
         await delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));

@@ -98,19 +98,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [allowedSections, setAllowedSections] = useState<PortalSection[]>(() => 
-    getUserAllowedSections(currentUser?.email)
-  );
-
+  const allowedSections = getUserAllowedSections(currentUser?.email);
   const userIsAdmin = isUserAdmin(currentUser?.email);
-
-  React.useEffect(() => {
-    setAllowedSections(getUserAllowedSections(currentUser?.email));
-  }, [currentUser?.email]);
-
-  const refreshPermissions = () => {
-    setAllowedSections(getUserAllowedSections(currentUser?.email));
-  };
 
   const navItems = ([
     {
@@ -398,7 +387,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <AdminPermissionsModal
         isOpen={isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
-        onPermissionsUpdated={refreshPermissions}
+        onPermissionsUpdated={() => {}}
       />
 
     </div>

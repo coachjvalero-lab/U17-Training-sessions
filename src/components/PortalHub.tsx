@@ -78,19 +78,8 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [logoSuccessMessage, setLogoSuccessMessage] = useState('');
 
-  const [allowedSections, setAllowedSections] = useState<PortalSection[]>(() => 
-    getUserAllowedSections(currentUser?.email)
-  );
-
+  const allowedSections = getUserAllowedSections(currentUser?.email);
   const userIsAdmin = isUserAdmin(currentUser?.email);
-
-  useEffect(() => {
-    setAllowedSections(getUserAllowedSections(currentUser?.email));
-  }, [currentUser?.email]);
-
-  const refreshPermissions = () => {
-    setAllowedSections(getUserAllowedSections(currentUser?.email));
-  };
 
   const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Closed').length;
   const activePlayersCount = squadPlayers.length || squadCount;
@@ -592,7 +581,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
         <AdminPermissionsModal
           isOpen={isAdminModalOpen}
           onClose={() => setIsAdminModalOpen(false)}
-          onPermissionsUpdated={refreshPermissions}
+          onPermissionsUpdated={() => {}}
         />
 
       </div>
