@@ -4,6 +4,7 @@ import {
   collection, 
   doc, 
   setDoc, 
+  updateDoc,
   deleteDoc, 
   getDoc,
   getDocs,
@@ -129,6 +130,9 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
 // Extend TrainingSession type for database-specific attributes if needed
 export interface CloudTrainingSession extends TrainingSession {
   updatedAt: number;
+  footballUpdatedAt?: number;
+  fitnessUpdatedAt?: number;
+  gkUpdatedAt?: number;
 }
 
 const SESSIONS_COLLECTION = 'sessions';
@@ -338,6 +342,94 @@ export async function saveSessionToCloud(session: TrainingSession): Promise<numb
 
   await saveDocWithRetry(SESSIONS_COLLECTION, session.id, cloudData);
   return saveTimestamp;
+}
+
+/**
+ * Saves only specific fields for a role to avoid overwriting other roles' changes.
+ * Used for granular updates when football/fitness/gk coaches work on the same session.
+ */
+export async function saveSessionFieldsByRole(
+  sessionId: string,
+  role: 'football' | 'fitness' | 'gk',
+  session: TrainingSession
+): Promise<number> {
+  const saveTimestamp = Date.now();
+  const ref = doc(db, SESSIONS_COLLECTION, sessionId);
+
+  // Define which fields each role owns
+  const fieldsToUpdate: Record<string, any> = {
+    updatedAt: saveTimestamp
+  };
+
+  if (role === 'football') {
+    fieldsToUpdate.footballUpdatedAt = saveTimestamp;
+    fieldsToUpdate.warmUp = session.warmUp;
+    fieldsToUpdate.mainPart = session.mainPart;
+    fieldsToUpdate.coolDown = session.coolDown;
+    fieldsToUpdate.playerGroups = session.playerGroups;
+    fieldsToUpdate.observations = session.observations || '';
+    fieldsToUpdate.teamName = session.teamName;
+    fieldsToUpdate.date = session.date;
+    fieldsToUpdate.time = session.time;
+    fieldsToUpdate.sessionNumber = session.sessionNumber;
+    fieldsToUpdate.microcycleDay = session.microcycleDay;
+    fieldsToUpdate.mainObjective = session.mainObjective;
+    fieldsToUpdate.materialsNeeded = session.materialsNeeded;
+    if (session.squadRoster) fieldsToUpdate.squadRoster = session.squadRoster;
+    if (session.attendance) fieldsToUpdate.attendance = session.attendance;
+  } else if (role === 'fitness') {
+    fieldsToUpdate.fitnessUpdatedAt = saveTimestamp;
+    fieldsToUpdate.fitnessWarmUp = session.fitnessWarmUp;
+    fieldsToUpdate.fitnessMainPart = session.fitnessMainPart;
+    fieldsToUpdate.fitnessCoolDown = session.fitnessCoolDown;
+    fieldsToUpdate.fitnessPlayerGroups = session.fitnessPlayerGroups;
+  } else if (role === 'gk') {
+    fieldsToUpdate.gkUpdatedAt = saveTimestamp;
+    fieldsToUpdate.gkWarmUp = session.gkWarmUp;
+    fieldsToUpdate.gkMainPart = session.gkMainPart;
+    fieldsToUpdate.gkCoolDown = session.gkCoolDown;
+    fieldsToUpdate.gkPlayerGroups = session.gkPlayerGroups;
+  }
+
+  // Use updateDoc to only modify specific fields, not replace the entire document
+  let attempt = 0;
+  while (true) {
+    emitSyncStatus({ status: attempt === 0 ? 'saving' : 'retrying', scope: SESSIONS_COLLECTION });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Cloud save operation timed out')), 6000);
+    });
+
+    try {
+      await Promise.race([
+        updateDoc(ref, fieldsToUpdate),
+        timeoutPromise
+      ]);
+      clearQuotaExceeded(SESSIONS_COLLECTION);
+      emitSyncStatus({ status: 'saved', scope: SESSIONS_COLLECTION });
+      return saveTimestamp;
+    } catch (err: any) {
+      attempt++;
+      const isQuota = err?.code === 'resource-exhausted';
+      const isTransient = isQuota || err?.code === 'unavailable' || err?.message === 'Cloud save operation timed out';
+
+      if (isTransient && attempt <= MAX_WRITE_RETRIES) {
+        await delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+        continue;
+      }
+
+      console.warn(`Cloud sync failed for ${SESSIONS_COLLECTION}/${sessionId}:`, err?.code || err?.message);
+      enqueuePendingWrite({ 
+        key: `${SESSIONS_COLLECTION}:${sessionId}:${role}`, 
+        scope: SESSIONS_COLLECTION, 
+        docId: sessionId, 
+        data: fieldsToUpdate, 
+        queuedAt: Date.now() 
+      });
+      if (isQuota) markQuotaExceeded(SESSIONS_COLLECTION);
+      emitSyncStatus({ status: 'offline-queued', scope: SESSIONS_COLLECTION, message: err?.code || err?.message });
+      throw err;
+    }
+  }
 }
 
 /**

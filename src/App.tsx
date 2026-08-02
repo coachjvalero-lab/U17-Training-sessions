@@ -31,7 +31,8 @@ import {
   MatchFixture 
 } from './types';
 import { 
-  saveSessionToCloud, 
+  saveSessionToCloud,
+  saveSessionFieldsByRole, 
   deleteSessionFromCloud, 
   subscribeToSessions, 
   subscribeToAuth,
@@ -542,7 +543,18 @@ export default function App() {
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
-  const lastLoadedSessionTimeRef = useRef<number>(0);
+  // Track timestamps per role to detect conflicts only for the fields each role owns
+  const lastLoadedSessionTimeRef = useRef<{
+    global: number;
+    football: number;
+    fitness: number;
+    gk: number;
+  }>({
+    global: 0,
+    football: 0,
+    fitness: 0,
+    gk: 0
+  });
   const currentSessionIdRef = useRef<string>('');
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
@@ -557,10 +569,15 @@ export default function App() {
   const applyCloudSessionToState = (sessionToLoad: CloudTrainingSession) => {
     const cloudTime = sessionToLoad.updatedAt || 0;
     hasInitialCloudLoadedRef.current = true;
-    lastLoadedSessionTimeRef.current = cloudTime;
+    lastLoadedSessionTimeRef.current = {
+      global: cloudTime,
+      football: sessionToLoad.footballUpdatedAt || cloudTime,
+      fitness: sessionToLoad.fitnessUpdatedAt || cloudTime,
+      gk: sessionToLoad.gkUpdatedAt || cloudTime
+    };
     currentSessionIdRef.current = sessionToLoad.id;
 
-    const { updatedAt, ...baseSession } = sessionToLoad;
+    const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, ...baseSession } = sessionToLoad;
 
     // Normalize old team names if needed
     if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
@@ -626,7 +643,7 @@ export default function App() {
 
           if (sessionToLoad) {
             const cloudTime = sessionToLoad.updatedAt || 0;
-            const isNewer = cloudTime > lastLoadedSessionTimeRef.current;
+            const isNewer = cloudTime > lastLoadedSessionTimeRef.current.global;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
             if (isFirstLoad) {
@@ -1080,16 +1097,41 @@ export default function App() {
   };
 
   const handleSaveActiveToCloud = async () => {
-    // Conflict check: has someone else saved this same session since we last loaded/saved it?
+    // Determine which role is saving based on activeSection
+    let role: 'football' | 'fitness' | 'gk' = 'football';
+    if (activeSection === 'fitness') {
+      role = 'fitness';
+    } else if (activeSection === 'gk') {
+      role = 'gk';
+    }
+
+    // Role-specific conflict check: only compare the timestamp for fields this role owns
     const cloudCopy = cloudSessions.find(s => s.id === session.id);
-    if (cloudCopy && (cloudCopy.updatedAt || 0) > lastLoadedSessionTimeRef.current) {
-      const overwrite = confirm(
-        'Esta sesión fue actualizada por otra persona mientras la editabas.\n\n' +
-        'Aceptar = sobrescribir con TUS cambios.\nCancelar = mantener tus cambios sin subir y revisar la otra versión primero.'
-      );
-      if (!overwrite) {
-        setRemoteSessionConflict(cloudCopy);
-        return;
+    if (cloudCopy) {
+      let cloudRoleTime = 0;
+      let localRoleTime = 0;
+
+      if (role === 'football') {
+        cloudRoleTime = cloudCopy.footballUpdatedAt || cloudCopy.updatedAt || 0;
+        localRoleTime = lastLoadedSessionTimeRef.current.football;
+      } else if (role === 'fitness') {
+        cloudRoleTime = cloudCopy.fitnessUpdatedAt || cloudCopy.updatedAt || 0;
+        localRoleTime = lastLoadedSessionTimeRef.current.fitness;
+      } else if (role === 'gk') {
+        cloudRoleTime = cloudCopy.gkUpdatedAt || cloudCopy.updatedAt || 0;
+        localRoleTime = lastLoadedSessionTimeRef.current.gk;
+      }
+
+      if (cloudRoleTime > localRoleTime) {
+        const roleLabel = role === 'football' ? 'Football' : role === 'fitness' ? 'Fitness' : 'GK';
+        const overwrite = confirm(
+          `Los campos de ${roleLabel} fueron actualizados por otra persona mientras editabas.\n\n` +
+          'Aceptar = sobrescribir con TUS cambios.\nCancelar = mantener tus cambios sin subir y revisar la otra versión primero.'
+        );
+        if (!overwrite) {
+          setRemoteSessionConflict(cloudCopy);
+          return;
+        }
       }
     }
 
@@ -1108,8 +1150,12 @@ export default function App() {
       setSession(sessionToSave);
 
       try {
-        const savedTime = await saveSessionToCloud(sessionToSave);
-        lastLoadedSessionTimeRef.current = savedTime;
+        // Save only the fields owned by this role to avoid overwriting other roles' changes
+        const savedTime = await saveSessionFieldsByRole(sessionToSave.id, role, sessionToSave);
+        
+        // Update only the timestamp for this role
+        lastLoadedSessionTimeRef.current[role] = savedTime;
+        lastLoadedSessionTimeRef.current.global = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
         clearQuotaExceeded();
         alert('Changes saved to the cloud and synced across all your devices!');
@@ -1200,7 +1246,7 @@ export default function App() {
 
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
-      const { updatedAt, ...baseSession } = loadedSession;
+      const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, ...baseSession } = loadedSession;
       const restoredLogo = latestSessionRef.current?.teamLogo ||
         localStorage.getItem('u17_uploaded_team_logo') || '';
 
@@ -1218,7 +1264,13 @@ export default function App() {
       }
 
       isRemoteUpdateRef.current = true;
-      lastLoadedSessionTimeRef.current = loadedSession.updatedAt || Date.now();
+      const cloudTime = loadedSession.updatedAt || Date.now();
+      lastLoadedSessionTimeRef.current = {
+        global: cloudTime,
+        football: footballUpdatedAt || cloudTime,
+        fitness: fitnessUpdatedAt || cloudTime,
+        gk: gkUpdatedAt || cloudTime
+      };
       currentSessionIdRef.current = unifiedSession.id;
       lastSavedJsonRef.current = JSON.stringify(unifiedSession);
 
@@ -1315,6 +1367,14 @@ export default function App() {
   };
 
   const handleCopyShareLink = async () => {
+    // Determine which role is saving based on activeSection
+    let role: 'football' | 'fitness' | 'gk' = 'football';
+    if (activeSection === 'fitness') {
+      role = 'fitness';
+    } else if (activeSection === 'gk') {
+      role = 'gk';
+    }
+
     try {
       setIsCloudSaving(true);
       const activeLogo = getActiveLogo();
@@ -1329,10 +1389,11 @@ export default function App() {
       localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(sessionToSave);
 
-      // 2. Try Cloud Firestore save
+      // 2. Try Cloud Firestore save (only save fields for current role)
       try {
-        const savedTime = await saveSessionToCloud(sessionToSave);
-        lastLoadedSessionTimeRef.current = savedTime;
+        const savedTime = await saveSessionFieldsByRole(sessionToSave.id, role, sessionToSave);
+        lastLoadedSessionTimeRef.current[role] = savedTime;
+        lastLoadedSessionTimeRef.current.global = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
       } catch (cloudErr) {
         console.warn('Cloud save warning on share link:', cloudErr);
