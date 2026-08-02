@@ -459,6 +459,12 @@ export function subscribeToSessions(
   );
   
   return onSnapshot(q, (querySnapshot) => {
+    // Ignore snapshots with local pending writes to avoid false conflict detection
+    // against our own writes that haven't been confirmed by the server yet
+    if (querySnapshot.metadata.hasPendingWrites) {
+      return;
+    }
+
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
       sessions.push(doc.data() as CloudTrainingSession);
