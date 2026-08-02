@@ -219,6 +219,43 @@ function emitSyncStatus(event: SyncStatusEvent): void {
   });
 }
 
+/**
+ * Firestore rejects undefined values. Normalize nested payloads so writes don't
+ * fail with invalid-argument when optional fields are still unset.
+ */
+function sanitizeForFirestore(value: any): any {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      const sanitized = sanitizeForFirestore(item);
+      return sanitized === undefined ? null : sanitized;
+    });
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === 'object') {
+    const out: Record<string, any> = {};
+    Object.entries(value).forEach(([key, val]) => {
+      const sanitized = sanitizeForFirestore(val);
+      if (sanitized !== undefined) {
+        out[key] = sanitized;
+      }
+    });
+    return out;
+  }
+
+  return value;
+}
+
 async function runWriteWithErrorReporting<T>(scope: string, docId: string, operation: string, writeFn: () => Promise<T>): Promise<T> {
   try {
     return await writeFn();
@@ -336,7 +373,7 @@ async function saveDocWithRetry(scope: string, docId: string, data: any | null):
 
     try {
       await Promise.race([
-        data === null ? deleteDoc(ref) : setDoc(ref, data, { merge: true }),
+        data === null ? deleteDoc(ref) : setDoc(ref, sanitizeForFirestore(data), { merge: true }),
         timeoutPromise
       ]);
       clearQuotaExceeded(scope);
@@ -447,6 +484,8 @@ export async function saveSessionFieldsByRole(
     fieldsToUpdate.gkPlayerGroups = session.gkPlayerGroups;
   }
 
+  const sanitizedFieldsToUpdate = sanitizeForFirestore(fieldsToUpdate);
+
   // Use setDoc with merge to only modify specific fields (creates document if it doesn't exist)
   let attempt = 0;
   while (true) {
@@ -457,7 +496,7 @@ export async function saveSessionFieldsByRole(
 
     try {
       await Promise.race([
-        setDoc(ref, fieldsToUpdate, { merge: true }),
+        setDoc(ref, sanitizedFieldsToUpdate, { merge: true }),
         timeoutPromise
       ]);
       clearQuotaExceeded(SESSIONS_COLLECTION);
