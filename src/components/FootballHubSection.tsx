@@ -186,7 +186,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   const [isSavingCard, setIsSavingCard] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToSessionCards(role, (cards) => {
+    const unsubscribe = subscribeToSessionCards(role as 'football' | 'fitness' | 'gk', (cards) => {
       const mappedCards: DrillCard[] = cards
         .map((card) => ({
           id: card.id,
@@ -228,7 +228,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     try {
       const id = `card-${Date.now()}`;
       const today = new Date().toISOString().split('T')[0];
-      const cardData = {
+      const cardData: { id: string; sessionNumber: number; title: string; date: string; category: string; description: string; duration: string; intensity: string; createdAt: number; updatedAt: number; role: 'football' | 'fitness' | 'gk' } = {
         id,
         sessionNumber: Number(payload.sessionNumber || '1'),
         title: payload.title,
@@ -239,7 +239,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         intensity: payload.intensity,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        role
+        role: role as 'football' | 'fitness' | 'gk'
       };
 
       await saveSessionCardToCloud(cardData);
@@ -923,6 +923,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateSessionCard}
+        role={role}
       />
 
     </div>

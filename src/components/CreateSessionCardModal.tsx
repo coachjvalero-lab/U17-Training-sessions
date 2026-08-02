@@ -11,6 +11,7 @@ interface CreateSessionCardModalProps {
     intensity: string;
     sessionNumber: string;
   }) => Promise<void> | void;
+  role?: 'football' | 'fitness' | 'gk';
 }
 
 const initialForm = {
@@ -25,7 +26,8 @@ const initialForm = {
 export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
   isOpen,
   onClose,
-  onSubmit
+  onSubmit,
+  role = 'football'
 }) => {
   const [form, setForm] = useState(initialForm);
 
@@ -37,15 +39,51 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
 
   if (!isOpen) return null;
 
+  const roleCopy = role === 'fitness'
+    ? {
+        title: 'New Fitness Card',
+        subtitle: 'Create a reusable fitness and conditioning card in Firestore.',
+        titleLabel: 'Block title',
+        titlePlaceholder: 'e.g. Acceleration circuit',
+        descriptionPlaceholder: 'Describe the physical objective, load, and coaching cues for this block.',
+        defaultCategory: 'Conditioning',
+        defaultDuration: '25 min',
+        defaultIntensity: 'Moderate-High',
+        saveLabel: 'Save fitness card'
+      }
+    : role === 'gk'
+      ? {
+          title: 'New GK Card',
+          subtitle: 'Create a reusable goalkeeper-specific card in Firestore.',
+          titleLabel: 'Drill title',
+          titlePlaceholder: 'e.g. 1v1 reaction series',
+          descriptionPlaceholder: 'Describe the technical focus, distribution goal, and coaching points for this drill.',
+          defaultCategory: 'GK',
+          defaultDuration: '18 min',
+          defaultIntensity: 'High',
+          saveLabel: 'Save GK card'
+        }
+      : {
+          title: 'New Session Card',
+          subtitle: 'Create a reusable football session card in Firestore.',
+          titleLabel: 'Title',
+          titlePlaceholder: 'e.g. Positional game 4v4',
+          descriptionPlaceholder: 'Describe the purpose and details of the session card',
+          defaultCategory: 'Tactical',
+          defaultDuration: '20 min',
+          defaultIntensity: 'Alta',
+          saveLabel: 'Save card'
+        };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
       ...form,
       title: form.title.trim(),
       description: form.description.trim(),
-      category: form.category.trim() || 'Tactical',
-      duration: form.duration.trim(),
-      intensity: form.intensity.trim(),
+      category: form.category.trim() || roleCopy.defaultCategory,
+      duration: form.duration.trim() || roleCopy.defaultDuration,
+      intensity: form.intensity.trim() || roleCopy.defaultIntensity,
       sessionNumber: form.sessionNumber.trim()
     };
 
@@ -60,8 +98,8 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
       <div className="w-full max-w-xl rounded-3xl border border-slate-700 bg-slate-900/95 p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-black text-white">New Session Card</h3>
-            <p className="mt-1 text-sm text-slate-400">Create a reusable football session card in Firestore.</p>
+            <h3 className="text-lg font-black text-white">{roleCopy.title}</h3>
+            <p className="mt-1 text-sm text-slate-400">{roleCopy.subtitle}</p>
           </div>
           <button
             type="button"
@@ -97,14 +135,14 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
           </div>
 
           <label className="block text-sm font-semibold text-slate-300">
-            <span className="mb-1 block">Title</span>
+            <span className="mb-1 block">{roleCopy.titleLabel}</span>
             <input
               type="text"
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none ring-0"
-              placeholder="e.g. Positional game 4v4"
+              placeholder={roleCopy.titlePlaceholder}
             />
           </label>
 
@@ -115,7 +153,7 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none ring-0"
-              placeholder="Describe the purpose and details of the session card"
+              placeholder={roleCopy.descriptionPlaceholder}
             />
           </label>
 
@@ -153,7 +191,7 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
               type="submit"
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white transition hover:bg-emerald-500"
             >
-              Save card
+              {roleCopy.saveLabel}
             </button>
           </div>
         </form>

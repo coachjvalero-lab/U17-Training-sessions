@@ -437,62 +437,19 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Load and merge into a single unified session
+  // Load and merge into a single unified session.
+  // Firestore is now the source of truth for the shared sessions list; localStorage
+  // is only kept as a transient cache for the current browser and must not decide
+  // which session the user sees.
   const [session, setSession] = useState<TrainingSession>(() => {
-    const unifiedSaved = localStorage.getItem('u17_training_session_unified');
-    if (unifiedSaved) {
-      try {
-        const parsed = JSON.parse(unifiedSaved);
-        if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          if (parsed.teamName === 'U17 Girls A.D. San Pedro') {
-            parsed.teamName = 'U17 Women Al Ula';
-          }
-          if (parsed.sessionNumber === '42') {
-            parsed.sessionNumber = '001';
-          }
-          return buildUnifiedSession(parsed);
-        }
-      } catch (e) {
-        console.error('Failed to parse saved unified session:', e);
-      }
-    }
-
-    // Fallback: merge separate football and fitness sessions if they exist
-    let fbSess = getDefaultSession();
-    const fbSaved = localStorage.getItem('u17_training_session_football') || localStorage.getItem('u17_training_session');
-    if (fbSaved) {
-      try {
-        const parsed = JSON.parse(fbSaved);
-        if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          fbSess = parsed;
-        }
-      } catch (e) {}
-    }
-
-    let fitSess = getDefaultFitnessSession();
-    const fitSaved = localStorage.getItem('u17_training_session_fitness');
-    if (fitSaved) {
-      try {
-        const parsed = JSON.parse(fitSaved);
-        if (parsed && typeof parsed === 'object' && parsed.teamName) {
-          fitSess = parsed;
-        }
-      } catch (e) {}
-    }
-
-    const defaultTemplate = getDefaultSession();
-
-    // Merge them into one unified session
+    const starter = getDefaultSession();
     return normalizeSessionRoster({
-      ...fbSess,
-      fitnessWarmUp: fbSess.fitnessWarmUp || fitSess.warmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-      fitnessMainPart: fbSess.fitnessMainPart || fitSess.mainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-      fitnessCoolDown: fbSess.fitnessCoolDown || fitSess.coolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-      fitnessPlayerGroups: fbSess.fitnessPlayerGroups || fitSess.playerGroups || [],
-      gkWarmUp: fbSess.gkWarmUp || defaultTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-      gkMainPart: fbSess.gkMainPart || defaultTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-      gkCoolDown: fbSess.gkCoolDown || defaultTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-      gkPlayerGroups: fbSess.gkPlayerGroups || [],
+      ...starter,
+      id: 'session-initial',
+      sessionNumber: '001',
+      date: new Date().toISOString().split('T')[0],
+      teamName: 'U17 Women Al Ula',
+      teamLogo: OFFICIAL_ALULA_LOGO_DATA_URL,
     });
   });
 
@@ -628,6 +585,8 @@ export default function App() {
           const urlParams = new URLSearchParams(window.location.search);
           const targetId = urlParams.get('session');
           const isFirstLoad = !hasInitialCloudLoadedRef.current;
+          const currentId = currentSessionIdRef.current;
+          const activeSessionStillExists = currentId ? sessions.some(s => s.id === currentId) : false;
 
           // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
           // (most recent session by date) ONLY on the very first cold start.
@@ -641,17 +600,24 @@ export default function App() {
             return;
           }
 
+          if (!activeSessionStillExists && !sessionToLoad) {
+            sessionToLoad = sessions[0];
+          }
+
           if (sessionToLoad) {
             const cloudTime = sessionToLoad.updatedAt || 0;
             const isNewer = cloudTime > lastLoadedSessionTimeRef.current.global;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
             if (isFirstLoad) {
-              // Nothing to lose yet — safe to load whatever the user should land on.
+              // Firestore is the source of truth for the active session on first load.
               applyCloudSessionToState(sessionToLoad);
             } else if (isDifferentSession) {
               // Never rip the screen out from under the user just because a DIFFERENT
               // session changed elsewhere in Firestore (Bloque 2, tarea 3).
+              if (!activeSessionStillExists) {
+                applyCloudSessionToState(sessionToLoad);
+              }
             } else if (isNewer) {
               const hasUnsavedChanges = JSON.stringify(latestSessionRef.current) !== lastSavedJsonRef.current;
               if (!hasUnsavedChanges) {
