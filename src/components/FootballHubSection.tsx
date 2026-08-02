@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   FileText, 
   Calendar, 
@@ -20,11 +20,10 @@ import {
   Trash2
 } from 'lucide-react';
 import { TrainingSession, Exercise, MatchFixture } from '../types';
-import { CloudTrainingSession, deleteSessionCardFromCloud, saveSessionCardToCloud, subscribeToSessionCards } from '../firebase';
+import { CloudTrainingSession } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
-import { CreateSessionCardModal } from './CreateSessionCardModal';
 
 export interface DrillCard {
   id: string;
@@ -184,82 +183,29 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
   // Search term for filtering sessions
   const [searchTerm, setSearchTerm] = useState('');
-  const [sessionCards, setSessionCards] = useState<DrillCard[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isSavingCard, setIsSavingCard] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToSessionCards(role as 'football' | 'fitness' | 'gk', (cards) => {
-      const mappedCards: DrillCard[] = cards
-        .map((card) => ({
-          id: card.id,
-          sessionNumber: Number(card.sessionNumber || 0) || 0,
-          title: card.title || 'Untitled session card',
-          date: card.date || new Date().toLocaleDateString('en-CA'),
-          category: (card.category as DrillCard['category']) || 'Tactical',
-          description: card.description || 'No description',
-          duration: card.duration || '20 min',
-          intensity: card.intensity || 'Alta',
-          drillType: 'rondo5v2',
-          likesCount: 0,
-          isBookmarked: false,
-          groupCount: 0,
-          rating: '—',
-          status: 'draft' as const,
-          createdAt: card.createdAt,
-          updatedAt: card.updatedAt,
-          role
-        }))
-        .filter((card) => card.sessionNumber > 0)
-        .sort((a, b) => (b.sessionNumber || 0) - (a.sessionNumber || 0));
-
-      setSessionCards(mappedCards);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleCreateSessionCard = async (payload: {
-    title: string;
-    description: string;
-    category: string;
-    duration: string;
-    intensity: string;
-    sessionNumber: string;
-  }) => {
-    setIsSavingCard(true);
-    try {
-      const id = `card-${Date.now()}`;
-      const today = new Date().toISOString().split('T')[0];
-      const cardData: { id: string; sessionNumber: number; title: string; date: string; category: DrillCard['category']; description: string; duration: string; intensity: string; createdAt: number; updatedAt: number; role: 'football' | 'fitness' | 'gk' } = {
-        id,
-        sessionNumber: Number(payload.sessionNumber || '1'),
-        title: payload.title,
-        date: today,
-        category: ((payload.category as DrillCard['category']) || 'Tactical'),
-        description: payload.description,
-        duration: payload.duration,
-        intensity: payload.intensity,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        role: role as 'football' | 'fitness' | 'gk'
-      };
-
-      await saveSessionCardToCloud(cardData);
-      setSessionCards(prev => [{
-        ...cardData,
-        drillType: 'rondo5v2',
+  const sessionCards = useMemo<DrillCard[]>(() => {
+    return cloudSessions
+      .map((sess) => ({
+        id: sess.id,
+        sessionNumber: Number(sess.sessionNumber || 0) || 0,
+        title: sess.mainObjective || `Session #${sess.sessionNumber || '?'}`,
+        date: sess.date || new Date().toLocaleDateString('en-CA'),
+        category: 'Tactical' as const,
+        description: sess.observations || 'No description',
+        duration: 'Session',
+        intensity: role === 'fitness' ? 'Fitness' : role === 'gk' ? 'GK' : 'Football',
+        drillType: 'rondo5v2' as const,
         likesCount: 0,
         isBookmarked: false,
-        groupCount: 0,
+        groupCount: (sess.playerGroups || []).length,
         rating: '—',
-        status: 'draft' as const,
+        status: (session.id === sess.id ? 'active' : 'draft') as DrillCard['status'],
+        updatedAt: sess.updatedAt,
         role
-      }, ...prev]);
-    } finally {
-      setIsSavingCard(false);
-    }
-  };
+      }))
+      .filter((card) => card.sessionNumber > 0)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }, [cloudSessions, role, session.id]);
 
   // Filter cloud sessions
   const filteredSessions = sessionCards
@@ -765,7 +711,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => onNewSession && onNewSession()}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -808,7 +754,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                     {!searchTerm && (
                       <button
                         type="button"
-                        onClick={() => setShowCreateModal(true)}
+                        onClick={() => onNewSession && onNewSession()}
                         className="mt-4 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-all"
                       >
                         Create your first session
@@ -856,13 +802,10 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                         {/* CARD BODY */}
                         <div 
                           onClick={() => {
-                            onChangeSession({
-                              mainObjective: sess.title,
-                              observations: sess.description || '',
-                              date: sess.date,
-                              sessionNumber: String(sess.sessionNumber),
-                              microcycleDay: 'MD'
-                            });
+                            const target = cloudSessions.find(s => s.id === sess.id);
+                            if (target && onLoadCloudSession) {
+                              onLoadCloudSession(target);
+                            }
                             setSessionSubNav('editor');
                           }}
                           className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors"
@@ -897,7 +840,9 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              void deleteSessionCardFromCloud(sess.id);
+                              if (onDeleteCloudSession) {
+                                onDeleteCloudSession(sess.id, String(sess.sessionNumber || ''), e);
+                              }
                             }}
                             className="p-2 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all border border-rose-500/30 hover:border-rose-500"
                             title="Delete Session"
@@ -921,14 +866,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
         </div>
       )}
-
-      <CreateSessionCardModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreateSessionCard}
-        role={role}
-      />
-
     </div>
   );
 };

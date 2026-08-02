@@ -564,13 +564,6 @@ export default function App() {
     lastSavedJsonRef.current = getSessionSyncSignature(unifiedSession);
     setSession(unifiedSession);
 
-    try {
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
-      localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
-    } catch (e) {
-      console.warn('LocalStorage sync warning:', e);
-    }
-
     if (unifiedSession.id && window.history.replaceState) {
       const url = new URL(window.location.href);
       if (url.searchParams.get('session') !== unifiedSession.id) {
@@ -695,17 +688,10 @@ export default function App() {
   }, []);
 
 
-  // Quietly persist the unified session locally whenever state updates
+  // Keep refs and URL in sync with the active cloud-backed session
   useEffect(() => {
     latestSessionRef.current = session;
     currentSessionIdRef.current = session.id;
-
-    try {
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(session));
-      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
-    } catch (e) {
-      console.warn('LocalStorage save failed:', e);
-    }
 
     if (session.id && window.history.replaceState) {
       try {
@@ -1127,9 +1113,6 @@ export default function App() {
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
-      // Always save locally immediately
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(sessionToSave));
-      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(sessionToSave);
 
       // Optimistically update references BEFORE cloud save to avoid false conflict detection
@@ -1138,58 +1121,6 @@ export default function App() {
       lastLoadedSessionTimeRef.current[role] = optimisticTime;
       lastLoadedSessionTimeRef.current.global = optimisticTime;
       lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
-
-      // Optimistically update cloudSessions to immediately reflect changes in the UI (Sidebar cards)
-      setCloudSessions(prev => {
-        const existing = prev.find(s => s.id === sessionToSave.id);
-        
-        if (existing) {
-          // Update existing session with new values from the current role
-          const updated: CloudTrainingSession = { ...existing, updatedAt: optimisticTime };
-          if (role === 'football') {
-            updated.footballUpdatedAt = optimisticTime;
-            updated.warmUp = sessionToSave.warmUp;
-            updated.mainPart = sessionToSave.mainPart;
-            updated.coolDown = sessionToSave.coolDown;
-            updated.playerGroups = sessionToSave.playerGroups;
-            updated.observations = sessionToSave.observations;
-            updated.teamName = sessionToSave.teamName;
-            updated.date = sessionToSave.date;
-            updated.time = sessionToSave.time;
-            updated.sessionNumber = sessionToSave.sessionNumber;
-            updated.microcycleDay = sessionToSave.microcycleDay;
-            updated.mainObjective = sessionToSave.mainObjective;
-            updated.materialsNeeded = sessionToSave.materialsNeeded;
-            updated.squadRoster = sessionToSave.squadRoster;
-            updated.attendance = sessionToSave.attendance;
-          } else if (role === 'fitness') {
-            updated.fitnessUpdatedAt = optimisticTime;
-            updated.fitnessWarmUp = sessionToSave.fitnessWarmUp;
-            updated.fitnessMainPart = sessionToSave.fitnessMainPart;
-            updated.fitnessCoolDown = sessionToSave.fitnessCoolDown;
-            updated.fitnessPlayerGroups = sessionToSave.fitnessPlayerGroups;
-          } else if (role === 'gk') {
-            updated.gkUpdatedAt = optimisticTime;
-            updated.gkWarmUp = sessionToSave.gkWarmUp;
-            updated.gkMainPart = sessionToSave.gkMainPart;
-            updated.gkCoolDown = sessionToSave.gkCoolDown;
-            updated.gkPlayerGroups = sessionToSave.gkPlayerGroups;
-          }
-          // Create entirely new array to force React re-render
-          const newList = [...prev.map(s => s.id === sessionToSave.id ? updated : s)];
-          return newList;
-        } else {
-          // New session not yet in cloudSessions - add it optimistically
-          const newSession: CloudTrainingSession = {
-            ...sessionToSave,
-            updatedAt: optimisticTime,
-            footballUpdatedAt: role === 'football' ? optimisticTime : undefined,
-            fitnessUpdatedAt: role === 'fitness' ? optimisticTime : undefined,
-            gkUpdatedAt: role === 'gk' ? optimisticTime : undefined,
-          };
-          return [newSession, ...prev];
-        }
-      });
 
       try {
         // Save only the fields owned by this role to avoid overwriting other roles' changes
@@ -1237,8 +1168,6 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(newSession));
-      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(newSession);
 
       try {
@@ -1277,8 +1206,6 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(newSession));
-      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(newSession);
       currentSessionIdRef.current = newId;
 
@@ -1454,9 +1381,6 @@ export default function App() {
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
-      // 1. Always save locally immediately
-      localStorage.setItem('u17_training_session_unified', JSON.stringify(sessionToSave));
-      localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(sessionToSave);
 
       // 2. Optimistically update references to prevent false conflict detection
@@ -1464,54 +1388,6 @@ export default function App() {
       lastLoadedSessionTimeRef.current[role] = optimisticTime;
       lastLoadedSessionTimeRef.current.global = optimisticTime;
       lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
-
-      // Optimistically update cloudSessions to immediately reflect changes in the UI
-      setCloudSessions(prev => {
-        const existing = prev.find(s => s.id === sessionToSave.id);
-        if (existing) {
-          const updated: CloudTrainingSession = { ...existing, updatedAt: optimisticTime };
-          if (role === 'football') {
-            updated.footballUpdatedAt = optimisticTime;
-            updated.warmUp = sessionToSave.warmUp;
-            updated.mainPart = sessionToSave.mainPart;
-            updated.coolDown = sessionToSave.coolDown;
-            updated.playerGroups = sessionToSave.playerGroups;
-            updated.observations = sessionToSave.observations;
-            updated.teamName = sessionToSave.teamName;
-            updated.date = sessionToSave.date;
-            updated.time = sessionToSave.time;
-            updated.sessionNumber = sessionToSave.sessionNumber;
-            updated.microcycleDay = sessionToSave.microcycleDay;
-            updated.mainObjective = sessionToSave.mainObjective;
-            updated.materialsNeeded = sessionToSave.materialsNeeded;
-            updated.squadRoster = sessionToSave.squadRoster;
-            updated.attendance = sessionToSave.attendance;
-          } else if (role === 'fitness') {
-            updated.fitnessUpdatedAt = optimisticTime;
-            updated.fitnessWarmUp = sessionToSave.fitnessWarmUp;
-            updated.fitnessMainPart = sessionToSave.fitnessMainPart;
-            updated.fitnessCoolDown = sessionToSave.fitnessCoolDown;
-            updated.fitnessPlayerGroups = sessionToSave.fitnessPlayerGroups;
-          } else if (role === 'gk') {
-            updated.gkUpdatedAt = optimisticTime;
-            updated.gkWarmUp = sessionToSave.gkWarmUp;
-            updated.gkMainPart = sessionToSave.gkMainPart;
-            updated.gkCoolDown = sessionToSave.gkCoolDown;
-            updated.gkPlayerGroups = sessionToSave.gkPlayerGroups;
-          }
-          return prev.map(s => s.id === sessionToSave.id ? updated : s);
-        } else {
-          // New session not yet in cloudSessions - add it optimistically
-          const newSession: CloudTrainingSession = {
-            ...sessionToSave,
-            updatedAt: optimisticTime,
-            footballUpdatedAt: role === 'football' ? optimisticTime : undefined,
-            fitnessUpdatedAt: role === 'fitness' ? optimisticTime : undefined,
-            gkUpdatedAt: role === 'gk' ? optimisticTime : undefined,
-          };
-          return [newSession, ...prev];
-        }
-      });
 
       // 3. Try Cloud Firestore save (only save fields for current role)
       try {
