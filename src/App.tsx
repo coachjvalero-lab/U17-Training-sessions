@@ -516,6 +516,14 @@ export default function App() {
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
 
+  // teamLogo is intentionally local-only (not persisted in session docs), so it must
+  // be excluded from sync comparisons to avoid false "unsaved/conflict" detections.
+  const getSessionSyncSignature = (value: Partial<TrainingSession> | null | undefined): string => {
+    if (!value) return '';
+    const { teamLogo: _logo, ...rest } = value as TrainingSession;
+    return JSON.stringify(rest);
+  };
+
   // Keep latest session ref in sync for window unload / visibilitychange handlers
   useEffect(() => {
     latestSessionRef.current = session;
@@ -553,7 +561,7 @@ export default function App() {
     });
 
     isRemoteUpdateRef.current = true;
-    lastSavedJsonRef.current = JSON.stringify(unifiedSession);
+    lastSavedJsonRef.current = getSessionSyncSignature(unifiedSession);
     setSession(unifiedSession);
 
     try {
@@ -592,7 +600,7 @@ export default function App() {
           // (most recent session by date) ONLY on the very first cold start.
           let sessionToLoad = targetId
             ? sessions.find(s => s.id === targetId)
-            : (isFirstLoad ? sessions[0] : undefined);
+            : (isFirstLoad ? sessions[0] : sessions.find(s => s.id === currentId));
 
           if (targetId && !sessionToLoad && currentSessionIdRef.current === targetId) {
             // Requested session hasn't reached Firestore yet — keep showing what we have.
@@ -606,7 +614,11 @@ export default function App() {
 
           if (sessionToLoad) {
             const cloudTime = sessionToLoad.updatedAt || 0;
-            const isNewer = cloudTime > lastLoadedSessionTimeRef.current.global;
+            const hasRemoteChanges =
+              cloudTime !== lastLoadedSessionTimeRef.current.global ||
+              (sessionToLoad.footballUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.football ||
+              (sessionToLoad.fitnessUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.fitness ||
+              (sessionToLoad.gkUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.gk;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
             if (isFirstLoad) {
@@ -618,8 +630,8 @@ export default function App() {
               if (!activeSessionStillExists) {
                 applyCloudSessionToState(sessionToLoad);
               }
-            } else if (isNewer) {
-              const hasUnsavedChanges = JSON.stringify(latestSessionRef.current) !== lastSavedJsonRef.current;
+            } else if (hasRemoteChanges) {
+              const hasUnsavedChanges = getSessionSyncSignature(latestSessionRef.current) !== lastSavedJsonRef.current;
               if (!hasUnsavedChanges) {
                 // No local edits at risk — safe to silently pick up the remote update.
                 applyCloudSessionToState(sessionToLoad);
@@ -1125,7 +1137,7 @@ export default function App() {
       const optimisticTime = Date.now();
       lastLoadedSessionTimeRef.current[role] = optimisticTime;
       lastLoadedSessionTimeRef.current.global = optimisticTime;
-      lastSavedJsonRef.current = JSON.stringify(sessionToSave);
+      lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
 
       // Optimistically update cloudSessions to immediately reflect changes in the UI (Sidebar cards)
       setCloudSessions(prev => {
@@ -1279,7 +1291,7 @@ export default function App() {
           fitness: savedTime,
           gk: savedTime
         };
-        lastSavedJsonRef.current = JSON.stringify(newSession);
+        lastSavedJsonRef.current = getSessionSyncSignature(newSession);
         // Optimistically add to cloudSessions
         setCloudSessions(prev => [{
           ...newSession,
@@ -1330,7 +1342,7 @@ export default function App() {
         gk: gkUpdatedAt || cloudTime
       };
       currentSessionIdRef.current = unifiedSession.id;
-      lastSavedJsonRef.current = JSON.stringify(unifiedSession);
+      lastSavedJsonRef.current = getSessionSyncSignature(unifiedSession);
 
       setSession(unifiedSession);
       
@@ -1451,7 +1463,7 @@ export default function App() {
       const optimisticTime = Date.now();
       lastLoadedSessionTimeRef.current[role] = optimisticTime;
       lastLoadedSessionTimeRef.current.global = optimisticTime;
-      lastSavedJsonRef.current = JSON.stringify(sessionToSave);
+      lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
 
       // Optimistically update cloudSessions to immediately reflect changes in the UI
       setCloudSessions(prev => {
