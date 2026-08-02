@@ -261,11 +261,15 @@ async function runWriteWithErrorReporting<T>(scope: string, docId: string, opera
     return await writeFn();
   } catch (error: any) {
     const errorCode = error?.code ? String(error.code) : 'unknown';
+    const isTransient = errorCode === 'resource-exhausted' || errorCode === 'unavailable';
     console.error(`[${operation}] Firestore write failed for ${scope}/${docId} [${errorCode}]`, error);
+    if (errorCode === 'resource-exhausted') {
+      markQuotaExceeded(scope);
+    }
     emitSyncStatus({
-      status: 'error',
+      status: isTransient ? 'offline-queued' : 'error',
       scope,
-      message: `${operation} failed (${errorCode})`
+      message: isTransient ? `${operation} pending retry (${errorCode})` : `${operation} failed (${errorCode})`
     });
     throw error;
   }
@@ -273,8 +277,16 @@ async function runWriteWithErrorReporting<T>(scope: string, docId: string, opera
 
 function reportSaveError(scope: string, docId: string, error: unknown, operation: string): void {
   const errorCode = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+  const isTransient = errorCode === 'resource-exhausted' || errorCode === 'unavailable';
   console.error(`[${operation}] Firestore write failed for ${scope}/${docId} [${errorCode}]`, error);
-  emitSyncStatus({ status: 'error', scope, message: `${operation} failed (${errorCode})` });
+  if (errorCode === 'resource-exhausted') {
+    markQuotaExceeded(scope);
+  }
+  emitSyncStatus({
+    status: isTransient ? 'offline-queued' : 'error',
+    scope,
+    message: isTransient ? `${operation} pending retry (${errorCode})` : `${operation} failed (${errorCode})`
+  });
 }
 
 // ---------------------------------------------------------------------------
