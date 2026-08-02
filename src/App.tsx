@@ -1159,7 +1159,6 @@ export default function App() {
       // Optimistically update cloudSessions to immediately reflect changes in the UI (Sidebar cards)
       setCloudSessions(prev => {
         const existing = prev.find(s => s.id === sessionToSave.id);
-        console.log('Optimistic update - Session ID:', sessionToSave.id, 'Found:', !!existing, 'New objective:', sessionToSave.mainObjective);
         
         if (existing) {
           // Update existing session with new values from the current role
@@ -1195,11 +1194,9 @@ export default function App() {
           }
           // Create entirely new array to force React re-render
           const newList = [...prev.map(s => s.id === sessionToSave.id ? updated : s)];
-          console.log('Updated cloudSessions list, new objective for session:', updated.mainObjective);
           return newList;
         } else {
           // New session not yet in cloudSessions - add it optimistically
-          console.log('Session not found in cloudSessions, adding new entry');
           const newSession: CloudTrainingSession = {
             ...sessionToSave,
             updatedAt: optimisticTime,
@@ -1292,9 +1289,26 @@ export default function App() {
       localStorage.setItem('u17_training_session_unified', JSON.stringify(newSession));
       localStorage.setItem('u17_training_session_updatedAt', String(Date.now()));
       setSession(newSession);
+      currentSessionIdRef.current = newId;
 
+      // Use full document save for new sessions (all fields are new)
       try {
-        await saveSessionToCloud(newSession);
+        const savedTime = await saveSessionToCloud(newSession);
+        lastLoadedSessionTimeRef.current = {
+          global: savedTime,
+          football: savedTime,
+          fitness: savedTime,
+          gk: savedTime
+        };
+        lastSavedJsonRef.current = JSON.stringify(newSession);
+        // Optimistically add to cloudSessions
+        setCloudSessions(prev => [{
+          ...newSession,
+          updatedAt: savedTime,
+          footballUpdatedAt: savedTime,
+          fitnessUpdatedAt: savedTime,
+          gkUpdatedAt: savedTime
+        }, ...prev]);
       } catch (cloudErr) {
         console.warn('Cloud save warning on new session:', cloudErr);
       }

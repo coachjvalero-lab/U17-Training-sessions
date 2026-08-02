@@ -459,15 +459,14 @@ export function subscribeToSessions(
   );
   
   return onSnapshot(q, (querySnapshot) => {
-    // Ignore snapshots with local pending writes to avoid false conflict detection
-    // against our own writes that haven't been confirmed by the server yet
-    if (querySnapshot.metadata.hasPendingWrites) {
-      return;
-    }
-
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
-      sessions.push(doc.data() as CloudTrainingSession);
+      // Skip individual documents with local pending writes to avoid false conflict detection
+      // This allows confirmed updates from the server to come through even if we have
+      // other pending writes
+      if (!doc.metadata.hasPendingWrites) {
+        sessions.push(doc.data() as CloudTrainingSession);
+      }
     });
     callback(sessions);
   }, (error) => {

@@ -475,7 +475,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <button
                           type="button"
                           onClick={(e) => onDeleteCloudSession(cloudSess.id, cloudSess.sessionNumber, e)}
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors"
+                          className="p-2 text-rose-500 hover:text-rose-300 hover:bg-rose-500/30 rounded-lg transition-all border border-rose-500/20 hover:border-rose-400/50"
                           title="Delete Session"
                         >
                           <Trash2 className="w-4 h-4" />
