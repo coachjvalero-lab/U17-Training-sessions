@@ -8,10 +8,6 @@ import {
   Search, 
   Filter, 
   ChevronDown, 
-  ThumbsUp, 
-  Bookmark, 
-  Users, 
-  Star, 
   Sparkles, 
   Check, 
   Edit3, 
@@ -179,18 +175,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeCardId, setActiveCardId] = useState<string>('card-1');
 
-  // Toggle bookmark on card
-  const toggleBookmark = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDrillCards(prev => prev.map(c => c.id === id ? { ...c, isBookmarked: !c.isBookmarked } : c));
-  };
-
-  // Toggle like on card
-  const toggleLike = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDrillCards(prev => prev.map(c => c.id === id ? { ...c, likesCount: c.likesCount + 1 } : c));
-  };
-
   // Add new session card
   const handleAddNewCard = () => {
     const title = prompt('Enter Training Session Title:', 'Nueva Sesión Táctica');
@@ -223,9 +207,9 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   const handleSelectCardToEdit = (card: DrillCard) => {
     setActiveCardId(card.id);
     onChangeSession({
-      mainObjective: card.title,
+      mainObjective: card.description || card.title,
       sessionType: card.category === 'Rondo' ? 'Possession / Rondo' : card.category === 'Game' ? 'Match Play' : 'Tactical Drills',
-      observations: card.description || `Tactical session: ${card.title} (Session #${String(card.sessionNumber).padStart(3, '0')}) loaded from Session Library.`
+      observations: `Tactical session: ${card.title} (Session #${String(card.sessionNumber).padStart(3, '0')}) loaded from Session Library.`
     });
     setSessionSubNav('editor');
   };
@@ -825,13 +809,13 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                             </div>
                           </div>
 
-                          {/* Title & Controls */}
+                          {/* Title (primary objective) & Controls */}
                           <div className="flex items-start justify-between gap-2 pt-1">
                             <h3 
                               onClick={() => handleSelectCardToEdit(card)}
-                              className="text-sm font-black text-slate-900 leading-snug line-clamp-2 cursor-pointer hover:text-emerald-700 transition-colors"
+                              className="text-sm font-black text-slate-900 leading-snug line-clamp-3 cursor-pointer hover:text-emerald-700 transition-colors"
                             >
-                              {card.title}
+                              {card.description || card.title}
                             </h3>
 
                             {/* Control action icons */}
@@ -846,51 +830,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                               </button>
                             </div>
                           </div>
-
-                          {/* Description */}
-                          {card.description && (
-                            <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-3 font-medium bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                              {card.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* CARD FOOTER ROW (LIKES, BOOKMARK, GROUP, STAR RATING MATCHING SCREENSHOT) */}
-                      <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs text-slate-500 font-medium">
-                        {/* Left Icons */}
-                        <div className="flex items-center space-x-3">
-                          <button
-                            type="button"
-                            onClick={(e) => toggleLike(card.id, e)}
-                            className="flex items-center space-x-1 hover:text-emerald-600 transition-colors cursor-pointer"
-                          >
-                            <ThumbsUp className="w-4 h-4" />
-                            {card.likesCount > 0 && (
-                              <span className="text-[10px] font-bold">{card.likesCount}</span>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={(e) => toggleBookmark(card.id, e)}
-                            className={`transition-colors cursor-pointer ${
-                              card.isBookmarked ? 'text-emerald-600 fill-emerald-600' : 'hover:text-emerald-600'
-                            }`}
-                          >
-                            <Bookmark className="w-4 h-4" />
-                          </button>
-
-                          <div className="flex items-center space-x-1 text-slate-400">
-                            <Users className="w-4 h-4" />
-                            <span className="text-[10px] font-bold">{card.groupCount}</span>
-                          </div>
-                        </div>
-
-                        {/* Right Rating */}
-                        <div className="flex items-center space-x-1 text-slate-400 font-mono text-[11px]">
-                          <Star className="w-4 h-4 text-slate-400" />
-                          <span>{card.rating}</span>
                         </div>
                       </div>
 
