@@ -1193,7 +1193,8 @@ export default function App() {
             updated.gkCoolDown = sessionToSave.gkCoolDown;
             updated.gkPlayerGroups = sessionToSave.gkPlayerGroups;
           }
-          const newList = prev.map(s => s.id === sessionToSave.id ? updated : s);
+          // Create entirely new array to force React re-render
+          const newList = [...prev.map(s => s.id === sessionToSave.id ? updated : s)];
           console.log('Updated cloudSessions list, new objective for session:', updated.mainObjective);
           return newList;
         } else {

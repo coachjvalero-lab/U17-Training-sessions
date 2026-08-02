@@ -441,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const isActive = cloudSess.id === session.id;
                   return (
                     <div
-                      key={cloudSess.id}
+                      key={`${cloudSess.id}-${cloudSess.updatedAt}-${cloudSess.mainObjective}`}
                       onClick={() => onLoadCloudSession(cloudSess)}
                       className={`group flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer text-left ${
                         isActive 
