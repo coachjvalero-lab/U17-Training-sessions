@@ -134,7 +134,22 @@ export interface CloudTrainingSession extends TrainingSession {
   gkUpdatedAt?: number;
 }
 
+export interface SessionCardDocument {
+  id: string;
+  sessionNumber: number;
+  title: string;
+  description: string;
+  category: string;
+  duration: string;
+  intensity: string;
+  date: string;
+  createdAt: number;
+  updatedAt: number;
+  role: 'football';
+}
+
 const SESSIONS_COLLECTION = 'sessions';
+const SESSION_CARDS_COLLECTION = 'sessionCards';
 
 // ---------------------------------------------------------------------------
 // Per-collection write quota tracking. A quota hit on one data type (e.g. video)
@@ -369,6 +384,22 @@ export async function saveSessionToCloud(session: TrainingSession): Promise<numb
   return saveTimestamp;
 }
 
+export async function saveSessionCardToCloud(card: SessionCardDocument): Promise<number> {
+  const saveTimestamp = Date.now();
+  const payload: SessionCardDocument = {
+    ...card,
+    updatedAt: saveTimestamp,
+    createdAt: card.createdAt || saveTimestamp
+  };
+
+  await saveDocWithRetry(SESSION_CARDS_COLLECTION, card.id, payload);
+  return saveTimestamp;
+}
+
+export async function deleteSessionCardFromCloud(cardId: string): Promise<void> {
+  await saveDocWithRetry(SESSION_CARDS_COLLECTION, cardId, null);
+}
+
 /**
  * Saves only specific fields for a role to avoid overwriting other roles' changes.
  * Used for granular updates when football/fitness/gk coaches work on the same session.
@@ -473,6 +504,31 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
  * Real-time listener for ALL sessions (unified).
  * Reads use the read quota (50k/day), so we do NOT block reads even if writes were throttled.
  */
+export function subscribeToSessionCards(
+  callback: (cards: SessionCardDocument[]) => void,
+  onError?: (error: any) => void
+) {
+  const q = query(
+    collection(db, SESSION_CARDS_COLLECTION),
+    orderBy('updatedAt', 'desc')
+  );
+
+  return onSnapshot(q, (querySnapshot) => {
+    const cards: SessionCardDocument[] = [];
+    querySnapshot.forEach((doc) => {
+      if (!doc.metadata.hasPendingWrites) {
+        cards.push(doc.data() as SessionCardDocument);
+      }
+    });
+    callback(cards);
+  }, (error) => {
+    console.warn('Session cards subscription error:', error);
+    if (onError) {
+      onError(error);
+    }
+  });
+}
+
 export function subscribeToSessions(
   typeOrCallback: ('football' | 'fitness') | ((sessions: CloudTrainingSession[]) => void),
   maybeCallback?: (sessions: CloudTrainingSession[]) => void,

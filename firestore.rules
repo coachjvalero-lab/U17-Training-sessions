@@ -61,6 +61,14 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
+    // Football session-card templates / gallery items
+    // ------------------------------------------------------------------
+    match /sessionCards/{cardId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('football');
+    }
+
+    // ------------------------------------------------------------------
     // Squad roster
     // ------------------------------------------------------------------
     match /squadPlayers/{playerId} {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   FileText, 
   Calendar, 
@@ -20,10 +20,11 @@ import {
   Trash2
 } from 'lucide-react';
 import { TrainingSession, Exercise, MatchFixture } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { CloudTrainingSession, deleteSessionCardFromCloud, saveSessionCardToCloud, subscribeToSessionCards, subscribeToSessions } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
+import { CreateSessionCardModal } from './CreateSessionCardModal';
 
 export interface DrillCard {
   id: string;
@@ -178,17 +179,94 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
   // Search term for filtering sessions
   const [searchTerm, setSearchTerm] = useState('');
+  const [sessionCards, setSessionCards] = useState<DrillCard[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isSavingCard, setIsSavingCard] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToSessionCards((cards) => {
+      const mappedCards: DrillCard[] = cards
+        .map((card) => ({
+          id: card.id,
+          sessionNumber: Number(card.sessionNumber || 0) || 0,
+          title: card.title || 'Untitled session card',
+          date: card.date || new Date().toLocaleDateString('en-CA'),
+          category: (card.category as DrillCard['category']) || 'Tactical',
+          description: card.description || 'No description',
+          duration: card.duration || '20 min',
+          intensity: card.intensity || 'Alta',
+          drillType: 'rondo5v2',
+          likesCount: 0,
+          isBookmarked: false,
+          groupCount: 0,
+          rating: '—',
+          status: 'draft' as const,
+          createdAt: card.createdAt,
+          updatedAt: card.updatedAt,
+          role: 'football' as const
+        }))
+        .filter((card) => card.sessionNumber > 0)
+        .sort((a, b) => (b.sessionNumber || 0) - (a.sessionNumber || 0));
+
+      setSessionCards(mappedCards);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleCreateSessionCard = async (payload: {
+    title: string;
+    description: string;
+    category: string;
+    duration: string;
+    intensity: string;
+    sessionNumber: string;
+  }) => {
+    setIsSavingCard(true);
+    try {
+      const id = `card-${Date.now()}`;
+      const today = new Date().toISOString().split('T')[0];
+      const cardData = {
+        id,
+        sessionNumber: Number(payload.sessionNumber || '1'),
+        title: payload.title,
+        date: today,
+        category: payload.category || 'Tactical',
+        description: payload.description,
+        duration: payload.duration,
+        intensity: payload.intensity,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        role: 'football' as const
+      };
+
+      await saveSessionCardToCloud(cardData);
+      setSessionCards(prev => [{
+        ...cardData,
+        drillType: 'rondo5v2',
+        likesCount: 0,
+        isBookmarked: false,
+        groupCount: 0,
+        rating: '—',
+        status: 'draft' as const,
+        role: 'football' as const
+      }, ...prev]);
+    } finally {
+      setIsSavingCard(false);
+    }
+  };
 
   // Filter cloud sessions
-  const filteredSessions = cloudSessions
-    .filter(sess => {
-      const matchesSearch = sess.mainObjective?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            sess.sessionNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            `session #${sess.sessionNumber}`.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredSessions = sessionCards
+    .filter((sess) => {
+      const search = searchTerm.toLowerCase();
+      const matchesSearch =
+        sess.title?.toLowerCase().includes(search) ||
+        String(sess.sessionNumber).includes(search) ||
+        `session #${sess.sessionNumber}`.toLowerCase().includes(search);
       return matchesSearch;
     })
     .sort((a, b) => {
-      // Sort by session date (most recent first)
       const dateA = a.date || '';
       const dateB = b.date || '';
       return dateB.localeCompare(dateA);
@@ -368,7 +446,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
           <div className="flex items-center space-x-3 text-xs font-mono shrink-0">
             <span className="bg-slate-800/80 border border-slate-700/80 px-3 py-1.5 rounded-xl text-slate-300 font-bold flex items-center space-x-1.5">
               <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-              <span>{cloudSessions.length} Session{cloudSessions.length !== 1 ? 's' : ''}</span>
+              <span>{sessionCards.length} Session{sessionCards.length !== 1 ? 's' : ''}</span>
             </span>
           </div>
         </div>
@@ -664,7 +742,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
             <button
               type="button"
-              onClick={onNewSession}
+              onClick={() => setShowCreateModal(true)}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -698,7 +776,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
               {/* CARDS GRID (3-COLUMN RESPONSIVE) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredSessions.length === 0 ? (
+                {sessionCards.length === 0 ? (
                   <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-slate-200">
                     <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm text-slate-500 font-semibold">
@@ -707,7 +785,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                     {!searchTerm && (
                       <button
                         type="button"
-                        onClick={onNewSession}
+                        onClick={() => setShowCreateModal(true)}
                         className="mt-4 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-all"
                       >
                         Create your first session
@@ -720,7 +798,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
                     return (
                       <div
-                        key={`${sess.id}-${sess.updatedAt}-${sess.mainObjective}`}
+                        key={`${sess.id}-${sess.updatedAt}-${sess.title}`}
                         className={`group bg-white rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col justify-between overflow-hidden relative ${
                           isActive 
                             ? 'border-emerald-500 ring-2 ring-emerald-500/20' 
@@ -754,28 +832,29 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
                         {/* CARD BODY */}
                         <div 
-                          onClick={() => onLoadCloudSession && onLoadCloudSession(sess)}
+                          onClick={() => setSessionSubNav('editor')}
                           className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors"
                         >
                           <div className="space-y-2.5">
                             {/* Main Objective / Title */}
                             <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-3 hover:text-emerald-700 transition-colors min-h-[3rem]">
-                              {sess.mainObjective || 'No objective assigned'}
+                              {sess.title || 'No objective assigned'}
                             </h3>
+                            {sess.description ? (
+                              <p className="text-xs text-slate-500 line-clamp-3">{sess.description}</p>
+                            ) : null}
 
                             {/* Metadata */}
                             <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold flex-wrap">
                               <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                {sess.microcycleDay || '-'}
+                                {sess.category || 'Tactical'}
                               </span>
                               <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                {sess.time || 'N/A'}
+                                {sess.duration || 'N/A'}
                               </span>
-                              {sess.teamName && (
-                                <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                  {sess.teamName}
-                                </span>
-                              )}
+                              <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                {sess.intensity || 'Alta'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -786,7 +865,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onDeleteCloudSession && onDeleteCloudSession(sess.id, sess.sessionNumber || '', e);
+                              void deleteSessionCardFromCloud(sess.id);
                             }}
                             className="p-2 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all border border-rose-500/30 hover:border-rose-500"
                             title="Delete Session"
@@ -810,6 +889,12 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
         </div>
       )}
+
+      <CreateSessionCardModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreateSessionCard}
+      />
 
     </div>
   );
