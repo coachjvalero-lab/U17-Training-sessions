@@ -99,7 +99,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
     return () => unsubscribe();
   }, [currentUser?.email]);
 
-  const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Fit / Discharged').length;
+  const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Closed').length;
   const activePlayersCount = squadPlayers.length || squadCount;
   const videoCount = videoSessions.length;
 

@@ -45,6 +45,9 @@ export interface DrillCard {
   intensity?: string;
   description?: string;
   exerciseData?: any;
+  createdAt?: number;
+  updatedAt?: number;
+  role?: 'football' | 'fitness' | 'gk';
 }
 
 const DEFAULT_DRILL_CARDS: DrillCard[] = [
@@ -228,12 +231,12 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     try {
       const id = `card-${Date.now()}`;
       const today = new Date().toISOString().split('T')[0];
-      const cardData: { id: string; sessionNumber: number; title: string; date: string; category: string; description: string; duration: string; intensity: string; createdAt: number; updatedAt: number; role: 'football' | 'fitness' | 'gk' } = {
+      const cardData: { id: string; sessionNumber: number; title: string; date: string; category: DrillCard['category']; description: string; duration: string; intensity: string; createdAt: number; updatedAt: number; role: 'football' | 'fitness' | 'gk' } = {
         id,
         sessionNumber: Number(payload.sessionNumber || '1'),
         title: payload.title,
         date: today,
-        category: payload.category || 'Tactical',
+        category: ((payload.category as DrillCard['category']) || 'Tactical'),
         description: payload.description,
         duration: payload.duration,
         intensity: payload.intensity,

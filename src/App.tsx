@@ -461,7 +461,7 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'offline-queued' | 'saved'; message?: string }>({ status: 'idle' });
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'offline-queued' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
@@ -1835,7 +1835,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={activeSection === 'gk'}
+                  isGk={false}
                 />
 
                 {/* Section: Main Part Block */}
@@ -1845,7 +1845,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={activeSection === 'gk'}
+                  isGk={false}
                 />
 
                 {/* Section: Cool Down Block */}
@@ -1855,7 +1855,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={activeSection === 'gk'}
+                  isGk={false}
                 />
 
                 {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
