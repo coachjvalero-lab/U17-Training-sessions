@@ -689,14 +689,19 @@ export async function deleteSquadPlayerFromCloud(playerId: string): Promise<void
 
 /**
  * One-time migration: uploads whatever squad roster is cached in this browser's localStorage
- * to the shared cloud roster, but only the very first time (guarded by a meta flag) so that
- * later, intentional deletions by the team are never resurrected by a stale local cache.
+ * to the shared cloud roster. If the meta flag is already initialized but the collection was
+ * later wiped, reseed it from the current local/base roster so the plantilla can be rebuilt.
  */
 export async function migrateLocalSquadIfNeeded(localPlayers: SquadPlayer[]): Promise<void> {
   const metaRef = doc(db, SQUAD_META_COLLECTION, 'status');
   try {
     const metaSnap = await getDoc(metaRef);
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
+      const playersSnap = await getDocs(collection(db, SQUAD_COLLECTION));
+      if (!playersSnap.empty || localPlayers.length === 0) {
+        return;
+      }
+      await Promise.all(localPlayers.map(p => saveSquadPlayerToCloud(p)));
       return;
     }
     await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
