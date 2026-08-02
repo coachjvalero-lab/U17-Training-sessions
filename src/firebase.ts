@@ -204,6 +204,27 @@ function emitSyncStatus(event: SyncStatusEvent): void {
   });
 }
 
+async function runWriteWithErrorReporting<T>(scope: string, docId: string, operation: string, writeFn: () => Promise<T>): Promise<T> {
+  try {
+    return await writeFn();
+  } catch (error: any) {
+    const errorCode = error?.code ? String(error.code) : 'unknown';
+    console.error(`[${operation}] Firestore write failed for ${scope}/${docId} [${errorCode}]`, error);
+    emitSyncStatus({
+      status: 'error',
+      scope,
+      message: `${operation} failed (${errorCode})`
+    });
+    throw error;
+  }
+}
+
+function reportSaveError(scope: string, docId: string, error: unknown, operation: string): void {
+  const errorCode = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+  console.error(`[${operation}] Firestore write failed for ${scope}/${docId} [${errorCode}]`, error);
+  emitSyncStatus({ status: 'error', scope, message: `${operation} failed (${errorCode})` });
+}
+
 // ---------------------------------------------------------------------------
 // Pending save queue: any write that fails after retries is queued in
 // localStorage and replayed automatically once connectivity/quota recovers
@@ -316,10 +337,15 @@ async function saveDocWithRetry(scope: string, docId: string, data: any | null):
         continue;
       }
 
-      console.warn(`Cloud sync failed for ${scope}/${docId}:`, err?.code || err?.message);
+      const errorCode = err?.code || 'unknown';
+      console.error(`[saveDocWithRetry] Cloud sync failed for ${scope}/${docId} [${errorCode}]`, err);
       enqueuePendingWrite({ key: `${scope}:${docId}`, scope, docId, data, queuedAt: Date.now() });
       if (isQuota) markQuotaExceeded(scope);
-      emitSyncStatus({ status: 'offline-queued', scope, message: err?.code || err?.message });
+      emitSyncStatus({
+        status: isTransient ? 'offline-queued' : 'error',
+        scope,
+        message: errorCode
+      });
       throw err;
     }
   }
@@ -416,7 +442,8 @@ export async function saveSessionFieldsByRole(
         continue;
       }
 
-      console.warn(`Cloud sync failed for ${SESSIONS_COLLECTION}/${sessionId}:`, err?.code || err?.message);
+      const errorCode = err?.code || 'unknown';
+      console.error(`[saveSessionFieldsByRole] Cloud sync failed for ${SESSIONS_COLLECTION}/${sessionId} [${errorCode}]`, err);
       enqueuePendingWrite({ 
         key: `${SESSIONS_COLLECTION}:${sessionId}:${role}`, 
         scope: SESSIONS_COLLECTION, 
@@ -425,7 +452,11 @@ export async function saveSessionFieldsByRole(
         queuedAt: Date.now() 
       });
       if (isQuota) markQuotaExceeded(SESSIONS_COLLECTION);
-      emitSyncStatus({ status: 'offline-queued', scope: SESSIONS_COLLECTION, message: err?.code || err?.message });
+      emitSyncStatus({
+        status: isTransient ? 'offline-queued' : 'error',
+        scope: SESSIONS_COLLECTION,
+        message: errorCode
+      });
       throw err;
     }
   }
@@ -455,7 +486,7 @@ export function subscribeToSessions(
 
   const q = query(
     collection(db, SESSIONS_COLLECTION),
-    orderBy('updatedAt', 'desc')
+    orderBy('date', 'desc')
   );
   
   return onSnapshot(q, (querySnapshot) => {
@@ -501,7 +532,9 @@ export function subscribeToTeamLogo(
 
 export async function saveTeamLogoToCloud(logoUrl: string): Promise<void> {
   const docRef = doc(db, TEAM_LOGO_COLLECTION, 'current');
-  await setDoc(docRef, { logoUrl, updatedAt: Date.now() }, { merge: true });
+  await runWriteWithErrorReporting(TEAM_LOGO_COLLECTION, 'current', 'Save team logo', async () => {
+    await setDoc(docRef, { logoUrl, updatedAt: Date.now() }, { merge: true });
+  });
 }
 
 export async function migrateLocalTeamLogoIfNeeded(localLogo: string): Promise<void> {
@@ -511,12 +544,14 @@ export async function migrateLocalTeamLogoIfNeeded(localLogo: string): Promise<v
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(TEAM_LOGO_COLLECTION, 'meta', 'Initialize team logo meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localLogo && localLogo !== OFFICIAL_ALULA_LOGO_DATA_URL) {
       await saveTeamLogoToCloud(localLogo);
     }
   } catch (e) {
-    console.warn('Team logo migration skipped:', e);
+    reportSaveError(TEAM_LOGO_COLLECTION, 'meta', e, 'Migrate team logo');
   }
 }
 
@@ -583,12 +618,14 @@ export async function migrateLocalExerciseLibraryIfNeeded(localExercises: Exerci
       return;
     }
     // Mark as initialized first to minimize the race window with other clients migrating concurrently
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(EXERCISE_LIBRARY_META_COLLECTION, 'status', 'Initialize exercise library meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localExercises.length > 0) {
       await Promise.all(localExercises.map(ex => saveExerciseToLibraryCloud(ex)));
     }
   } catch (e) {
-    console.warn('Exercise library migration skipped:', e);
+    reportSaveError(EXERCISE_LIBRARY_META_COLLECTION, 'status', e, 'Migrate exercise library');
   }
 }
 
@@ -640,12 +677,14 @@ export async function migrateLocalVideoAnalysisIfNeeded(localSessions: VideoAnal
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(VIDEO_ANALYSIS_META_COLLECTION, 'status', 'Initialize video analysis meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localSessions.length > 0) {
       await Promise.all(localSessions.map(session => saveVideoAnalysisToCloud(session)));
     }
   } catch (e) {
-    console.warn('Video analysis migration skipped:', e);
+    reportSaveError(VIDEO_ANALYSIS_META_COLLECTION, 'status', e, 'Migrate video analysis');
   }
 }
 
@@ -697,12 +736,14 @@ export async function migrateLocalCompetitionFixturesIfNeeded(localFixtures: Mat
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(COMPETITION_FIXTURES_META_COLLECTION, 'status', 'Initialize competition fixtures meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localFixtures.length > 0) {
       await Promise.all(localFixtures.map(fixture => saveCompetitionFixtureToCloud(fixture)));
     }
   } catch (e) {
-    console.warn('Competition fixtures migration skipped:', e);
+    reportSaveError(COMPETITION_FIXTURES_META_COLLECTION, 'status', e, 'Migrate competition fixtures');
   }
 }
 
@@ -730,7 +771,9 @@ export function subscribeToDeletedExerciseIds(
 export async function addDeletedExerciseIdsCloud(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const metaRef = doc(db, EXERCISE_LIBRARY_META_COLLECTION, 'deletedIds');
-  await setDoc(metaRef, { ids: arrayUnion(...ids), updatedAt: Date.now() }, { merge: true });
+  await runWriteWithErrorReporting(EXERCISE_LIBRARY_META_COLLECTION, 'deletedIds', 'Update deleted exercise IDs', async () => {
+    await setDoc(metaRef, { ids: arrayUnion(...ids), updatedAt: Date.now() }, { merge: true });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -800,12 +843,14 @@ export async function migrateLocalSquadIfNeeded(localPlayers: SquadPlayer[]): Pr
       await Promise.all(localPlayers.map(p => saveSquadPlayerToCloud(p)));
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(SQUAD_META_COLLECTION, 'status', 'Initialize squad meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localPlayers.length > 0) {
       await Promise.all(localPlayers.map(p => saveSquadPlayerToCloud(p)));
     }
   } catch (e) {
-    console.warn('Squad roster migration skipped:', e);
+    reportSaveError(SQUAD_META_COLLECTION, 'status', e, 'Migrate squad roster');
   }
 }
 
@@ -871,12 +916,14 @@ export async function migrateLocalPhysioRecordsIfNeeded(localRecords: PhysioReco
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(PHYSIO_META_COLLECTION, 'status', 'Initialize physio meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localRecords.length > 0) {
       await Promise.all(localRecords.map(r => savePhysioRecordToCloud(r)));
     }
   } catch (e) {
-    console.warn('Physio records migration skipped:', e);
+    reportSaveError(PHYSIO_META_COLLECTION, 'status', e, 'Migrate physio records');
   }
 }
 
@@ -911,7 +958,9 @@ export function subscribeToExcludedPlayers(
 export async function addExcludedPlayersCloud(names: string[]): Promise<void> {
   if (names.length === 0) return;
   const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayers');
-  await setDoc(metaRef, { names: arrayUnion(...names), updatedAt: Date.now() }, { merge: true });
+  await runWriteWithErrorReporting(ATTENDANCE_META_COLLECTION, 'excludedPlayers', 'Update excluded players', async () => {
+    await setDoc(metaRef, { names: arrayUnion(...names), updatedAt: Date.now() }, { merge: true });
+  });
 }
 
 /**
@@ -925,12 +974,14 @@ export async function migrateLocalExcludedPlayersIfNeeded(localNames: string[]):
     if (metaSnap.exists() && metaSnap.data()?.initialized) {
       return;
     }
-    await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    await runWriteWithErrorReporting(ATTENDANCE_META_COLLECTION, 'excludedPlayersStatus', 'Initialize excluded players meta', async () => {
+      await setDoc(metaRef, { initialized: true, updatedAt: Date.now() }, { merge: true });
+    });
     if (localNames.length > 0) {
       await addExcludedPlayersCloud(localNames);
     }
   } catch (e) {
-    console.warn('Excluded players migration skipped:', e);
+    reportSaveError(ATTENDANCE_META_COLLECTION, 'excludedPlayersStatus', e, 'Migrate excluded players');
   }
 }
 
@@ -991,8 +1042,12 @@ async function syncUserRolesCloud(list: UserPermission[]): Promise<void> {
  */
 export async function saveUserPermissionsListCloud(list: UserPermission[]): Promise<void> {
   const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
-  await setDoc(docRef, { users: list, updatedAt: Date.now() }, { merge: true });
-  await syncUserRolesCloud(list);
+  await runWriteWithErrorReporting(PERMISSIONS_COLLECTION, 'list', 'Save permissions list', async () => {
+    await setDoc(docRef, { users: list, updatedAt: Date.now() }, { merge: true });
+  });
+  await runWriteWithErrorReporting(USER_ROLES_COLLECTION, 'sync', 'Sync user roles', async () => {
+    await syncUserRolesCloud(list);
+  });
 }
 
 /**
@@ -1006,10 +1061,14 @@ export async function migrateLocalPermissionsIfNeeded(localList: UserPermission[
     if (docSnap.exists() && docSnap.data()?.users) {
       return;
     }
-    await setDoc(docRef, { users: localList, updatedAt: Date.now() }, { merge: true });
-    await syncUserRolesCloud(localList);
+    await runWriteWithErrorReporting(PERMISSIONS_COLLECTION, 'list', 'Migrate permissions list', async () => {
+      await setDoc(docRef, { users: localList, updatedAt: Date.now() }, { merge: true });
+    });
+    await runWriteWithErrorReporting(USER_ROLES_COLLECTION, 'sync', 'Sync migrated user roles', async () => {
+      await syncUserRolesCloud(localList);
+    });
   } catch (e) {
-    console.warn('User permissions migration skipped:', e);
+    reportSaveError(PERMISSIONS_COLLECTION, 'list', e, 'Migrate permissions');
   }
 }
 

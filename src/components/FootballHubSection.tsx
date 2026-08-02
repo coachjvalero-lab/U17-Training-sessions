@@ -16,7 +16,8 @@ import {
   Target,
   XCircle,
   FolderOpen,
-  BookOpen
+  BookOpen,
+  Trash2
 } from 'lucide-react';
 import { TrainingSession, Exercise, MatchFixture } from '../types';
 import { CloudTrainingSession } from '../firebase';
@@ -151,6 +152,9 @@ interface FootballHubSectionProps {
     exercise: Exercise,
     targetSection?: 'football' | 'fitness' | 'gk'
   ) => void;
+  onLoadCloudSession?: (sess: CloudTrainingSession) => void;
+  onDeleteCloudSession?: (id: string, sessNum: string, e: React.MouseEvent) => void;
+  onNewSession?: () => void;
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -161,7 +165,10 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   squadRoster = [],
   fixtures,
   onUpdateFixtures,
-  onAddExerciseToSession
+  onAddExerciseToSession,
+  onLoadCloudSession,
+  onDeleteCloudSession,
+  onNewSession
 }) => {
   // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition' | 'library'
   const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition' | 'library'>('sessions');
@@ -169,61 +176,23 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   // Sub-navigation inside 'sessions': 'cards' | 'editor'
   const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>('cards');
 
-  // Drill Cards list
-  const [drillCards, setDrillCards] = useState<DrillCard[]>(DEFAULT_DRILL_CARDS);
+  // Search term for filtering sessions
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [activeCardId, setActiveCardId] = useState<string>('card-1');
 
-  // Add new session card
-  const handleAddNewCard = () => {
-    const title = prompt('Enter Training Session Title:', 'Nueva Sesión Táctica');
-    if (!title || !title.trim()) return;
-
-    const maxNum = drillCards.length > 0 ? Math.max(...drillCards.map(c => c.sessionNumber || 0)) : 0;
-    const nextSessionNum = maxNum + 1;
-
-    const newCard: DrillCard = {
-      id: `card-${Date.now()}`,
-      sessionNumber: nextSessionNum,
-      title: title.trim(),
-      date: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
-      category: 'Tactical',
-      likesCount: 0,
-      isBookmarked: false,
-      groupCount: 8,
-      rating: '0,0 (0)',
-      status: 'active',
-      duration: '20 min',
-      intensity: 'Alta',
-      description: 'Sesión de trabajo táctico de campo registrada en la librería de sesiones.'
-    };
-
-    setDrillCards([newCard, ...drillCards]);
-    setActiveCardId(newCard.id);
-  };
-
-  // Load a card into active session editor
-  const handleSelectCardToEdit = (card: DrillCard) => {
-    setActiveCardId(card.id);
-    onChangeSession({
-      mainObjective: card.description || card.title,
-      sessionType: card.category === 'Rondo' ? 'Possession / Rondo' : card.category === 'Game' ? 'Match Play' : 'Tactical Drills',
-      observations: `Tactical session: ${card.title} (Session #${String(card.sessionNumber).padStart(3, '0')}) loaded from Session Library.`
-    });
-    setSessionSubNav('editor');
-  };
-
-  // Filter and sort cards inversely (Session #005, Session #004, Session #003...)
-  const filteredCards = drillCards
-    .filter(card => {
-      const matchesSearch = card.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            card.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            `session #${card.sessionNumber}`.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCat = selectedCategory === 'All' || card.category === selectedCategory;
-      return matchesSearch && matchesCat;
+  // Filter cloud sessions
+  const filteredSessions = cloudSessions
+    .filter(sess => {
+      const matchesSearch = sess.mainObjective?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            sess.sessionNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            `session #${sess.sessionNumber}`.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
     })
-    .sort((a, b) => b.sessionNumber - a.sessionNumber);
+    .sort((a, b) => {
+      // Sort by session date (most recent first)
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateB.localeCompare(dateA);
+    });
 
   // Render tactical field SVG diagram matching card drill type
   const renderTacticalFieldSvg = (type: DrillCard['drillType']) => {
@@ -399,7 +368,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
           <div className="flex items-center space-x-3 text-xs font-mono shrink-0">
             <span className="bg-slate-800/80 border border-slate-700/80 px-3 py-1.5 rounded-xl text-slate-300 font-bold flex items-center space-x-1.5">
               <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-              <span>{drillCards.length} Session Cards</span>
+              <span>{cloudSessions.length} Session{cloudSessions.length !== 1 ? 's' : ''}</span>
             </span>
           </div>
         </div>
@@ -456,7 +425,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
               <span className="text-[11px] font-mono text-slate-400">
-                {drillCards.length} Session Cards
+                {cloudSessions.length} Session{cloudSessions.length !== 1 ? 's' : ''} Saved
               </span>
               <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
                 <span>Open Module</span>
@@ -695,11 +664,11 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
             <button
               type="button"
-              onClick={handleAddNewCard}
+              onClick={onNewSession}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Nueva Sesión / Add Card</span>
+              <span>Nueva Sesión / New Session</span>
             </button>
           </div>
 
@@ -716,126 +685,119 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search session title or category..."
+                    placeholder="Search sessions by objective or number..."
                     className="w-full pl-9 pr-4 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   />
                 </div>
 
-                {/* Categories */}
-                <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-                  {['All', 'Rondo', 'Game', 'Speed', 'Build-Up', 'Finishing'].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                        selectedCategory === cat
-                          ? 'bg-[#002142] text-emerald-400 border border-emerald-500/30'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
+                {/* Session Count */}
+                <div className="text-xs font-bold text-slate-600">
+                  {filteredSessions.length} session{filteredSessions.length !== 1 ? 's' : ''} found
                 </div>
               </div>
 
-              {/* CARDS GRID (3-COLUMN RESPONSIVE MATCHING USER'S ATTACHED SCREENSHOT) */}
+              {/* CARDS GRID (3-COLUMN RESPONSIVE) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredCards.map((card) => {
-                  const isActive = activeCardId === card.id;
+                {filteredSessions.length === 0 ? (
+                  <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-slate-200">
+                    <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm text-slate-500 font-semibold">
+                      {searchTerm ? 'No sessions match your search' : 'No sessions saved yet'}
+                    </p>
+                    {!searchTerm && (
+                      <button
+                        type="button"
+                        onClick={onNewSession}
+                        className="mt-4 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-all"
+                      >
+                        Create your first session
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  filteredSessions.map((sess) => {
+                    const isActive = session.id === sess.id;
 
-                  return (
-                    <div
-                      key={card.id}
-                      className={`group bg-white rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col justify-between overflow-hidden relative ${
-                        isActive 
-                          ? 'border-emerald-500 ring-2 ring-emerald-500/20' 
-                          : 'border-slate-200/90 hover:border-slate-300'
-                      }`}
-                    >
-                      {/* CARD TOP HEADER (SESSION NUMBER, DATE, TOP RIGHT CIRCLE) */}
-                      <div className="p-4 flex items-center justify-between border-b border-slate-100 bg-white">
-                        <div className="flex items-center space-x-3">
-                          {/* Session Badge Avatar */}
-                          <div className="w-10 h-10 rounded-xl bg-[#002142] text-emerald-400 font-mono font-black text-xs flex items-center justify-center shadow-sm shrink-0 border border-slate-800">
-                            #{String(card.sessionNumber).padStart(3, '0')}
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black text-slate-900 leading-none tracking-tight">
-                              Session #{String(card.sessionNumber).padStart(3, '0')}
-                            </h4>
-                            <p className="text-[11px] font-semibold text-slate-400 mt-1 flex items-center space-x-1">
-                              <Clock className="w-3 h-3 text-slate-400 inline" />
-                              <span>{card.date}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Top-Right Circle Status Selector */}
-                        <button
-                          type="button"
-                          onClick={() => handleSelectCardToEdit(card)}
-                          title="Select Session Card"
-                          className={`w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer ${
-                            isActive
-                              ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                              : 'border-slate-300 hover:border-emerald-500 text-transparent'
-                          }`}
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* CARD BODY / CATEGORY TAG, TITLE, METADATA & CONTROL BUTTONS */}
-                      <div className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between">
-                        <div className="space-y-2.5">
-                          {/* Tags row */}
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                              {card.category}
-                            </span>
-                            <div className="flex items-center space-x-2 text-[11px] text-slate-500 font-semibold">
-                              {card.duration && (
-                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                  {card.duration}
-                                </span>
-                              )}
-                              {card.intensity && (
-                                <span className="bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                  {card.intensity}
-                                </span>
-                              )}
+                    return (
+                      <div
+                        key={`${sess.id}-${sess.updatedAt}-${sess.mainObjective}`}
+                        className={`group bg-white rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col justify-between overflow-hidden relative ${
+                          isActive 
+                            ? 'border-emerald-500 ring-2 ring-emerald-500/20' 
+                            : 'border-slate-200/90 hover:border-slate-300'
+                        }`}
+                      >
+                        {/* CARD TOP HEADER */}
+                        <div className="p-4 flex items-center justify-between border-b border-slate-100 bg-white">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-xl bg-[#002142] text-emerald-400 font-mono font-black text-xs flex items-center justify-center shadow-sm shrink-0 border border-slate-800">
+                              #{sess.sessionNumber || '?'}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black text-slate-900 leading-none tracking-tight">
+                                Session #{sess.sessionNumber || '?'}
+                              </h4>
+                              <p className="text-[11px] font-semibold text-slate-400 mt-1 flex items-center space-x-1">
+                                <Clock className="w-3 h-3 text-slate-400 inline" />
+                                <span>{sess.date}</span>
+                              </p>
                             </div>
                           </div>
 
-                          {/* Title (primary objective) & Controls */}
-                          <div className="flex items-start justify-between gap-2 pt-1">
-                            <h3 
-                              onClick={() => handleSelectCardToEdit(card)}
-                              className="text-sm font-black text-slate-900 leading-snug line-clamp-3 cursor-pointer hover:text-emerald-700 transition-colors"
-                            >
-                              {card.description || card.title}
+                          {/* Active indicator */}
+                          {isActive && (
+                            <div className="px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
+                              <span className="text-[10px] font-black text-emerald-700 uppercase">Active</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* CARD BODY */}
+                        <div 
+                          onClick={() => onLoadCloudSession && onLoadCloudSession(sess)}
+                          className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="space-y-2.5">
+                            {/* Main Objective / Title */}
+                            <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-3 hover:text-emerald-700 transition-colors min-h-[3rem]">
+                              {sess.mainObjective || 'No objective assigned'}
                             </h3>
 
-                            {/* Control action icons */}
-                            <div className="flex items-center space-x-1 shrink-0 text-slate-400">
-                              <button
-                                type="button"
-                                onClick={() => handleSelectCardToEdit(card)}
-                                title="Expand Session"
-                                className="p-1 hover:text-emerald-600 transition-colors cursor-pointer"
-                              >
-                                <ChevronDown className="w-4 h-4" />
-                              </button>
+                            {/* Metadata */}
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold flex-wrap">
+                              <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                {sess.microcycleDay || '-'}
+                              </span>
+                              <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                {sess.time || 'N/A'}
+                              </span>
+                              {sess.teamName && (
+                                <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                  {sess.teamName}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                    </div>
-                  );
-                })}
+                        {/* CARD FOOTER - Delete Button */}
+                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCloudSession && onDeleteCloudSession(sess.id, sess.sessionNumber || '', e);
+                            }}
+                            className="p-2 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all border border-rose-500/30 hover:border-rose-500"
+                            title="Delete Session"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
             </div>

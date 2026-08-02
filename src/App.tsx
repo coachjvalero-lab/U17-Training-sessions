@@ -630,7 +630,7 @@ export default function App() {
           const isFirstLoad = !hasInitialCloudLoadedRef.current;
 
           // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
-          // (most recently updated session in Cloud) ONLY on the very first cold start.
+          // (most recent session by date) ONLY on the very first cold start.
           let sessionToLoad = targetId
             ? sessions.find(s => s.id === targetId)
             : (isFirstLoad ? sessions[0] : undefined);
@@ -1218,11 +1218,15 @@ export default function App() {
         clearQuotaExceeded();
         alert('Changes saved to the cloud and synced across all your devices!');
       } catch (cloudErr) {
-        console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
-        alert('Guardado localmente, pendiente de subir a la nube (se reintentará automáticamente).');
+        const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
+        console.error('[handleSaveActiveToCloud] Cloud save failed:', cloudErr);
+        setCloudSyncStatus({ status: 'error', message: `Guardar sesión falló (${errorCode})` });
+        alert(`Guardado localmente, pendiente de subir a la nube. Código: ${errorCode}`);
       }
     } catch (error) {
-      console.error('Error saving session:', error);
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+      console.error('[handleSaveActiveToCloud] Error saving session:', error);
+      setCloudSyncStatus({ status: 'error', message: `Guardar sesión falló (${errorCode})` });
       alert('Saved in your browser!');
     } finally {
       setIsCloudSaving(false);
@@ -1257,10 +1261,14 @@ export default function App() {
       try {
         await saveSessionToCloud(newSession);
       } catch (cloudErr) {
-        console.warn('Cloud save warning on new copy:', cloudErr);
+        const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
+        console.error('[handleSaveAsNewToCloud] Cloud save failed:', cloudErr);
+        setCloudSyncStatus({ status: 'error', message: `Guardar copia falló (${errorCode})` });
       }
     } catch (error) {
-      console.error('Error saving copy:', error);
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+      console.error('[handleSaveAsNewToCloud] Error saving copy:', error);
+      setCloudSyncStatus({ status: 'error', message: `Guardar copia falló (${errorCode})` });
     } finally {
       setIsCloudSaving(false);
     }
@@ -1310,10 +1318,14 @@ export default function App() {
           gkUpdatedAt: savedTime
         }, ...prev]);
       } catch (cloudErr) {
-        console.warn('Cloud save warning on new session:', cloudErr);
+        const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
+        console.error('[handleCreateNewCloudSession] Cloud save failed:', cloudErr);
+        setCloudSyncStatus({ status: 'error', message: `Crear sesión falló (${errorCode})` });
       }
     } catch (error) {
-      console.error('Error creating new session:', error);
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+      console.error('[handleCreateNewCloudSession] Error creating new session:', error);
+      setCloudSyncStatus({ status: 'error', message: `Crear sesión falló (${errorCode})` });
     } finally {
       setIsCloudSaving(false);
     }
@@ -1524,7 +1536,9 @@ export default function App() {
         lastLoadedSessionTimeRef.current[role] = savedTime;
         lastLoadedSessionTimeRef.current.global = savedTime;
       } catch (cloudErr) {
-        console.warn('Cloud save warning on share link:', cloudErr);
+        const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
+        console.error('[handleCopyShareLink] Cloud save failed:', cloudErr);
+        setCloudSyncStatus({ status: 'error', message: `Compartir sesión falló (${errorCode})` });
       }
 
       // 4. Build sharing URL with target session ID
@@ -1682,6 +1696,7 @@ export default function App() {
       retrying: { text: 'No se pudo guardar en la nube, reintentando…', className: 'bg-amber-500 text-slate-950' },
       'offline-queued': { text: 'Guardado localmente, pendiente de subir a la nube.', className: 'bg-rose-600 text-white' },
       saved: { text: 'Guardado en la nube ✓', className: 'bg-emerald-500 text-slate-950' },
+      error: { text: cloudSyncStatus.message || 'Error al guardar en la nube', className: 'bg-rose-700 text-white' },
     };
     const cfg = bannerConfig[cloudSyncStatus.status];
     if (!cfg) return null;
@@ -1810,6 +1825,9 @@ export default function App() {
             cloudSessions={cloudSessions}
             onChangeSession={handleUpdateSession}
             onAddExerciseToSession={handleAddExerciseFromLibrary}
+            onLoadCloudSession={handleLoadCloudSession}
+            onDeleteCloudSession={handleDeleteCloudSession}
+            onNewSession={handleCreateNewCloudSession}
             squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
