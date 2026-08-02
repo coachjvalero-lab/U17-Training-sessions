@@ -1,8 +1,141 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
     }
+
+    function userEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    // One doc per user at userRoles/{email}, e.g. { role: 'coach', allowedSections: ['football', ...] }.
+    // This is the ONLY source of truth rules trust — never anything computed on the client.
+    function roleDoc() {
+      return get(/databases/$(database)/documents/userRoles/$(userEmail())).data;
+    }
+
+    function hasRoleDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/userRoles/$(userEmail()));
+    }
+
+    // Fixed bootstrap account: needed the very first time the app runs, before any
+    // userRoles doc exists, so SOMEONE can create the first admin role doc at all.
+    // Every other admin (including this one, once it has its own doc) is validated
+    // purely through userRoles/{email} — this is not a client-trusted shortcut.
+    function isBootstrapAdmin() {
+      return isSignedIn() && userEmail() == 'admin@alula.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || (hasRoleDoc() && roleDoc().role == 'admin');
+    }
+
+    function hasSection(section) {
+      return isAdmin() || (hasRoleDoc() && (section in roleDoc().allowedSections));
+    }
+
+    // ------------------------------------------------------------------
+    // Permissions / roles — only admins may grant or change access.
+    // ------------------------------------------------------------------
+    match /userRoles/{email} {
+      allow read: if isSignedIn() && (email == userEmail() || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /permissionsConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Training sessions (football / fitness / gk unified doc)
+    // ------------------------------------------------------------------
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('football') || hasSection('fitness') || hasSection('gk');
+    }
+
+    // ------------------------------------------------------------------
+    // Squad roster
+    // ------------------------------------------------------------------
+    match /squadPlayers/{playerId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('squad');
+    }
+    match /squadMeta/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('squad');
+    }
+
+    // ------------------------------------------------------------------
+    // Physiotherapy / medical records — sensitive data, limited readers.
+    // ------------------------------------------------------------------
+    match /physioRecords/{recordId} {
+      allow read: if isAdmin() || hasSection('physio') || hasSection('football') || hasSection('fitness') || hasSection('gk');
+      allow write: if isAdmin() || hasSection('physio');
+    }
+    match /physioMeta/{docId} {
+      allow read: if isAdmin() || hasSection('physio') || hasSection('football') || hasSection('fitness') || hasSection('gk');
+      allow write: if isAdmin() || hasSection('physio');
+    }
+
+    // ------------------------------------------------------------------
+    // Attendance
+    // ------------------------------------------------------------------
+    match /attendanceMeta/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('attendance');
+    }
+
+    // ------------------------------------------------------------------
+    // Video analysis
+    // ------------------------------------------------------------------
+    match /videoAnalysis/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('video');
+    }
+    match /videoAnalysisMeta/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('video');
+    }
+
+    // ------------------------------------------------------------------
+    // Exercise library
+    // ------------------------------------------------------------------
+    match /exerciseLibrary/{exerciseId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('exercises');
+    }
+    match /exerciseLibraryMeta/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('exercises');
+    }
+
+    // ------------------------------------------------------------------
+    // Competition fixtures — no dedicated section, gated by football access.
+    // ------------------------------------------------------------------
+    match /competitionFixtures/{fixtureId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('football');
+    }
+    match /competitionFixturesMeta/{docId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('football');
+    }
+
+    // ------------------------------------------------------------------
+    // Team logo — cosmetic, shared branding. Any authenticated staff can update.
+    // ------------------------------------------------------------------
+    match /teamLogoConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Deny everything else by default (no catch-all wildcard).
   }
 }

@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { 
   getFirestore, 
   collection, 
@@ -6,6 +6,7 @@ import {
   setDoc, 
   deleteDoc, 
   getDoc,
+  getDocs,
   query, 
   orderBy, 
   onSnapshot,
@@ -65,12 +66,22 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
 }
 
 /**
- * Register a new user with email and password
+ * Creates a brand-new staff login (email + password) WITHOUT touching the currently
+ * signed-in session. Uses a short-lived secondary Firebase App instance so the admin
+ * creating the account is never signed out or replaced by the new user.
+ * Only ever call this from an admin-gated UI (e.g. AdminPermissionsModal) — Firestore
+ * rules are the real access boundary, this is just so admins don't lose their session.
  */
-export async function registerUser(email: string, pass: string): Promise<User> {
+export async function adminCreateUserAccount(email: string, pass: string): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
-  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-  return cred.user;
+  const secondaryApp = initializeApp(firebaseConfig, `admin-create-user-${Date.now()}`);
+  try {
+    const secondaryAuth = getAuth(secondaryApp);
+    await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, pass);
+    await signOut(secondaryAuth);
+  } finally {
+    await deleteApp(secondaryApp);
+  }
 }
 
 /**
@@ -121,33 +132,41 @@ export interface CloudTrainingSession extends TrainingSession {
 }
 
 const SESSIONS_COLLECTION = 'sessions';
-const QUOTA_KEY = 'firestore_write_quota_exceeded_until';
 
-export function markQuotaExceeded(durationMs: number = 5 * 60 * 1000): void {
+// ---------------------------------------------------------------------------
+// Per-collection write quota tracking. A quota hit on one data type (e.g. video)
+// must never block saves for another (e.g. sessions/squad), so each scope gets
+// its own short-lived lockout key instead of one global switch.
+// ---------------------------------------------------------------------------
+function quotaKey(scope: string): string {
+  return `firestore_write_quota_exceeded_until:${scope}`;
+}
+
+export function markQuotaExceeded(scope: string = SESSIONS_COLLECTION, durationMs: number = 30 * 1000): void {
   const until = Date.now() + durationMs;
   try {
-    localStorage.setItem(QUOTA_KEY, String(until));
+    localStorage.setItem(quotaKey(scope), String(until));
   } catch (e) {
     // ignore
   }
 }
 
-export function clearQuotaExceeded(): void {
+export function clearQuotaExceeded(scope: string = SESSIONS_COLLECTION): void {
   try {
-    localStorage.removeItem(QUOTA_KEY);
+    localStorage.removeItem(quotaKey(scope));
   } catch (e) {
     // ignore
   }
 }
 
-export function isCloudQuotaExceeded(): boolean {
+export function isCloudQuotaExceeded(scope: string = SESSIONS_COLLECTION): boolean {
   try {
-    const val = localStorage.getItem(QUOTA_KEY);
+    const val = localStorage.getItem(quotaKey(scope));
     if (!val) return false;
     const until = parseInt(val, 10);
     if (isNaN(until)) return false;
     if (Date.now() >= until) {
-      localStorage.removeItem(QUOTA_KEY);
+      localStorage.removeItem(quotaKey(scope));
       return false;
     }
     return true;
@@ -156,19 +175,159 @@ export function isCloudQuotaExceeded(): boolean {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Visible sync status (so the UI can show "saving…", "retrying…", "saved locally,
+// pending upload" instead of silently swallowing failures in console.warn).
+// ---------------------------------------------------------------------------
+export type SyncStatus = 'saving' | 'retrying' | 'saved' | 'offline-queued' | 'error';
+export interface SyncStatusEvent {
+  status: SyncStatus;
+  scope: string;
+  message?: string;
+}
+type SyncStatusListener = (event: SyncStatusEvent) => void;
+let syncStatusListeners: SyncStatusListener[] = [];
+
+export function subscribeSyncStatus(listener: SyncStatusListener): () => void {
+  syncStatusListeners.push(listener);
+  return () => {
+    syncStatusListeners = syncStatusListeners.filter(l => l !== listener);
+  };
+}
+
+function emitSyncStatus(event: SyncStatusEvent): void {
+  syncStatusListeners.forEach(cb => {
+    try { cb(event); } catch (e) { /* ignore listener errors */ }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pending save queue: any write that fails after retries is queued in
+// localStorage and replayed automatically once connectivity/quota recovers
+// (see flushPendingWrites, called on 'online' and on app start).
+// ---------------------------------------------------------------------------
+interface PendingWrite {
+  key: string; // `${scope}:${docId}`
+  scope: string;
+  docId: string;
+  data: any | null; // null means "delete this document"
+  queuedAt: number;
+}
+
+const PENDING_QUEUE_KEY = 'firestore_pending_write_queue';
+
+function readPendingQueue(): PendingWrite[] {
+  try {
+    const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writePendingQueue(items: PendingWrite[]): void {
+  try {
+    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(items));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function enqueuePendingWrite(item: PendingWrite): void {
+  const items = readPendingQueue().filter(i => i.key !== item.key);
+  items.push(item);
+  writePendingQueue(items);
+}
+
+function dequeuePendingWrite(key: string): void {
+  writePendingQueue(readPendingQueue().filter(i => i.key !== key));
+}
+
+export function getPendingWriteCount(): number {
+  return readPendingQueue().length;
+}
+
+/**
+ * Retries every queued write once (used on reconnect / app start). Writes that fail
+ * again simply stay queued — saveWithRetry re-enqueues them internally.
+ */
+export async function flushPendingWrites(): Promise<void> {
+  const items = readPendingQueue();
+  for (const item of items) {
+    try {
+      const ref = doc(db, item.scope, item.docId);
+      if (item.data === null) {
+        await deleteDoc(ref);
+      } else {
+        await setDoc(ref, item.data, { merge: true });
+      }
+      dequeuePendingWrite(item.key);
+      clearQuotaExceeded(item.scope);
+      emitSyncStatus({ status: 'saved', scope: item.scope });
+    } catch (err: any) {
+      // Still failing (offline / quota) — leave queued, it will retry on the next flush.
+      if (err?.code === 'resource-exhausted') {
+        markQuotaExceeded(item.scope);
+      }
+    }
+  }
+}
+
+const MAX_WRITE_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Generic "save one document" helper with exponential backoff retries. A failure in one
+ * scope (collection) only ever queues/marks quota for that scope — it never blocks writes
+ * to other scopes. Pass `data: null` to delete the document instead of writing it.
+ */
+async function saveDocWithRetry(scope: string, docId: string, data: any | null): Promise<void> {
+  const ref = doc(db, scope, docId);
+  let attempt = 0;
+
+  while (true) {
+    emitSyncStatus({ status: attempt === 0 ? 'saving' : 'retrying', scope });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Cloud save operation timed out')), 6000);
+    });
+
+    try {
+      await Promise.race([
+        data === null ? deleteDoc(ref) : setDoc(ref, data, { merge: true }),
+        timeoutPromise
+      ]);
+      clearQuotaExceeded(scope);
+      emitSyncStatus({ status: 'saved', scope });
+      return;
+    } catch (err: any) {
+      attempt++;
+      const isQuota = err?.code === 'resource-exhausted';
+      const isTransient = isQuota || err?.code === 'unavailable' || err?.message === 'Cloud save operation timed out';
+
+      if (isTransient && attempt <= MAX_WRITE_RETRIES) {
+        await delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+        continue;
+      }
+
+      console.warn(`Cloud sync failed for ${scope}/${docId}:`, err?.code || err?.message);
+      enqueuePendingWrite({ key: `${scope}:${docId}`, scope, docId, data, queuedAt: Date.now() });
+      if (isQuota) markQuotaExceeded(scope);
+      emitSyncStatus({ status: 'offline-queued', scope, message: err?.code || err?.message });
+      throw err;
+    }
+  }
+}
+
 /**
  * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
- * If force is true, ignores temporary quota lockout and attempts the save directly.
  */
-export async function saveSessionToCloud(session: TrainingSession, force: boolean = false): Promise<number> {
+export async function saveSessionToCloud(session: TrainingSession): Promise<number> {
   const saveTimestamp = Date.now();
 
-  if (!force && isCloudQuotaExceeded()) {
-    return saveTimestamp;
-  }
-  
-  const sessionRef = doc(db, SESSIONS_COLLECTION, session.id);
-  
   // Strip teamLogo (base64 can exceed Firestore's 1MB document limit); stored only in localStorage
   const { teamLogo: _logo, ...sessionWithoutLogo } = session;
   const cleanSession = JSON.parse(JSON.stringify(sessionWithoutLogo));
@@ -176,42 +335,16 @@ export async function saveSessionToCloud(session: TrainingSession, force: boolea
     ...cleanSession,
     updatedAt: saveTimestamp
   };
-  
-  // Timeout Promise after 6 seconds
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Cloud save operation timed out')), 6000);
-  });
 
-  try {
-    await Promise.race([
-      setDoc(sessionRef, cloudData, { merge: true }),
-      timeoutPromise
-    ]);
-    clearQuotaExceeded();
-    return saveTimestamp;
-  } catch (err: any) {
-    if (err?.code === 'resource-exhausted') {
-      markQuotaExceeded(5 * 60 * 1000);
-    }
-    console.warn('Cloud sync failed:', err?.code || err?.message);
-    throw err;
-  }
+  await saveDocWithRetry(SESSIONS_COLLECTION, session.id, cloudData);
+  return saveTimestamp;
 }
 
 /**
  * Deletes a session from Firestore
  */
 export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
-  try {
-    const sessionRef = doc(db, SESSIONS_COLLECTION, sessionId);
-    await deleteDoc(sessionRef);
-  } catch (err: any) {
-    if (err?.code === 'resource-exhausted') {
-      markQuotaExceeded(5 * 60 * 1000);
-    }
-    console.warn('Delete operation failed:', err?.code || err?.message);
-    throw err;
-  }
+  await saveDocWithRetry(SESSIONS_COLLECTION, sessionId, null);
 }
 
 /**
@@ -329,9 +462,8 @@ export function subscribeToExerciseLibrary(
  */
 export async function saveExerciseToLibraryCloud(exercise: Exercise): Promise<number> {
   const saveTimestamp = Date.now();
-  const exerciseRef = doc(db, EXERCISE_LIBRARY_COLLECTION, exercise.id);
   const cleanExercise = JSON.parse(JSON.stringify(exercise));
-  await setDoc(exerciseRef, { ...cleanExercise, updatedAt: saveTimestamp }, { merge: true });
+  await saveDocWithRetry(EXERCISE_LIBRARY_COLLECTION, exercise.id, { ...cleanExercise, updatedAt: saveTimestamp });
   return saveTimestamp;
 }
 
@@ -339,8 +471,7 @@ export async function saveExerciseToLibraryCloud(exercise: Exercise): Promise<nu
  * Deletes a single exercise from the shared cloud library.
  */
 export async function deleteExerciseFromLibraryCloud(exerciseId: string): Promise<void> {
-  const exerciseRef = doc(db, EXERCISE_LIBRARY_COLLECTION, exerciseId);
-  await deleteDoc(exerciseRef);
+  await saveDocWithRetry(EXERCISE_LIBRARY_COLLECTION, exerciseId, null);
 }
 
 /**
@@ -397,15 +528,13 @@ export function subscribeToVideoAnalysis(
 
 export async function saveVideoAnalysisToCloud(session: VideoAnalysis): Promise<number> {
   const saveTimestamp = Date.now();
-  const sessionRef = doc(db, VIDEO_ANALYSIS_COLLECTION, session.id);
   const cleanSession = JSON.parse(JSON.stringify(session));
-  await setDoc(sessionRef, { ...cleanSession, updatedAt: saveTimestamp }, { merge: true });
+  await saveDocWithRetry(VIDEO_ANALYSIS_COLLECTION, session.id, { ...cleanSession, updatedAt: saveTimestamp });
   return saveTimestamp;
 }
 
 export async function deleteVideoAnalysisFromCloud(sessionId: string): Promise<void> {
-  const sessionRef = doc(db, VIDEO_ANALYSIS_COLLECTION, sessionId);
-  await deleteDoc(sessionRef);
+  await saveDocWithRetry(VIDEO_ANALYSIS_COLLECTION, sessionId, null);
 }
 
 export async function migrateLocalVideoAnalysisIfNeeded(localSessions: VideoAnalysis[]): Promise<void> {
@@ -456,15 +585,13 @@ export function subscribeToCompetitionFixtures(
 
 export async function saveCompetitionFixtureToCloud(fixture: MatchFixture): Promise<number> {
   const saveTimestamp = Date.now();
-  const fixtureRef = doc(db, COMPETITION_FIXTURES_COLLECTION, fixture.id);
   const cleanFixture = JSON.parse(JSON.stringify(fixture));
-  await setDoc(fixtureRef, { ...cleanFixture, updatedAt: saveTimestamp }, { merge: true });
+  await saveDocWithRetry(COMPETITION_FIXTURES_COLLECTION, fixture.id, { ...cleanFixture, updatedAt: saveTimestamp });
   return saveTimestamp;
 }
 
 export async function deleteCompetitionFixtureFromCloud(fixtureId: string): Promise<void> {
-  const fixtureRef = doc(db, COMPETITION_FIXTURES_COLLECTION, fixtureId);
-  await deleteDoc(fixtureRef);
+  await saveDocWithRetry(COMPETITION_FIXTURES_COLLECTION, fixtureId, null);
 }
 
 export async function migrateLocalCompetitionFixturesIfNeeded(localFixtures: MatchFixture[]): Promise<void> {
@@ -548,9 +675,8 @@ export function subscribeToSquadPlayers(
  */
 export async function saveSquadPlayerToCloud(player: SquadPlayer): Promise<number> {
   const saveTimestamp = Date.now();
-  const playerRef = doc(db, SQUAD_COLLECTION, player.id);
   const cleanPlayer = JSON.parse(JSON.stringify(player));
-  await setDoc(playerRef, { ...cleanPlayer, updatedAt: saveTimestamp }, { merge: true });
+  await saveDocWithRetry(SQUAD_COLLECTION, player.id, { ...cleanPlayer, updatedAt: saveTimestamp });
   return saveTimestamp;
 }
 
@@ -558,8 +684,7 @@ export async function saveSquadPlayerToCloud(player: SquadPlayer): Promise<numbe
  * Deletes a single squad player from the shared cloud roster.
  */
 export async function deleteSquadPlayerFromCloud(playerId: string): Promise<void> {
-  const playerRef = doc(db, SQUAD_COLLECTION, playerId);
-  await deleteDoc(playerRef);
+  await saveDocWithRetry(SQUAD_COLLECTION, playerId, null);
 }
 
 /**
@@ -621,9 +746,8 @@ export function subscribeToPhysioRecords(
  */
 export async function savePhysioRecordToCloud(record: PhysioRecord): Promise<number> {
   const saveTimestamp = Date.now();
-  const recordRef = doc(db, PHYSIO_COLLECTION, record.id);
   const cleanRecord = JSON.parse(JSON.stringify(record));
-  await setDoc(recordRef, { ...cleanRecord, cloudUpdatedAt: saveTimestamp }, { merge: true });
+  await saveDocWithRetry(PHYSIO_COLLECTION, record.id, { ...cleanRecord, cloudUpdatedAt: saveTimestamp });
   return saveTimestamp;
 }
 
@@ -631,8 +755,7 @@ export async function savePhysioRecordToCloud(record: PhysioRecord): Promise<num
  * Deletes a single physio record from the shared cloud log.
  */
 export async function deletePhysioRecordFromCloud(recordId: string): Promise<void> {
-  const recordRef = doc(db, PHYSIO_COLLECTION, recordId);
-  await deleteDoc(recordRef);
+  await saveDocWithRetry(PHYSIO_COLLECTION, recordId, null);
 }
 
 /**
@@ -716,6 +839,7 @@ export async function migrateLocalExcludedPlayersIfNeeded(localNames: string[]):
 // ---------------------------------------------------------------------------
 
 const PERMISSIONS_COLLECTION = 'permissionsConfig';
+const USER_ROLES_COLLECTION = 'userRoles';
 
 /**
  * Real-time listener for the shared user-permissions list.
@@ -736,12 +860,38 @@ export function subscribeToUserPermissions(
 }
 
 /**
+ * Mirrors the full permissions list into one doc per user at userRoles/{email} so
+ * Firestore security rules can look up a user's role/sections in O(1) without ever
+ * trusting anything computed on the client. Removes docs for users no longer listed.
+ */
+async function syncUserRolesCloud(list: UserPermission[]): Promise<void> {
+  const snap = await getDocs(collection(db, USER_ROLES_COLLECTION));
+  const existingIds = new Set(snap.docs.map(d => d.id));
+  const nextIds = new Set(list.map(u => u.email.trim().toLowerCase()));
+
+  const writes = list.map(u => {
+    const emailId = u.email.trim().toLowerCase();
+    return setDoc(doc(db, USER_ROLES_COLLECTION, emailId), {
+      role: u.role,
+      allowedSections: u.allowedSections,
+      updatedAt: Date.now()
+    });
+  });
+  const removals = [...existingIds]
+    .filter(id => !nextIds.has(id))
+    .map(id => deleteDoc(doc(db, USER_ROLES_COLLECTION, id)));
+
+  await Promise.all([...writes, ...removals]);
+}
+
+/**
  * Overwrites the shared permissions list. Used only when an admin explicitly saves
  * changes from the Admin Permissions modal (a single, deliberate batch edit).
  */
 export async function saveUserPermissionsListCloud(list: UserPermission[]): Promise<void> {
   const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
   await setDoc(docRef, { users: list, updatedAt: Date.now() }, { merge: true });
+  await syncUserRolesCloud(list);
 }
 
 /**
@@ -756,7 +906,9 @@ export async function migrateLocalPermissionsIfNeeded(localList: UserPermission[
       return;
     }
     await setDoc(docRef, { users: localList, updatedAt: Date.now() }, { merge: true });
+    await syncUserRolesCloud(localList);
   } catch (e) {
     console.warn('User permissions migration skipped:', e);
   }
 }
+

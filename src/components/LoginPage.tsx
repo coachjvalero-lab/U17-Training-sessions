@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, UserPlus, CheckCircle2, KeyRound, Mail, RefreshCw } from 'lucide-react';
+import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, CheckCircle2, KeyRound, Mail, RefreshCw } from 'lucide-react';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
-import { loginUser, registerUser, resetPasswordEmail } from '../firebase';
+import { loginUser, resetPasswordEmail } from '../firebase';
 
 interface LoginPageProps {
   onSuccess: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'reset'>('login');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,17 +26,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     }
   });
 
-  const switchMode = (mode: 'login' | 'register' | 'reset') => {
+  const switchMode = (mode: 'login' | 'reset') => {
     setAuthMode(mode);
     setErrorMessage('');
     setSuccessMessage('');
     if (mode === 'login') {
       setUsername('admin');
       setPassword('');
-    } else if (mode === 'register') {
-      setUsername('');
-      setPassword('');
-      setConfirmPassword('');
     } else if (mode === 'reset') {
       setResetEmail(username.includes('@') ? username : '');
     }
@@ -79,45 +74,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
       return;
     }
 
-    if (authMode === 'register') {
-      if (password.length < 6) {
-        setErrorMessage('Password must be at least 6 characters long.');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMessage('Passwords do not match. Please verify and try again.');
-        return;
-      }
-    }
-
     setIsLoading(true);
     try {
-      if (authMode === 'register') {
-        let cleanEmail = username.trim().toLowerCase();
-        if (!cleanEmail.includes('@')) {
-          cleanEmail = `${cleanEmail}@alula.com`;
-        }
-        await registerUser(cleanEmail, password);
-        setSuccessMessage('Account created successfully! Logging in...');
-        setTimeout(() => {
-          onSuccess();
-        }, 800);
-      } else {
-        await loginUser(username, password);
-        onSuccess();
-      }
+      await loginUser(username, password);
+      onSuccess();
     } catch (err: any) {
       console.error('Authentication error:', err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setErrorMessage('Incorrect username or password. Please try again.');
-      } else if (err.code === 'auth/email-already-in-use') {
-        setErrorMessage('This username/email is already registered. Please sign in.');
-      } else if (err.code === 'auth/weak-password') {
-        setErrorMessage('Password is too weak (minimum 6 characters required).');
       } else if (err.message) {
         setErrorMessage(err.message.replace('Firebase: ', ''));
       } else {
-        setErrorMessage(authMode === 'register' ? 'Failed to create account.' : 'Failed to sign in.');
+        setErrorMessage('Failed to sign in.');
       }
     } finally {
       setIsLoading(false);
@@ -179,16 +147,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-100">
-                {authMode === 'register' 
-                  ? 'Create New User Account' 
-                  : authMode === 'reset' 
+                {authMode === 'reset' 
                   ? 'Reset or Change Password' 
                   : 'Sign In to Your Account'}
               </h2>
               <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-                {authMode === 'register' 
-                  ? 'Register a new coach or technical staff account.' 
-                  : authMode === 'reset'
+                {authMode === 'reset'
                   ? 'Enter your account email to receive a secure password reset link.'
                   : 'Enter your credentials to access technical and session plans.'}
               </p>
@@ -257,12 +221,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 </button>
               </div>
             ) : (
-              /* Standard Login or Register Form */
+              /* Standard Login Form */
               <>
                 {/* Username / Email Input */}
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                    {authMode === 'register' ? 'Email / Username' : 'Username or Email'}
+                    Username or Email
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -274,7 +238,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                       autoFocus
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder={authMode === 'register' ? 'coach@alula.com' : 'admin'}
+                      placeholder="admin"
                       className="w-full pl-10 pr-4 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                     />
                   </div>
@@ -318,28 +282,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                   </div>
                 </div>
 
-                {/* Confirm Password (only in register mode) */}
-                {authMode === 'register' && (
-                  <div className="space-y-1.5 animate-fadeIn">
-                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full pl-10 pr-10 py-2.5 bg-[#171d2a] border border-slate-700/60 rounded-xl text-sm font-medium text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition-all"
-                      />
-                    </div>
-                  </div>
-                )}
-
                 {/* Submit Button */}
                 <button
                   type="submit"
@@ -349,12 +291,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                      <span>{authMode === 'register' ? 'Creating Account...' : 'Authenticating...'}</span>
+                      <span>Authenticating...</span>
                     </>
                   ) : (
                     <>
-                      {authMode === 'register' ? <UserPlus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                      <span>{authMode === 'register' ? 'Create Account & Sign In' : 'Sign In'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                      <span>Sign In</span>
                     </>
                   )}
                 </button>
@@ -373,26 +315,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 ← Back to Sign In
               </button>
             ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => switchMode(authMode === 'register' ? 'login' : 'register')}
-                  className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors focus:outline-none cursor-pointer"
-                >
-                  {authMode === 'register' 
-                    ? 'Already have an account? Sign In' 
-                    : 'Need an account? Register new user'}
-                </button>
-                {authMode === 'login' && (
-                  <button
-                    type="button"
-                    onClick={() => switchMode('reset')}
-                    className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors focus:outline-none cursor-pointer"
-                  >
-                    Change Password
-                  </button>
-                )}
-              </>
+              <button
+                type="button"
+                onClick={() => switchMode('reset')}
+                className="text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors focus:outline-none cursor-pointer mx-auto"
+              >
+                Change Password
+              </button>
             )}
           </div>
         </div>

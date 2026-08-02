@@ -23,6 +23,7 @@ import {
   saveUserPermissionsList,
   saveUserPermissionsListToCloud
 } from '../utils/permissions';
+import { adminCreateUserAccount } from '../firebase';
 
 interface AdminPermissionsModalProps {
   isOpen: boolean;
@@ -37,7 +38,10 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 }) => {
   const [users, setUsers] = useState<UserPermission[]>(() => getUserPermissionsList());
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserPermission['role']>('coach');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -55,7 +59,7 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
     }
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     if (!newUserEmail.trim()) {
@@ -70,6 +74,15 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 
     if (users.some(u => u.email.toLowerCase() === clean)) {
       setErrorMsg('This user already exists in the permissions list.');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      setErrorMsg('Set a temporary login password of at least 6 characters for this user.');
+      return;
+    }
+    if (newUserPassword !== newUserConfirmPassword) {
+      setErrorMsg('Passwords do not match. Please verify and try again.');
       return;
     }
 
@@ -91,17 +104,35 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
       defaultAllowed = ['football', 'squad'];
     }
 
-    const newUser: UserPermission = {
-      email: clean,
-      role: newUserRole,
-      allowedSections: defaultAllowed
-    };
+    setIsCreatingUser(true);
+    try {
+      // Create the actual login credentials first (secondary auth instance keeps this admin signed in).
+      await adminCreateUserAccount(clean, newUserPassword);
 
-    const updated = [...users, newUser];
-    setUsers(updated);
-    setNewUserEmail('');
-    setSuccessMsg(`User ${clean} added! Adjust tab permissions below.`);
-    setTimeout(() => setSuccessMsg(''), 2500);
+      const newUser: UserPermission = {
+        email: clean,
+        role: newUserRole,
+        allowedSections: defaultAllowed
+      };
+
+      const updated = [...users, newUser];
+      setUsers(updated);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserConfirmPassword('');
+      setSuccessMsg(`Account and permissions created for ${clean}! Adjust tab access below, then save.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        setErrorMsg('An account with this email already exists in Firebase Auth.');
+      } else if (err?.code === 'auth/weak-password') {
+        setErrorMsg('Password is too weak (minimum 6 characters required).');
+      } else {
+        setErrorMsg(err?.message ? err.message.replace('Firebase: ', '') : 'Failed to create the account.');
+      }
+    } finally {
+      setIsCreatingUser(false);
+    }
   };
 
   const handleToggleSection = (userEmail: string, sectionId: PortalSection) => {
@@ -202,23 +233,23 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
         )}
 
         {/* Add User Bar */}
-        <form onSubmit={handleAddUser} className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="flex-1 w-full flex items-center space-x-2">
-            <Users className="w-4 h-4 text-slate-400 shrink-0" />
-            <input
-              type="text"
-              value={newUserEmail}
-              onChange={(e) => setNewUserEmail(e.target.value)}
-              placeholder="Add user email e.g. coach2@alula.com or username..."
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-emerald-500 text-slate-800"
-            />
-          </div>
+        <form onSubmit={handleAddUser} className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex flex-col gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="flex-1 w-full flex items-center space-x-2">
+              <Users className="w-4 h-4 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="New user email e.g. coach2@alula.com or username..."
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-emerald-500 text-slate-800"
+              />
+            </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto shrink-0">
             <select
               value={newUserRole}
               onChange={(e) => setNewUserRole(e.target.value as any)}
-              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer w-full sm:w-auto shrink-0"
             >
               <option value="coach">Role: Coach</option>
               <option value="fitness_coach">Role: Fitness Coach</option>
@@ -228,13 +259,30 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
               <option value="admin">Role: Admin</option>
               <option value="custom">Role: Custom</option>
             </select>
+          </div>
 
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <input
+              type="password"
+              value={newUserPassword}
+              onChange={(e) => setNewUserPassword(e.target.value)}
+              placeholder="Temporary login password (min. 6 chars)"
+              className="w-full sm:flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-emerald-500 text-slate-800"
+            />
+            <input
+              type="password"
+              value={newUserConfirmPassword}
+              onChange={(e) => setNewUserConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              className="w-full sm:flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-emerald-500 text-slate-800"
+            />
             <button
               type="submit"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors shrink-0 flex items-center space-x-1 cursor-pointer"
+              disabled={isCreatingUser}
+              className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors shrink-0 flex items-center justify-center space-x-1 cursor-pointer disabled:opacity-60"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add User</span>
+              <span>{isCreatingUser ? 'Creating Account...' : 'Create User & Account'}</span>
             </button>
           </div>
         </form>

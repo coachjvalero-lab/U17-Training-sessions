@@ -128,7 +128,6 @@ export function initPermissionsCloudSync(onUpdate?: () => void): () => void {
 export function isUserAdmin(userEmail?: string | null): boolean {
   if (!userEmail) return false;
   const clean = userEmail.trim().toLowerCase();
-  if (clean.startsWith('admin') || clean.includes('admin')) return true;
   const list = getUserPermissionsList();
   const match = list.find(u => {
     const uEmail = u.email.toLowerCase();

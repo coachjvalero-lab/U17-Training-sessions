@@ -38,6 +38,8 @@ import {
   logoutUser,
   markQuotaExceeded,
   clearQuotaExceeded,
+  subscribeSyncStatus,
+  flushPendingWrites,
   subscribeToSquadPlayers,
   saveSquadPlayerToCloud,
   deleteSquadPlayerFromCloud,
@@ -500,6 +502,12 @@ export default function App() {
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'offline-queued' | 'saved'; message?: string }>({ status: 'idle' });
+  // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
+  // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
+  const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
+
   const [libraryCount, setLibraryCount] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('u17_custom_exercise_library');
@@ -544,6 +552,52 @@ export default function App() {
     latestSessionRef.current = session;
   }, [session]);
 
+  // Applies a cloud session snapshot to local state/localStorage/URL. Shared by the initial
+  // load, the "no local edits pending" auto-refresh case, and the conflict banner's Reload action.
+  const applyCloudSessionToState = (sessionToLoad: CloudTrainingSession) => {
+    const cloudTime = sessionToLoad.updatedAt || 0;
+    hasInitialCloudLoadedRef.current = true;
+    lastLoadedSessionTimeRef.current = cloudTime;
+    currentSessionIdRef.current = sessionToLoad.id;
+
+    const { updatedAt, ...baseSession } = sessionToLoad;
+
+    // Normalize old team names if needed
+    if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
+      baseSession.teamName = 'U17 Women Al Ula';
+    }
+    if (baseSession.sessionNumber === '42') {
+      baseSession.sessionNumber = '001';
+    }
+
+    const restoredLogo = latestSessionRef.current?.teamLogo ||
+      localStorage.getItem('u17_uploaded_team_logo') || '';
+
+    const unifiedSession: TrainingSession = buildUnifiedSession({
+      ...baseSession,
+      teamLogo: restoredLogo,
+    });
+
+    isRemoteUpdateRef.current = true;
+    lastSavedJsonRef.current = JSON.stringify(unifiedSession);
+    setSession(unifiedSession);
+
+    try {
+      localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
+      localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
+    } catch (e) {
+      console.warn('LocalStorage sync warning:', e);
+    }
+
+    if (unifiedSession.id && window.history.replaceState) {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('session') !== unifiedSession.id) {
+        url.searchParams.set('session', unifiedSession.id);
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+  };
+
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
     setIsLoadingCloud(true);
@@ -556,20 +610,18 @@ export default function App() {
           // Read URL query parameters to see if a specific session ID was requested
           const urlParams = new URLSearchParams(window.location.search);
           const targetId = urlParams.get('session');
+          const isFirstLoad = !hasInitialCloudLoadedRef.current;
 
-          // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0] (most recently updated session in Cloud)
-          let sessionToLoad = targetId 
-            ? sessions.find(s => s.id === targetId) 
-            : undefined;
+          // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
+          // (most recently updated session in Cloud) ONLY on the very first cold start.
+          let sessionToLoad = targetId
+            ? sessions.find(s => s.id === targetId)
+            : (isFirstLoad ? sessions[0] : undefined);
 
-          if (!sessionToLoad) {
-            // If targetId was specified in URL, but hasn't reached Firestore yet,
-            // do NOT fall back to sessions[0] if user is already on targetId
-            if (targetId && currentSessionIdRef.current === targetId) {
-              hasInitialCloudLoadedRef.current = true;
-              return;
-            }
-            sessionToLoad = sessions[0]; // Pick the latest active session in Firestore
+          if (targetId && !sessionToLoad && currentSessionIdRef.current === targetId) {
+            // Requested session hasn't reached Firestore yet — keep showing what we have.
+            hasInitialCloudLoadedRef.current = true;
+            return;
           }
 
           if (sessionToLoad) {
@@ -577,50 +629,21 @@ export default function App() {
             const isNewer = cloudTime > lastLoadedSessionTimeRef.current;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
-            // Load from cloud if:
-            // 1) First initial startup
-            // 2) Received a newer timestamp update from Firestore
-            // 3) Session ID changed
-            if (!hasInitialCloudLoadedRef.current || isNewer || isDifferentSession) {
-              hasInitialCloudLoadedRef.current = true;
-              lastLoadedSessionTimeRef.current = cloudTime;
-              currentSessionIdRef.current = sessionToLoad.id;
-
-              const { updatedAt, ...baseSession } = sessionToLoad;
-
-              // Normalize old team names if needed
-              if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
-                baseSession.teamName = 'U17 Women Al Ula';
-              }
-              if (baseSession.sessionNumber === '42') {
-                baseSession.sessionNumber = '001';
-              }
-
-              const restoredLogo = latestSessionRef.current?.teamLogo ||
-                localStorage.getItem('u17_uploaded_team_logo') || '';
-
-              const unifiedSession: TrainingSession = buildUnifiedSession({
-                ...baseSession,
-                teamLogo: restoredLogo,
-              });
-
-              isRemoteUpdateRef.current = true;
-              lastSavedJsonRef.current = JSON.stringify(unifiedSession);
-              setSession(unifiedSession);
-
-              try {
-                localStorage.setItem('u17_training_session_unified', JSON.stringify(unifiedSession));
-                localStorage.setItem('u17_training_session_updatedAt', String(cloudTime));
-              } catch (e) {
-                console.warn('LocalStorage sync warning:', e);
-              }
-
-              if (unifiedSession.id && window.history.replaceState) {
-                const url = new URL(window.location.href);
-                if (url.searchParams.get('session') !== unifiedSession.id) {
-                  url.searchParams.set('session', unifiedSession.id);
-                  window.history.replaceState({}, '', url.toString());
-                }
+            if (isFirstLoad) {
+              // Nothing to lose yet — safe to load whatever the user should land on.
+              applyCloudSessionToState(sessionToLoad);
+            } else if (isDifferentSession) {
+              // Never rip the screen out from under the user just because a DIFFERENT
+              // session changed elsewhere in Firestore (Bloque 2, tarea 3).
+            } else if (isNewer) {
+              const hasUnsavedChanges = JSON.stringify(latestSessionRef.current) !== lastSavedJsonRef.current;
+              if (!hasUnsavedChanges) {
+                // No local edits at risk — safe to silently pick up the remote update.
+                applyCloudSessionToState(sessionToLoad);
+              } else {
+                // Someone else saved this same session while we have unsaved local edits.
+                // Surface it instead of silently overwriting (Bloque 2, tarea 3/4).
+                setRemoteSessionConflict(sessionToLoad);
               }
             }
           }
@@ -637,6 +660,40 @@ export default function App() {
     );
     return () => unsubscribe();
   }, []);
+
+  // Mirror low-level cloud save activity (saving/retrying/queued/saved) into visible UI state.
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((event) => {
+      if (event.status === 'saved') {
+        setCloudSyncStatus({ status: 'saved' });
+        setTimeout(() => {
+          setCloudSyncStatus(prev => (prev.status === 'saved' ? { status: 'idle' } : prev));
+        }, 2500);
+      } else {
+        setCloudSyncStatus({ status: event.status, message: event.message });
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Retry anything left in the pending-write queue (Bloque 2, tarea 5): on app start,
+  // whenever the browser regains connectivity, and whenever the tab becomes visible again.
+  useEffect(() => {
+    flushPendingWrites().catch(() => {});
+    const handleOnline = () => { flushPendingWrites().catch(() => {}); };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        flushPendingWrites().catch(() => {});
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
 
   // Quietly persist the unified session locally whenever state updates
   useEffect(() => {
@@ -1023,6 +1080,19 @@ export default function App() {
   };
 
   const handleSaveActiveToCloud = async () => {
+    // Conflict check: has someone else saved this same session since we last loaded/saved it?
+    const cloudCopy = cloudSessions.find(s => s.id === session.id);
+    if (cloudCopy && (cloudCopy.updatedAt || 0) > lastLoadedSessionTimeRef.current) {
+      const overwrite = confirm(
+        'Esta sesión fue actualizada por otra persona mientras la editabas.\n\n' +
+        'Aceptar = sobrescribir con TUS cambios.\nCancelar = mantener tus cambios sin subir y revisar la otra versión primero.'
+      );
+      if (!overwrite) {
+        setRemoteSessionConflict(cloudCopy);
+        return;
+      }
+    }
+
     try {
       setIsCloudSaving(true);
       const activeLogo = getActiveLogo();
@@ -1038,14 +1108,14 @@ export default function App() {
       setSession(sessionToSave);
 
       try {
-        const savedTime = await saveSessionToCloud(sessionToSave, true);
+        const savedTime = await saveSessionToCloud(sessionToSave);
         lastLoadedSessionTimeRef.current = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
         clearQuotaExceeded();
         alert('Changes saved to the cloud and synced across all your devices!');
       } catch (cloudErr) {
         console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
-        alert('Saved in your browser! (Cloud sync will retry once the Firestore limit resets).');
+        alert('Guardado localmente, pendiente de subir a la nube (se reintentará automáticamente).');
       }
     } catch (error) {
       console.error('Error saving session:', error);
@@ -1375,6 +1445,67 @@ export default function App() {
     </div>
   );
 
+  const handleReloadRemoteSession = () => {
+    if (remoteSessionConflict) {
+      applyCloudSessionToState(remoteSessionConflict);
+      setRemoteSessionConflict(null);
+    }
+  };
+
+  const handleKeepLocalChanges = () => {
+    setRemoteSessionConflict(null);
+  };
+
+  // Visible cloud-sync feedback (Bloque 2, tarea 1): saving/retrying/offline-queued/conflict banners.
+  const renderSyncBanner = () => {
+    if (remoteSessionConflict) {
+      return (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[95] print:hidden w-[92%] max-w-xl">
+          <div className="bg-amber-500 text-slate-950 rounded-xl shadow-xl px-4 py-3 flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-xs font-bold">
+            <span className="flex-1 text-center sm:text-left">
+              Esta sesión #{remoteSessionConflict.sessionNumber} fue actualizada por otra persona, revisa los cambios.
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleReloadRemoteSession}
+                className="px-3 py-1.5 bg-slate-950 text-white rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                Recargar su versión
+              </button>
+              <button
+                type="button"
+                onClick={handleKeepLocalChanges}
+                className="px-3 py-1.5 bg-white/50 rounded-lg hover:bg-white/70 transition-colors"
+              >
+                Mantener los míos
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (cloudSyncStatus.status === 'idle') return null;
+
+    const bannerConfig: Record<string, { text: string; className: string }> = {
+      saving: { text: 'Guardando en la nube…', className: 'bg-slate-800 text-white' },
+      retrying: { text: 'No se pudo guardar en la nube, reintentando…', className: 'bg-amber-500 text-slate-950' },
+      'offline-queued': { text: 'Guardado localmente, pendiente de subir a la nube.', className: 'bg-rose-600 text-white' },
+      saved: { text: 'Guardado en la nube ✓', className: 'bg-emerald-500 text-slate-950' },
+    };
+    const cfg = bannerConfig[cloudSyncStatus.status];
+    if (!cfg) return null;
+
+    return (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[95] print:hidden">
+        <div className={`rounded-xl shadow-xl px-4 py-2 text-xs font-bold ${cfg.className}`}>
+          {cfg.text}
+        </div>
+      </div>
+    );
+  };
+
   // Auth Guard: Show loading indicator or Login Page if unauthenticated
   if (isAuthInitializing) {
     return (
@@ -1415,6 +1546,7 @@ export default function App() {
           onUpdateLogo={handleUpdateTeamLogo}
         />
         {renderThemeToggle()}
+        {renderSyncBanner()}
       </>
     );
   }
@@ -1422,6 +1554,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
       {renderThemeToggle()}
+      {renderSyncBanner()}
       
       {/* Lateral Dark Blue Navigation Sidebar */}
       <Sidebar
