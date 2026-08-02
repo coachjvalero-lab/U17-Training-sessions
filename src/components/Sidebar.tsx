@@ -39,7 +39,6 @@ interface SidebarProps {
   setActiveSection: (section: PortalSection) => void;
   onClearSession: () => void;
   onNewSession: () => void;
-  isSaving: boolean;
   cloudSessions: CloudTrainingSession[];
   isLoadingCloud: boolean;
   isCloudSaving: boolean;
@@ -60,7 +59,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveSection,
   onClearSession,
   onNewSession,
-  isSaving,
   cloudSessions,
   isLoadingCloud,
   isCloudSaving,
@@ -206,17 +204,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               Coaching Staff
             </p>
           </div>
-        </div>
-
-        {/* Local Autosave indicator */}
-        <div className="flex items-center space-x-1.5 bg-[#001020]/80 px-2 py-1 rounded-full border border-slate-700/80 shrink-0">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${isSaving ? 'bg-amber-400' : 'bg-emerald-500'}`}></span>
-          </span>
-          <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-300">
-            {isSaving ? 'Saving...' : 'Autosave'}
-          </span>
         </div>
       </div>
 
@@ -392,17 +379,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-amber-600/30 text-amber-300 border-amber-500/50 cursor-wait' 
               : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 shadow-emerald-500/20 hover:shadow-emerald-500/30'
           }`}
-          title="Guardar sesión actual en la nube y en local"
+          title="Save current session to the cloud and locally"
         >
           {isCloudSaving ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
-              <span>Guardando...</span>
+              <span>Saving...</span>
             </>
           ) : (
             <>
               <Save className="w-4 h-4 text-slate-950" />
-              <span>Guardar Sesión</span>
+              <span>Save Session</span>
             </>
           )}
         </button>
@@ -426,14 +413,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onSaveToCloud}
               disabled={isCloudSaving}
               className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 rounded-lg transition-all cursor-pointer border border-emerald-400/30 text-[10px] font-bold flex items-center space-x-1"
-              title="Guardar sesión actual"
+              title="Save current session"
             >
               {isCloudSaving ? (
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
               ) : (
                 <Save className="w-3 h-3 text-emerald-300" />
               )}
-              <span className="hidden sm:inline">Guardar</span>
+              <span className="hidden sm:inline">Save</span>
             </button>
           </div>
         </div>

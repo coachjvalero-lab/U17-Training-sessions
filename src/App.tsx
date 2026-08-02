@@ -36,7 +36,6 @@ import {
   subscribeToSessions, 
   subscribeToAuth,
   logoutUser,
-  isCloudQuotaExceeded,
   markQuotaExceeded,
   clearQuotaExceeded,
   subscribeToSquadPlayers,
@@ -494,7 +493,6 @@ export default function App() {
     });
   });
 
-  const [isSaving, setIsSaving] = useState(false);
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
 
   const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>([]);
@@ -545,54 +543,6 @@ export default function App() {
   useEffect(() => {
     latestSessionRef.current = session;
   }, [session]);
-
-  // Direct helper to save current session to Firestore immediately
-  const saveCurrentSessionToCloudNow = async (sessionToSave: TrainingSession, force: boolean = false) => {
-    // Check if daily quota was recently exceeded; if so, skip background autosave
-    if (!force && isCloudQuotaExceeded()) {
-      setIsCloudSaving(false);
-      return;
-    }
-
-    const activeLogo = getActiveLogo();
-    const formattedSession: TrainingSession = {
-      ...sessionToSave,
-      teamLogo: sessionToSave.teamLogo || activeLogo,
-      teamName: sessionToSave.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : sessionToSave.teamName
-    };
-
-    const currentJson = JSON.stringify(formattedSession);
-    if (currentJson === lastSavedJsonRef.current) {
-      setIsCloudSaving(false);
-      return;
-    }
-
-    setIsCloudSaving(true);
-    setIsSaving(true);
-    try {
-      const savedTime = await saveSessionToCloud(formattedSession, force);
-      lastLoadedSessionTimeRef.current = savedTime;
-      lastSavedJsonRef.current = currentJson;
-      clearQuotaExceeded();
-    } catch (_err) {
-      console.warn('Cloud save skipped or throttled. All progress remains safely saved locally.');
-    } finally {
-      setIsCloudSaving(false);
-      setTimeout(() => setIsSaving(false), 800);
-    }
-  };
-
-  // Flush to cloud when tab is hidden/backgrounded
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && latestSessionRef.current) {
-        saveCurrentSessionToCloudNow(latestSessionRef.current);
-      }
-    };
-
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
 
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
@@ -711,71 +661,6 @@ export default function App() {
         console.warn('URL update failed:', e);
       }
     }
-  }, [session]);
-
-  // Scheduled Daily Sync at 0:30 AM — fires once, then reschedules 24 h later
-  useEffect(() => {
-    let timerId: ReturnType<typeof setTimeout>;
-
-    const runDailyReset = () => {
-      const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const lastResetDate = localStorage.getItem('u17_last_030_reset_date');
-
-      if (lastResetDate !== todayStr) {
-        clearQuotaExceeded();
-        localStorage.setItem('u17_last_030_reset_date', todayStr);
-        if (latestSessionRef.current) {
-          saveCurrentSessionToCloudNow(latestSessionRef.current);
-        }
-      }
-
-      // Schedule next check for exactly 24 hours later
-      timerId = setTimeout(runDailyReset, 24 * 60 * 60 * 1000);
-    };
-
-    // Calculate ms until next 0:30 AM
-    const scheduleFirst = () => {
-      const now = new Date();
-      const next = new Date(now);
-      next.setHours(0, 30, 0, 0);
-      if (next <= now) next.setDate(next.getDate() + 1);
-      timerId = setTimeout(runDailyReset, next.getTime() - now.getTime());
-    };
-
-    // Run immediately if today's reset hasn't happened yet, then schedule
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const isPast030 = now.getHours() > 0 || (now.getHours() === 0 && now.getMinutes() >= 30);
-    if (isPast030 && localStorage.getItem('u17_last_030_reset_date') !== todayStr) {
-      runDailyReset();
-    } else {
-      scheduleFirst();
-    }
-
-    return () => clearTimeout(timerId);
-  }, []);
-
-  // Debounced Cloud Autosave: automatically sync local changes to Firestore 2.5 seconds after editing stops
-  useEffect(() => {
-    // If this session state update came directly from a Firestore remote snapshot, skip auto-saving
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false;
-      return;
-    }
-
-    // Firestore is the source of truth: never push local/cached data until the initial cloud response (success or error) has been received
-    if (!hasInitialCloudLoadedRef.current) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      if (latestSessionRef.current) {
-        saveCurrentSessionToCloudNow(latestSessionRef.current);
-      }
-    }, 2500); // 2.5 seconds debounce for real-time cloud sync
-
-    return () => clearTimeout(timer);
   }, [session]);
 
   const handleUpdateSession = (fields: Partial<TrainingSession>) => {
@@ -1157,14 +1042,14 @@ export default function App() {
         lastLoadedSessionTimeRef.current = savedTime;
         lastSavedJsonRef.current = JSON.stringify(sessionToSave);
         clearQuotaExceeded();
-        alert('¡Cambios guardados en la nube y sincronizados en todos tus dispositivos!');
+        alert('Changes saved to the cloud and synced across all your devices!');
       } catch (cloudErr) {
         console.warn('Cloud save warning in handleSaveActiveToCloud:', cloudErr);
-        alert('¡Guardado en tu navegador! (Se reintentará la sincronización en la nube cuando se reestablezca el límite de Firestore).');
+        alert('Saved in your browser! (Cloud sync will retry once the Firestore limit resets).');
       }
     } catch (error) {
       console.error('Error saving session:', error);
-      alert('¡Guardado en el navegador!');
+      alert('Saved in your browser!');
     } finally {
       setIsCloudSaving(false);
     }
@@ -1394,12 +1279,12 @@ export default function App() {
       await navigator.clipboard.writeText(url.toString());
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
-      alert('¡Enlace copiado al portapapeles! Los demás usuarios verán tus cambios en tiempo real en la nube.');
+      alert('Link copied to clipboard! Other users will see your changes in real time in the cloud.');
     } catch (error) {
       console.error('Error copying share link:', error);
       const url = new URL(window.location.href);
       url.searchParams.set('session', session.id);
-      alert('Enlace de sesión: ' + url.toString());
+      alert('Session link: ' + url.toString());
     } finally {
       setIsCloudSaving(false);
     }
@@ -1546,7 +1431,6 @@ export default function App() {
         totalLibraryExercisesCount={libraryCount}
         onClearSession={handleClearSession}
         onNewSession={handleCreateNewCloudSession}
-        isSaving={isSaving}
         cloudSessions={cloudSessions}
         isLoadingCloud={isLoadingCloud}
         isCloudSaving={isCloudSaving}

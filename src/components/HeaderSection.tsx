@@ -151,17 +151,17 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 onClick={onSave}
                 disabled={isSaving}
                 className="print:hidden flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer border border-emerald-400 shrink-0 hover:shadow-emerald-500/20"
-                title="Guardar cambios de la sesión"
+                title="Save session changes"
               >
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Guardando...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4 text-slate-950" />
-                    <span>Guardar Sesión</span>
+                    <span>Save Session</span>
                   </>
                 )}
               </button>
