@@ -34,7 +34,7 @@ import {
 import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
-import { getUserAllowedSections, isUserAdmin, initPermissionsCloudSync } from '../utils/permissions';
+import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
 import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface PortalHubProps {
@@ -91,13 +91,6 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   const refreshPermissions = () => {
     setAllowedSections(getUserAllowedSections(currentUser?.email));
   };
-
-  // Keep permissions in sync across devices: migrate any local cache once, then
-  // subscribe to live updates from Firestore so admin changes apply immediately.
-  useEffect(() => {
-    const unsubscribe = initPermissionsCloudSync(refreshPermissions);
-    return () => unsubscribe();
-  }, [currentUser?.email]);
 
   const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Closed').length;
   const activePlayersCount = squadPlayers.length || squadCount;

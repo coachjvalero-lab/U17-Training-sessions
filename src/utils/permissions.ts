@@ -1,8 +1,7 @@
 import { PortalSection } from '../types';
 import {
   subscribeToUserPermissions,
-  saveUserPermissionsListCloud,
-  migrateLocalPermissionsIfNeeded
+  saveUserPermissionsListCloud
 } from '../firebase';
 
 export interface UserPermission {
@@ -71,8 +70,6 @@ export function saveUserPermissionsListToCloud(list: UserPermission[]): void {
  * Returns an unsubscribe function.
  */
 export function initPermissionsCloudSync(onUpdate?: () => void): () => void {
-  migrateLocalPermissionsIfNeeded(getUserPermissionsList()).catch(() => {});
-
   const unsubscribe = subscribeToUserPermissions((list) => {
     if (list.length === 0) return;
     saveUserPermissionsList(list);

@@ -30,7 +30,7 @@ import { User } from 'firebase/auth';
 import { TrainingSession, PortalSection } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
-import { getUserAllowedSections, isUserAdmin, initPermissionsCloudSync } from '../utils/permissions';
+import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
 import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface SidebarProps {
@@ -111,13 +111,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const refreshPermissions = () => {
     setAllowedSections(getUserAllowedSections(currentUser?.email));
   };
-
-  // Keep permissions in sync across devices: migrate any local cache once, then
-  // subscribe to live updates from Firestore so admin changes apply immediately.
-  React.useEffect(() => {
-    const unsubscribe = initPermissionsCloudSync(refreshPermissions);
-    return () => unsubscribe();
-  }, [currentUser?.email]);
 
   const navItems = ([
     {

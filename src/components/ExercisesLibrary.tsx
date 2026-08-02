@@ -28,7 +28,6 @@ import {
   subscribeToExerciseLibrary, 
   saveExerciseToLibraryCloud, 
   deleteExerciseFromLibraryCloud, 
-  migrateLocalExerciseLibraryIfNeeded, 
   subscribeToDeletedExerciseIds, 
   addDeletedExerciseIdsCloud 
 } from '../firebase';
@@ -81,10 +80,8 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   });
 
   // Subscribe to the shared cloud exercise library in real time so every coach sees the same drills.
-  // Also migrates whatever was cached locally (once) so no existing custom exercises get lost.
+  // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
-    migrateLocalExerciseLibraryIfNeeded(initialLocalExercisesRef.current).catch(() => {});
-
     const unsubscribe = subscribeToExerciseLibrary((cloudExercises) => {
       const list: Exercise[] = cloudExercises.map(({ updatedAt, ...ex }) => ex);
       setCustomExercises(list);

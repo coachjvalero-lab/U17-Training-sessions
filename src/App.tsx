@@ -44,27 +44,22 @@ import {
   subscribeToSquadPlayers,
   saveSquadPlayerToCloud,
   deleteSquadPlayerFromCloud,
-  migrateLocalSquadIfNeeded,
   subscribeToPhysioRecords,
   savePhysioRecordToCloud,
   deletePhysioRecordFromCloud,
-  migrateLocalPhysioRecordsIfNeeded,
   subscribeToExcludedPlayers,
   addExcludedPlayersCloud,
-  migrateLocalExcludedPlayersIfNeeded,
   subscribeToTeamLogo,
   saveTeamLogoToCloud,
-  migrateLocalTeamLogoIfNeeded,
   subscribeToVideoAnalysis,
   saveVideoAnalysisToCloud,
   deleteVideoAnalysisFromCloud,
-  migrateLocalVideoAnalysisIfNeeded,
   subscribeToCompetitionFixtures,
   saveCompetitionFixtureToCloud,
   deleteCompetitionFixtureFromCloud,
-  migrateLocalCompetitionFixturesIfNeeded,
   CloudTrainingSession 
 } from './firebase';
+import { initPermissionsCloudSync } from './utils/permissions';
 import { 
   ShieldCheck, 
   Info, 
@@ -145,11 +140,9 @@ export default function App() {
   const hasSquadMigrationSettledRef = useRef(false);
 
   // Subscribe to the shared cloud squad roster in real time so every coach sees the same players.
-  // Also migrates whatever was cached locally (once) so no existing roster data gets lost.
+  // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
-    migrateLocalSquadIfNeeded(initialSquadPlayersRef.current)
-      .catch(() => {})
-      .finally(() => { hasSquadMigrationSettledRef.current = true; });
+    hasSquadMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToSquadPlayers((cloudPlayers) => {
       if (cloudPlayers.length === 0 && !hasSquadMigrationSettledRef.current) {
@@ -203,11 +196,9 @@ export default function App() {
   const hasPhysioMigrationSettledRef = useRef(false);
 
   // Subscribe to the shared cloud physio records in real time so every coach/physio sees the same log.
-  // Also migrates whatever was cached locally (once) so no existing records get lost.
+  // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
-    migrateLocalPhysioRecordsIfNeeded(initialPhysioRecordsRef.current)
-      .catch(() => {})
-      .finally(() => { hasPhysioMigrationSettledRef.current = true; });
+    hasPhysioMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToPhysioRecords((cloudRecords) => {
       if (cloudRecords.length === 0 && !hasPhysioMigrationSettledRef.current) {
@@ -250,11 +241,9 @@ export default function App() {
   const hasExcludedPlayersMigrationSettledRef = useRef(false);
 
   // Subscribe to the shared cloud excluded-players list in real time.
-  // Also migrates whatever was cached locally (once) so no existing exclusions get lost.
+  // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
-    migrateLocalExcludedPlayersIfNeeded(initialExcludedPlayersRef.current)
-      .catch(() => {})
-      .finally(() => { hasExcludedPlayersMigrationSettledRef.current = true; });
+    hasExcludedPlayersMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToExcludedPlayers((names) => {
       if (names.length === 0 && !hasExcludedPlayersMigrationSettledRef.current) {
@@ -300,9 +289,7 @@ export default function App() {
   const hasTeamLogoMigrationSettledRef = useRef(false);
 
   useEffect(() => {
-    migrateLocalTeamLogoIfNeeded(initialTeamLogoRef.current)
-      .catch(() => {})
-      .finally(() => { hasTeamLogoMigrationSettledRef.current = true; });
+    hasTeamLogoMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToTeamLogo((cloudLogo) => {
       if (!cloudLogo && !hasTeamLogoMigrationSettledRef.current) {
@@ -368,9 +355,7 @@ export default function App() {
   const hasVideoMigrationSettledRef = useRef(false);
 
   useEffect(() => {
-    migrateLocalVideoAnalysisIfNeeded(initialVideoSessionsRef.current)
-      .catch(() => {})
-      .finally(() => { hasVideoMigrationSettledRef.current = true; });
+    hasVideoMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToVideoAnalysis((cloudSessions) => {
       if (cloudSessions.length === 0 && !hasVideoMigrationSettledRef.current) {
@@ -406,9 +391,7 @@ export default function App() {
   const hasCompetitionFixturesMigrationSettledRef = useRef(false);
 
   useEffect(() => {
-    migrateLocalCompetitionFixturesIfNeeded(initialCompetitionFixturesRef.current)
-      .catch(() => {})
-      .finally(() => { hasCompetitionFixturesMigrationSettledRef.current = true; });
+    hasCompetitionFixturesMigrationSettledRef.current = true;
 
     const unsubscribe = subscribeToCompetitionFixtures((cloudFixtures) => {
       if (cloudFixtures.length === 0 && !hasCompetitionFixturesMigrationSettledRef.current) {
@@ -459,6 +442,7 @@ export default function App() {
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [, setPermissionsSyncVersion] = useState(0);
 
   // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
   const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'offline-queued' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
@@ -475,6 +459,15 @@ export default function App() {
       return 0;
     }
   });
+
+  // Single app-level permissions sync initialization (avoids duplicate initializations across components).
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const unsubscribe = initPermissionsCloudSync(() => {
+      setPermissionsSyncVersion(v => v + 1);
+    });
+    return () => unsubscribe();
+  }, [currentUser?.email]);
 
   useEffect(() => {
     const isDark = themeMode === 'dark';
