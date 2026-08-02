@@ -20,7 +20,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { TrainingSession, Exercise, MatchFixture } from '../types';
-import { CloudTrainingSession, deleteSessionCardFromCloud, saveSessionCardToCloud, subscribeToSessionCards, subscribeToSessions } from '../firebase';
+import { CloudTrainingSession, deleteSessionCardFromCloud, saveSessionCardToCloud, subscribeToSessionCards } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
@@ -156,6 +156,7 @@ interface FootballHubSectionProps {
   onLoadCloudSession?: (sess: CloudTrainingSession) => void;
   onDeleteCloudSession?: (id: string, sessNum: string, e: React.MouseEvent) => void;
   onNewSession?: () => void;
+  role?: 'football' | 'fitness' | 'gk';
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -169,7 +170,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onAddExerciseToSession,
   onLoadCloudSession,
   onDeleteCloudSession,
-  onNewSession
+  onNewSession,
+  role = 'football'
 }) => {
   // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition' | 'library'
   const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition' | 'library'>('sessions');
@@ -184,7 +186,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   const [isSavingCard, setIsSavingCard] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToSessionCards((cards) => {
+    const unsubscribe = subscribeToSessionCards(role, (cards) => {
       const mappedCards: DrillCard[] = cards
         .map((card) => ({
           id: card.id,
@@ -203,7 +205,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
           status: 'draft' as const,
           createdAt: card.createdAt,
           updatedAt: card.updatedAt,
-          role: 'football' as const
+          role
         }))
         .filter((card) => card.sessionNumber > 0)
         .sort((a, b) => (b.sessionNumber || 0) - (a.sessionNumber || 0));
@@ -237,7 +239,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         intensity: payload.intensity,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        role: 'football' as const
+        role
       };
 
       await saveSessionCardToCloud(cardData);
@@ -249,7 +251,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         groupCount: 0,
         rating: '—',
         status: 'draft' as const,
-        role: 'football' as const
+        role
       }, ...prev]);
     } finally {
       setIsSavingCard(false);
@@ -418,10 +420,28 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     }
   };
 
+  const roleTitle = role === 'fitness'
+    ? 'Fitness & Conditioning Hub'
+    : role === 'gk'
+      ? 'Goalkeeper Hub'
+      : 'Football Management Hub';
+
+  const roleSubtitle = role === 'fitness'
+    ? 'Create and review conditioning blocks, physical themes, and training cards for the fitness department.'
+    : role === 'gk'
+      ? 'Create and review goalkeeper-specific cards, shot-stopping themes, and distribution drills.'
+      : 'Select a module to view daily training sessions, planification microcycles, or match fixtures';
+
+  const roleBadge = role === 'fitness'
+    ? 'Fitness Department'
+    : role === 'gk'
+      ? 'GK Department'
+      : 'Al Ula FC';
+
   return (
     <div className="space-y-6">
       
-      {/* 1. FOOTBALL MODULE NAVIGATION HUB (PORTALHUB CARDS STYLE) */}
+      {/* 1. ROLE MODULE NAVIGATION HUB (PORTALHUB CARDS STYLE) */}
       <div className="bg-[#002142] p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 text-white space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
@@ -431,13 +451,13 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
               </span>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center space-x-2">
-                  <span>Football Management Hub</span>
+                  <span>{roleTitle}</span>
                   <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Al Ula FC
+                    {roleBadge}
                   </span>
                 </h1>
                 <p className="text-xs text-slate-300 font-medium">
-                  Select a module to view daily training sessions, planification microcycles, or match fixtures
+                  {roleSubtitle}
                 </p>
               </div>
             </div>
@@ -832,7 +852,16 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
                         {/* CARD BODY */}
                         <div 
-                          onClick={() => setSessionSubNav('editor')}
+                          onClick={() => {
+                            onChangeSession({
+                              mainObjective: sess.title,
+                              observations: sess.description || '',
+                              date: sess.date,
+                              sessionNumber: String(sess.sessionNumber),
+                              microcycleDay: 'MD'
+                            });
+                            setSessionSubNav('editor');
+                          }}
                           className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors"
                         >
                           <div className="space-y-2.5">

@@ -145,7 +145,7 @@ export interface SessionCardDocument {
   date: string;
   createdAt: number;
   updatedAt: number;
-  role: 'football';
+  role: 'football' | 'fitness' | 'gk';
 }
 
 const SESSIONS_COLLECTION = 'sessions';
@@ -505,9 +505,14 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
  * Reads use the read quota (50k/day), so we do NOT block reads even if writes were throttled.
  */
 export function subscribeToSessionCards(
-  callback: (cards: SessionCardDocument[]) => void,
+  roleOrCallback: 'football' | 'fitness' | 'gk' | ((cards: SessionCardDocument[]) => void),
+  maybeCallback?: ((cards: SessionCardDocument[]) => void) | ((error: any) => void),
   onError?: (error: any) => void
 ) {
+  const callback = typeof roleOrCallback === 'function' ? roleOrCallback : maybeCallback as ((cards: SessionCardDocument[]) => void) | undefined;
+  const role = typeof roleOrCallback === 'string' ? roleOrCallback : undefined;
+  const errorHandler = typeof roleOrCallback === 'function' ? maybeCallback as ((error: any) => void) | undefined : onError;
+
   const q = query(
     collection(db, SESSION_CARDS_COLLECTION),
     orderBy('updatedAt', 'desc')
@@ -517,14 +522,19 @@ export function subscribeToSessionCards(
     const cards: SessionCardDocument[] = [];
     querySnapshot.forEach((doc) => {
       if (!doc.metadata.hasPendingWrites) {
-        cards.push(doc.data() as SessionCardDocument);
+        const card = doc.data() as SessionCardDocument;
+        if (!role || card.role === role) {
+          cards.push(card);
+        }
       }
     });
-    callback(cards);
+    if (callback) {
+      callback(cards);
+    }
   }, (error) => {
     console.warn('Session cards subscription error:', error);
-    if (onError) {
-      onError(error);
+    if (errorHandler) {
+      errorHandler(error);
     }
   });
 }

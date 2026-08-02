@@ -1831,6 +1831,7 @@ export default function App() {
             squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
+            role="football"
             renderActiveSessionEditor={() => (
               <main className="space-y-6 md:space-y-8 print:space-y-1.5">
                 
@@ -1892,6 +1893,218 @@ export default function App() {
                 />
 
                 {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
+                <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+                          Session Observations & Notes
+                        </h2>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          Private coaching staff notes (Screen view only — hidden when printing PDF)
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
+                      Screen Only
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={session.observations || ''}
+                    onChange={(e) => handleUpdateSession({ observations: e.target.value })}
+                    rows={4}
+                    placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
+                    className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
+                  />
+                </section>
+
+              </main>
+            )}
+          />
+        ) : activeSection === 'fitness' ? (
+          <FootballHubSection
+            session={session}
+            cloudSessions={cloudSessions}
+            onChangeSession={handleUpdateSession}
+            onAddExerciseToSession={handleAddExerciseFromLibrary}
+            onLoadCloudSession={handleLoadCloudSession}
+            onDeleteCloudSession={handleDeleteCloudSession}
+            onNewSession={handleCreateNewCloudSession}
+            squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            fixtures={competitionFixtures}
+            onUpdateFixtures={handleUpdateCompetitionFixtures}
+            role="fitness"
+            renderActiveSessionEditor={() => (
+              <main className="space-y-6 md:space-y-8 print:space-y-1.5">
+                
+                {/* Header Section */}
+                <HeaderSection 
+                  session={session}
+                  onChange={handleUpdateSession}
+                  onSave={handleSaveActiveToCloud}
+                  isSaving={isCloudSaving}
+                />
+
+                {/* Section: Session Attendance Quick Tracker */}
+                <SessionAttendanceTracker
+                  attendance={session.attendance}
+                  squadRoster={session.squadRoster}
+                  onChangeAttendance={handleUpdateAttendance}
+                  onChangeRoster={handleUpdateRoster}
+                  excludedPlayers={excludedPlayers}
+                  onExcludePlayer={handleExcludePlayer}
+                />
+
+                {/* Section: Player Groups Manager */}
+                <PlayerGroupsSection
+                  groups={activePlayerGroups}
+                  squadRoster={session.squadRoster}
+                  attendance={session.attendance}
+                  onChangeGroups={handleUpdateGroups}
+                  onChangeRoster={handleUpdateRoster}
+                />
+
+                {/* Section: Warm-Up Block */}
+                <ExerciseBlock 
+                  block={activeWarmUp}
+                  onChange={(exs) => handleUpdateExercises('warmUp', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={false}
+                />
+
+                {/* Section: Main Part Block */}
+                <ExerciseBlock 
+                  block={activeMainPart}
+                  onChange={(exs) => handleUpdateExercises('mainPart', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={false}
+                />
+
+                {/* Section: Cool Down Block */}
+                <ExerciseBlock 
+                  block={activeCoolDown}
+                  onChange={(exs) => handleUpdateExercises('coolDown', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={false}
+                />
+
+                {/* Section: Observations & Notes */}
+                <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+                          Session Observations & Notes
+                        </h2>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          Private coaching staff notes (Screen view only — hidden when printing PDF)
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
+                      Screen Only
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={session.observations || ''}
+                    onChange={(e) => handleUpdateSession({ observations: e.target.value })}
+                    rows={4}
+                    placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
+                    className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
+                  />
+                </section>
+
+              </main>
+            )}
+          />
+        ) : activeSection === 'gk' ? (
+          <FootballHubSection
+            session={session}
+            cloudSessions={cloudSessions}
+            onChangeSession={handleUpdateSession}
+            onAddExerciseToSession={handleAddExerciseFromLibrary}
+            onLoadCloudSession={handleLoadCloudSession}
+            onDeleteCloudSession={handleDeleteCloudSession}
+            onNewSession={handleCreateNewCloudSession}
+            squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            fixtures={competitionFixtures}
+            onUpdateFixtures={handleUpdateCompetitionFixtures}
+            role="gk"
+            renderActiveSessionEditor={() => (
+              <main className="space-y-6 md:space-y-8 print:space-y-1.5">
+                
+                {/* Header Section */}
+                <HeaderSection 
+                  session={session}
+                  onChange={handleUpdateSession}
+                  onSave={handleSaveActiveToCloud}
+                  isSaving={isCloudSaving}
+                />
+
+                {/* Section: Session Attendance Quick Tracker */}
+                <SessionAttendanceTracker
+                  attendance={session.attendance}
+                  squadRoster={session.squadRoster}
+                  onChangeAttendance={handleUpdateAttendance}
+                  onChangeRoster={handleUpdateRoster}
+                  excludedPlayers={excludedPlayers}
+                  onExcludePlayer={handleExcludePlayer}
+                />
+
+                {/* Section: Player Groups Manager */}
+                <PlayerGroupsSection
+                  groups={activePlayerGroups}
+                  squadRoster={session.squadRoster}
+                  attendance={session.attendance}
+                  onChangeGroups={handleUpdateGroups}
+                  onChangeRoster={handleUpdateRoster}
+                />
+
+                {/* Section: Warm-Up Block */}
+                <ExerciseBlock 
+                  block={activeWarmUp}
+                  onChange={(exs) => handleUpdateExercises('warmUp', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={true}
+                />
+
+                {/* Section: Main Part Block */}
+                <ExerciseBlock 
+                  block={activeMainPart}
+                  onChange={(exs) => handleUpdateExercises('mainPart', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={true}
+                />
+
+                {/* Section: Cool Down Block */}
+                <ExerciseBlock 
+                  block={activeCoolDown}
+                  onChange={(exs) => handleUpdateExercises('coolDown', exs)}
+                  expandedExercises={expandedExercises}
+                  toggleExpand={toggleExpand}
+                  sessionGroups={activePlayerGroups}
+                  isGk={true}
+                />
+
+                {/* Section: Observations & Notes */}
                 <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div className="flex items-center space-x-2.5">
