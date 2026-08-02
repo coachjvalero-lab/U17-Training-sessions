@@ -28,36 +28,6 @@ export const DEFAULT_USER_PERMISSIONS: UserPermission[] = [
     email: 'admin@alula.com',
     role: 'admin',
     allowedSections: ['football', 'fitness', 'gk', 'squad', 'attendance', 'physio', 'video', 'exercises', 'planning']
-  },
-  {
-    email: 'coach@alula.com',
-    role: 'coach',
-    allowedSections: ['football', 'squad', 'attendance', 'video', 'exercises', 'planning']
-  },
-  {
-    email: 'coachmarta@alula.com',
-    role: 'coach',
-    allowedSections: ['football', 'squad', 'attendance', 'video', 'exercises', 'planning']
-  },
-  {
-    email: 'fitness@alula.com',
-    role: 'fitness_coach',
-    allowedSections: ['fitness', 'squad', 'attendance', 'exercises', 'planning']
-  },
-  {
-    email: 'gkcoach@alula.com',
-    role: 'gk_coach',
-    allowedSections: ['gk', 'squad', 'attendance', 'exercises', 'planning']
-  },
-  {
-    email: 'physio@alula.com',
-    role: 'physio',
-    allowedSections: ['physio', 'squad', 'attendance']
-  },
-  {
-    email: 'analyst@alula.com',
-    role: 'analyst',
-    allowedSections: ['video', 'exercises', 'football', 'planning']
   }
 ];
 
@@ -71,17 +41,6 @@ export function getUserPermissionsList(): UserPermission[] {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
         list = parsed;
-        // Merge missing default users so CoachMarta and other default roles are guaranteed to appear
-        DEFAULT_USER_PERMISSIONS.forEach(defUser => {
-          const exists = list.some(u => {
-            const uEmail = u.email.toLowerCase();
-            const defEmail = defUser.email.toLowerCase();
-            return uEmail === defEmail || uEmail.split('@')[0] === defEmail.split('@')[0];
-          });
-          if (!exists) {
-            list.push(defUser);
-          }
-        });
       }
     }
   } catch (e) {

@@ -1159,6 +1159,8 @@ export default function App() {
       // Optimistically update cloudSessions to immediately reflect changes in the UI (Sidebar cards)
       setCloudSessions(prev => {
         const existing = prev.find(s => s.id === sessionToSave.id);
+        console.log('Optimistic update - Session ID:', sessionToSave.id, 'Found:', !!existing, 'New objective:', sessionToSave.mainObjective);
+        
         if (existing) {
           // Update existing session with new values from the current role
           const updated: CloudTrainingSession = { ...existing, updatedAt: optimisticTime };
@@ -1191,10 +1193,20 @@ export default function App() {
             updated.gkCoolDown = sessionToSave.gkCoolDown;
             updated.gkPlayerGroups = sessionToSave.gkPlayerGroups;
           }
-          return prev.map(s => s.id === sessionToSave.id ? updated : s);
+          const newList = prev.map(s => s.id === sessionToSave.id ? updated : s);
+          console.log('Updated cloudSessions list, new objective for session:', updated.mainObjective);
+          return newList;
         } else {
-          // New session not yet in cloudSessions - will be added when server confirms
-          return prev;
+          // New session not yet in cloudSessions - add it optimistically
+          console.log('Session not found in cloudSessions, adding new entry');
+          const newSession: CloudTrainingSession = {
+            ...sessionToSave,
+            updatedAt: optimisticTime,
+            footballUpdatedAt: role === 'football' ? optimisticTime : undefined,
+            fitnessUpdatedAt: role === 'fitness' ? optimisticTime : undefined,
+            gkUpdatedAt: role === 'gk' ? optimisticTime : undefined,
+          };
+          return [newSession, ...prev];
         }
       });
 
@@ -1478,8 +1490,17 @@ export default function App() {
             updated.gkPlayerGroups = sessionToSave.gkPlayerGroups;
           }
           return prev.map(s => s.id === sessionToSave.id ? updated : s);
+        } else {
+          // New session not yet in cloudSessions - add it optimistically
+          const newSession: CloudTrainingSession = {
+            ...sessionToSave,
+            updatedAt: optimisticTime,
+            footballUpdatedAt: role === 'football' ? optimisticTime : undefined,
+            fitnessUpdatedAt: role === 'fitness' ? optimisticTime : undefined,
+            gkUpdatedAt: role === 'gk' ? optimisticTime : undefined,
+          };
+          return [newSession, ...prev];
         }
-        return prev;
       });
 
       // 3. Try Cloud Firestore save (only save fields for current role)
