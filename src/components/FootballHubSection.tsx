@@ -145,7 +145,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     <div className="space-y-6">
       
       {/* 1. ROLE MODULE NAVIGATION HUB (PORTALHUB CARDS STYLE) */}
-      <div className="bg-[#002142] p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 text-white space-y-5">
+      <div className="bg-[#002142] p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 text-white space-y-5 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
             <div className="flex items-center space-x-2.5">
