@@ -47,10 +47,6 @@ export const auth = getAuth(app);
 
 let authListeners: ((user: User | null) => void)[] = [];
 
-function notifyAuthListeners(user: User | null) {
-  authListeners.forEach(cb => cb(user));
-}
-
 /**
  * Sign in with username or email and password.
  * Converts plain usernames like 'admin' to 'admin@alula.com' automatically.

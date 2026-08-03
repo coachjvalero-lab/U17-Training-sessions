@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Plus, Trash2, Shuffle, Edit3, Check, RefreshCw, Layers, Shield, UserCheck, AlertCircle } from 'lucide-react';
+import { Users, Plus, Trash2, Edit3, Check, RefreshCw, Shield, UserCheck, AlertCircle } from 'lucide-react';
 import { PlayerGroup, PlayerAttendance } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
 
@@ -58,7 +58,6 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Unassigned attending players vs unassigned all
   const unassignedAttendingPlayers = attendingPlayers.filter(p => !allAssignedPlayers.has(p));
-  const unassignedPlayers = squadRoster.filter(p => !allAssignedPlayers.has(p));
 
   // Add new group
   const handleAddGroup = () => {

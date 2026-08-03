@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
-import { getDefaultSession, getDefaultFitnessSession, getEmptySession } from './defaultSession';
+import { getDefaultSession, getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { normalizeSessionRoster, DEFAULT_DETAILED_SQUAD } from './constants/squad';
 import { HeaderSection } from './components/HeaderSection';
@@ -9,14 +9,13 @@ import { PlayerGroupsSection } from './components/PlayerGroupsSection';
 import { Sidebar } from './components/Sidebar';
 import { ExercisesLibrary } from './components/ExercisesLibrary';
 import { PlanificationSection } from './components/PlanificationSection';
-import { AttendanceSection } from './components/AttendanceSection';
 import { SessionAttendanceTracker } from './components/SessionAttendanceTracker';
 import { LoginPage } from './components/LoginPage';
 import { PortalHub } from './components/PortalHub';
 import { SquadRosterSection } from './components/SquadRosterSection';
 import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
-import { CompetitionSection, DEFAULT_MATCHES } from './components/CompetitionSection';
+import { DEFAULT_MATCHES } from './components/CompetitionSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { 
   TrainingSession, 
@@ -61,26 +60,8 @@ import {
 } from './firebase';
 import { initPermissionsCloudSync } from './utils/permissions';
 import { 
-  ShieldCheck, 
-  Info, 
-  Clipboard, 
-  Cloud, 
-  CloudUpload, 
-  Trash2, 
-  FolderOpen, 
-  Plus, 
-  RefreshCw, 
-  HelpCircle,
-  Database,
-  Share2,
-  Check,
-  Link,
   FileText,
   Loader2,
-  Trophy,
-  Calendar,
-  Swords,
-  Users,
   Moon,
   Sun
 } from 'lucide-react';
@@ -118,7 +99,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
   const [activeSection, setActiveSection] = useState<PortalSection>('hub');
-  const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition'>('sessions');
 
   // Squad Players ("Plantilla") — initial value is only a local cache for instant paint/offline;
   // Firestore is the source of truth (see subscription effect below).
@@ -425,10 +405,10 @@ export default function App() {
   // is only kept as a transient cache for the current browser and must not decide
   // which session the user sees.
   const [session, setSession] = useState<TrainingSession>(() => {
-    const starter = getDefaultSession();
+    const starter = getEmptySession();
     return normalizeSessionRoster({
       ...starter,
-      id: 'session-initial',
+      id: 'memory-session-' + Date.now(),
       sessionNumber: '001',
       date: new Date().toISOString().split('T')[0],
       teamName: 'U17 Women Al Ula',
@@ -632,7 +612,7 @@ export default function App() {
         hasInitialCloudLoadedRef.current = true;
       },
       undefined,
-      (err) => {
+      () => {
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
         markQuotaExceeded();
@@ -986,42 +966,6 @@ export default function App() {
     }));
   };
 
-  const handleUpdateMaterials = (materialsNeeded: string) => {
-    setSession(prev => ({
-      ...prev,
-      materialsNeeded
-    }));
-  };
-
-  const handleImportSession = (imported: TrainingSession) => {
-    const unifiedImport: TrainingSession = buildUnifiedSession(imported);
-    
-    setSession(unifiedImport);
-    
-    // Expand exercises
-    const expanded: Record<string, boolean> = {};
-    const activeWarmUp = activeSection === 'football' 
-      ? unifiedImport.warmUp 
-      : activeSection === 'fitness'
-      ? unifiedImport.fitnessWarmUp
-      : unifiedImport.gkWarmUp;
-    const activeMainPart = activeSection === 'football' 
-      ? unifiedImport.mainPart 
-      : activeSection === 'fitness'
-      ? unifiedImport.fitnessMainPart
-      : unifiedImport.gkMainPart;
-    const activeCoolDown = activeSection === 'football' 
-      ? unifiedImport.coolDown 
-      : activeSection === 'fitness'
-      ? unifiedImport.fitnessCoolDown
-      : unifiedImport.gkCoolDown;
-
-    activeWarmUp?.exercises.forEach(ex => { expanded[ex.id] = true; });
-    activeMainPart?.exercises.forEach(ex => { expanded[ex.id] = true; });
-    activeCoolDown?.exercises.forEach(ex => { expanded[ex.id] = true; });
-    setExpandedExercises(expanded);
-  };
-
   const getActiveLogo = () => {
     if (teamLogo) {
       return teamLogo;
@@ -1042,18 +986,6 @@ export default function App() {
         ...empty,
         teamLogo: activeLogo
       });
-      setExpandedExercises({});
-    }
-  };
-
-  const handleRestoreDemo = () => {
-    if (confirm(`Are you sure you want to restore the demo training session? This will overwrite your current work for all section tabs.`)) {
-      const activeLogo = getActiveLogo();
-      const demo = getDefaultSession();
-      setSession(normalizeSessionRoster({
-        ...demo,
-        teamLogo: activeLogo
-      }));
       setExpandedExercises({});
     }
   };
@@ -1135,45 +1067,6 @@ export default function App() {
       console.error('[handleSaveActiveToCloud] Error saving session:', error);
       setCloudSyncStatus({ status: 'error', message: `Guardar sesión falló (${errorCode})` });
       alert('Saved in your browser!');
-    } finally {
-      setIsCloudSaving(false);
-    }
-  };
-
-  const handleSaveAsNewToCloud = async () => {
-    const currentNum = parseInt(session.sessionNumber) || 0;
-    const nextNum = String(currentNum + 1);
-    const newNumber = prompt('Enter session number for the new cloud copy:', nextNum);
-    if (newNumber === null) return; // User cancelled
-    
-    const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
-    const today = new Date().toISOString().split('T')[0];
-    const activeLogo = getActiveLogo();
-
-    const newSession: TrainingSession = {
-      ...session,
-      id: newId,
-      sessionNumber: newNumber,
-      date: today,
-      teamName: 'U17 Women Al Ula',
-      teamLogo: activeLogo || session.teamLogo
-    };
-
-    try {
-      setIsCloudSaving(true);
-      setSession(newSession);
-
-      try {
-        await saveSessionToCloud(newSession);
-      } catch (cloudErr) {
-        const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
-        console.error('[handleSaveAsNewToCloud] Cloud save failed:', cloudErr);
-        setCloudSyncStatus({ status: 'error', message: `Guardar copia falló (${errorCode})` });
-      }
-    } catch (error) {
-      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
-      console.error('[handleSaveAsNewToCloud] Error saving copy:', error);
-      setCloudSyncStatus({ status: 'error', message: `Guardar copia falló (${errorCode})` });
     } finally {
       setIsCloudSaving(false);
     }
@@ -1475,15 +1368,6 @@ export default function App() {
     : activeSection === 'fitness'
     ? (session.fitnessPlayerGroups || [])
     : (session.gkPlayerGroups || []);
-
-  // Quick Action: Expand All or Collapse All
-  const handleToggleAll = (expand: boolean) => {
-    const nextExpanded: Record<string, boolean> = {};
-    activeWarmUp.exercises.forEach(e => { nextExpanded[e.id] = expand; });
-    activeMainPart.exercises.forEach(e => { nextExpanded[e.id] = expand; });
-    activeCoolDown.exercises.forEach(e => { nextExpanded[e.id] = expand; });
-    setExpandedExercises(nextExpanded);
-  };
 
   const renderThemeToggle = () => (
     <div className="fixed top-4 right-4 z-[90] print:hidden">

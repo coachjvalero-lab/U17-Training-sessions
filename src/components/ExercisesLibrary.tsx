@@ -1,25 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
-  Filter, 
   Plus, 
   BookOpen, 
-  Layers, 
-  Activity, 
-  ShieldCheck, 
   Clock, 
   Maximize2, 
   PlusCircle, 
   Trash2, 
   Check, 
   X, 
-  Image as ImageIcon,
   ChevronDown,
   Upload,
   Loader2,
   Sparkles,
-  Copy,
-  Edit3
+  Copy
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { 
@@ -49,8 +43,7 @@ interface ExercisesLibraryProps {
 export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   currentSession,
   cloudSessions,
-  onAddExerciseToSession,
-  activeSection
+  onAddExerciseToSession
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'football' | 'fitness' | 'gk'>('all');

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
-  Clock, Maximize2, ShieldAlert, Image as ImageIcon, Sparkles, AlertCircle, Loader2, Users, BookmarkPlus, Check
+  Clock, Maximize2, ShieldAlert, Image as ImageIcon, AlertCircle, Loader2, Users, BookmarkPlus, Check
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingBlock, PlayerGroup } from '../types';
 import { processUploadedImageFile } from '../utils/heic';
@@ -90,13 +90,6 @@ const serializeCoachRolesList = (entries: CoachRoleEntry[]): string => {
     .filter(entry => entry.name.trim() !== '')
     .map(entry => `${entry.name.trim()}: ${entry.role}`)
     .join('; ');
-};
-
-// Standard soccer template graphics to load instantly
-const FIELD_TEMPLATES = {
-  field: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%"><rect width="400" height="300" fill="%2315803d" /><rect x="10" y="10" width="380" height="280" fill="none" stroke="white" stroke-width="2" /><line x1="200" y1="10" x2="200" y2="290" stroke="white" stroke-width="2" /><circle cx="200" cy="150" r="40" fill="none" stroke="white" stroke-width="2" /><circle cx="200" cy="150" r="3" fill="white" /><rect x="10" y="70" width="50" height="160" fill="none" stroke="white" stroke-width="2" /><rect x="10" y="110" width="15" height="80" fill="none" stroke="white" stroke-width="2" /><rect x="340" y="70" width="50" height="160" fill="none" stroke="white" stroke-width="2" /><rect x="375" y="110" width="15" height="80" fill="none" stroke="white" stroke-width="2" /></svg>`,
-  rondo: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%"><rect width="400" height="300" fill="%23166534" /><rect x="100" y="50" width="200" height="200" fill="none" stroke="white" stroke-dasharray="4" stroke-width="2" /><circle cx="200" cy="65" r="8" fill="%233b82f6" stroke="white" stroke-width="1" /><circle cx="200" cy="235" r="8" fill="%233b82f6" stroke="white" stroke-width="1" /><circle cx="115" cy="150" r="8" fill="%233b82f6" stroke="white" stroke-width="1" /><circle cx="285" cy="150" r="8" fill="%233b82f6" stroke="white" stroke-width="1" /><circle cx="180" cy="130" r="8" fill="%23ef4444" stroke="white" stroke-width="1" /><circle cx="220" cy="170" r="8" fill="%23ef4444" stroke="white" stroke-width="1" /><circle cx="185" cy="85" r="4" fill="white" stroke="black" stroke-width="1" /></svg>`,
-  halfField: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%"><rect width="400" height="300" fill="%2314532d" /><rect x="10" y="10" width="380" height="280" fill="none" stroke="white" stroke-width="2" /><line x1="10" y1="150" x2="390" y2="150" stroke="white" stroke-width="2" stroke-dasharray="3" /><rect x="110" y="10" width="180" height="70" fill="none" stroke="white" stroke-width="2" /><circle cx="200" cy="80" r="3" fill="white" /><path d="M 160 80 A 40 40 0 0 0 240 80" fill="none" stroke="white" stroke-width="2" /></svg>`
 };
 
 export function calculateExerciseTotalDuration(

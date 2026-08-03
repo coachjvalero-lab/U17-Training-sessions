@@ -2,17 +2,13 @@ import React, { useState } from 'react';
 import { 
   X, 
   Shield, 
-  UserCheck, 
   Plus, 
   Check, 
   Save, 
   Trash2, 
   Lock, 
   Unlock, 
-  CheckSquare, 
-  Square,
   AlertCircle,
-  Sparkles,
   Users
 } from 'lucide-react';
 import { PortalSection } from '../types';

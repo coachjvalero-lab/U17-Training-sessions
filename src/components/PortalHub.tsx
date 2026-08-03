@@ -1,28 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { 
   Layers, 
   Activity, 
   ShieldCheck, 
   Users, 
-  UserCheck, 
   Stethoscope, 
   Video, 
   BookOpen, 
   BarChart3, 
-  ArrowRight, 
   Shield, 
-  Sparkles,
-  Calendar,
-  Zap,
-  TrendingUp,
-  Clock,
   LogOut,
-  User as UserIcon,
   ChevronRight,
-  ClipboardList,
-  Flame,
-  Award,
   Upload,
   Camera,
   X,
@@ -221,7 +210,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans select-none">
+    <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans select-none print:hidden">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Top Al Ula Official Header Card */}

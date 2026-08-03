@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, CheckCircle2, KeyRound, Mail, RefreshCw } from 'lucide-react';
+import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, CheckCircle2, KeyRound, Mail } from 'lucide-react';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { loginUser, resetPasswordEmail } from '../firebase';
 

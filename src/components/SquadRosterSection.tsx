@@ -10,23 +10,15 @@ import {
   AlertTriangle, 
   Clock, 
   XCircle, 
-  Shield, 
-  Hash, 
-  Tag, 
-  FileText, 
   Save, 
   X,
   UserCheck,
   LayoutGrid,
   List,
   Camera,
-  Globe,
-  Sparkles,
   ArrowRight,
   Upload,
-  Link,
-  Check,
-  RotateCcw
+  Link
 } from 'lucide-react';
 import { SquadPlayer, TrainingSession } from '../types';
 import { CloudTrainingSession } from '../firebase';

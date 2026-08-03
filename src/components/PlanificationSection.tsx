@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { TrainingSession, Exercise, GameMoment } from '../types';
+import { TrainingSession, Exercise } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { 
   BarChart3, 
@@ -9,8 +9,6 @@ import {
   ChevronUp, 
   Layers, 
   Target, 
-  Activity, 
-  ShieldCheck, 
   Flame, 
   Shield, 
   Zap, 
@@ -18,9 +16,7 @@ import {
   Sliders, 
   BookOpen, 
   CheckCircle2, 
-  Dumbbell, 
   TrendingUp,
-  Info,
   Trophy,
   Minus
 } from 'lucide-react';
@@ -677,7 +673,6 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
 
                       {subMomentsArray.map((sub, idx) => {
                         const subPct = moment.totalMinutes > 0 ? Math.round((sub.totalMinutes / moment.totalMinutes) * 100) : 0;
-                        const sessionNumbersList = Array.from(sub.sessionNumbers);
 
                         return (
                           <div 

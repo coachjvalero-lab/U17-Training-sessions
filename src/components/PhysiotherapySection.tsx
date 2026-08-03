@@ -2,17 +2,11 @@ import React, { useState } from 'react';
 import { 
   Stethoscope, 
   PlusCircle, 
-  Activity, 
   AlertCircle, 
   CheckCircle2, 
-  Clock, 
-  User, 
-  Calendar, 
-  FileText, 
   Trash2, 
   Edit3, 
   Search, 
-  Filter,
   X,
   Save,
   HeartPulse

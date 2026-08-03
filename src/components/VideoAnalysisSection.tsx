@@ -3,19 +3,13 @@ import {
   Video, 
   PlusCircle, 
   PlayCircle, 
-  Tag, 
-  Clock, 
-  Calendar, 
-  FileText, 
   Search, 
-  Filter, 
   Trash2, 
   Edit3, 
   X, 
   Save, 
   ExternalLink,
-  Plus,
-  Layers
+  Plus
 } from 'lucide-react';
 import { VideoAnalysis, GameMoment } from '../types';
 

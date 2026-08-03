@@ -3,24 +3,14 @@ import {
   Trophy, 
   Calendar, 
   MapPin, 
-  Clock, 
   Plus, 
   CheckCircle2, 
-  ChevronRight, 
-  Shield, 
-  Search, 
-  Filter, 
   Trash2, 
   Edit2, 
+  BarChart2,
   Users, 
-  Award, 
-  BarChart2, 
   X,
-  FileText,
-  Swords,
-  Target,
-  Sparkles,
-  Check
+  Swords
 } from 'lucide-react';
 import { TrainingSession, MatchFixture } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
@@ -104,7 +94,6 @@ const INITIAL_STANDINGS = [
 ];
 
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
-  session,
   squadRoster = [],
   fixtures: fixturesProp,
   onUpdateFixtures

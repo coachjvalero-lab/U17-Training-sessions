@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
   UserCheck, 
-  UserX, 
   CheckCircle2, 
   XCircle, 
   Palmtree, 
@@ -14,8 +13,6 @@ import {
   ChevronDown, 
   ChevronUp, 
   Check, 
-  Users, 
-  AlertCircle,
   Dumbbell
 } from 'lucide-react';
 import { PlayerAttendance, AbsenceReason } from '../types';
@@ -48,7 +45,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   squadRoster = DEFAULT_SQUAD_PLAYERS,
   onChangeAttendance,
   onChangeRoster,
-  compact = false,
+  compact: _compact = false,
   excludedPlayers = [],
   onExcludePlayer
 }) => {

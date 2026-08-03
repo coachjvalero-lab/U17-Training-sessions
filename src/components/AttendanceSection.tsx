@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Users, 
-  UserCheck, 
   UserX, 
-  CheckCircle2, 
-  XCircle, 
   Palmtree, 
   GraduationCap, 
   Stethoscope, 
@@ -13,23 +10,17 @@ import {
   TrendingUp, 
   Calendar, 
   Plus, 
-  Edit3, 
   Trash2, 
   Printer, 
   Search, 
-  Filter, 
   BarChart3, 
-  AlertTriangle,
   Trophy,
   Crown,
   Medal,
   Award,
-  BarChart2,
-  Activity,
-  Check
+  Activity
 } from 'lucide-react';
 import { 
-  ComposedChart,
   LineChart, 
   Line, 
   AreaChart,
@@ -39,14 +30,12 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
-  Cell, 
-  Legend, 
   ReferenceLine 
 } from 'recharts';
-import { TrainingSession, PlayerAttendance, AbsenceReason } from '../types';
+import { TrainingSession, AbsenceReason } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
-import { ABSENCE_REASONS, getAbsenceReasonConfig, SessionAttendanceTracker } from './SessionAttendanceTracker';
+import { SessionAttendanceTracker } from './SessionAttendanceTracker';
 
 interface AttendanceSectionProps {
   session: TrainingSession;
@@ -474,7 +463,6 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               {filteredPlayerStats.map((stat) => {
                 const isExcellent = stat.rate >= 85;
                 const isGood = stat.rate >= 70 && stat.rate < 85;
-                const isAttention = stat.rate < 70;
 
                 return (
                   <tr key={stat.player} className="hover:bg-slate-50/80 transition-colors">

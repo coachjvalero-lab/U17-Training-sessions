@@ -6,15 +6,9 @@ import {
   Layers, 
   Plus, 
   Search, 
-  Filter, 
-  ChevronDown, 
-  Sparkles, 
-  Check, 
   Edit3, 
   ArrowRight, 
   Clock, 
-  Target,
-  XCircle,
   FolderOpen,
   BookOpen,
   Trash2
@@ -49,99 +43,6 @@ export interface DrillCard {
   role?: 'football' | 'fitness' | 'gk';
 }
 
-const DEFAULT_DRILL_CARDS: DrillCard[] = [
-  {
-    id: 'card-5',
-    sessionNumber: 5,
-    title: 'Circuito de Finalización 2v1 & Remate',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '30 de julio de 2026',
-    category: 'Finishing',
-    drillType: 'finishing2v1',
-    likesCount: 11,
-    isBookmarked: false,
-    groupCount: 6,
-    rating: '4,9 (8)',
-    status: 'completed',
-    duration: '18 min',
-    intensity: 'Alta Intensidad',
-    description: 'Ataque rápido por bandas con desmarque de apoyo en 2v1 y disparo a puerta en transición veloz.'
-  },
-  {
-    id: 'card-4',
-    sessionNumber: 4,
-    title: 'Salida de Balón 4v3 + Portero',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '29 de julio de 2026',
-    category: 'Build-Up',
-    drillType: 'buildup4v3',
-    likesCount: 15,
-    isBookmarked: true,
-    groupCount: 8,
-    rating: '4,8 (5)',
-    status: 'active',
-    duration: '20 min',
-    intensity: 'Medio-Alta',
-    description: 'Iniciación desde línea defensiva superando presión alta rival buscando al pivote o lateral libre.'
-  },
-  {
-    id: 'card-3',
-    sessionNumber: 3,
-    title: 'Speed 3 vs 0 Counterattack',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '28 de julio de 2026',
-    category: 'Speed',
-    drillType: 'speed3v0',
-    likesCount: 9,
-    isBookmarked: false,
-    groupCount: 6,
-    rating: '4,5 (3)',
-    status: 'completed',
-    duration: '12 min',
-    intensity: 'Explosiva',
-    description: 'Sprint en combinación de 3 atacantes con pared directa y finalización con límite de tiempo.'
-  },
-  {
-    id: 'card-2',
-    sessionNumber: 2,
-    title: 'Partido Aplicado 7 vs 7 Reducido',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '27 de julio de 2026',
-    category: 'Game',
-    drillType: 'game7v7',
-    likesCount: 18,
-    isBookmarked: false,
-    groupCount: 14,
-    rating: '5,0 (12)',
-    status: 'active',
-    duration: '25 min',
-    intensity: 'Máxima Competitiva',
-    description: 'Juego de aplicación táctica en campo reducido con norma de gol triple tras pérdida en campo rival.'
-  },
-  {
-    id: 'card-1',
-    sessionNumber: 1,
-    title: 'Rondo 5vs2 con cambio de orientación',
-    coachName: 'Javi Valero',
-    coachAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    date: '26 de julio de 2026',
-    category: 'Rondo',
-    drillType: 'rondo5v2',
-    likesCount: 12,
-    isBookmarked: true,
-    groupCount: 7,
-    rating: '4,7 (6)',
-    status: 'active',
-    duration: '15 min',
-    intensity: 'Alta',
-    description: 'Mantenimiento de posesión en cuadrantes conectados orientando el juego tras 4 pases consecutivos.'
-  }
-];
-
 interface FootballHubSectionProps {
   session: TrainingSession;
   cloudSessions: CloudTrainingSession[];
@@ -164,7 +65,6 @@ interface FootballHubSectionProps {
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   session,
   cloudSessions,
-  onChangeSession,
   renderActiveSessionEditor,
   squadRoster = [],
   fixtures,
@@ -222,152 +122,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       const dateB = b.date || '';
       return dateB.localeCompare(dateA);
     });
-
-  // Render tactical field SVG diagram matching card drill type
-  const renderTacticalFieldSvg = (type: DrillCard['drillType']) => {
-    if (type === 'rondo5v2') {
-      return (
-        <svg viewBox="0 0 400 260" className="w-full h-full object-cover">
-          {/* Pitch background */}
-          <rect width="400" height="260" fill="#4f9a2b" />
-          
-          {/* Main outer boundary */}
-          <rect x="15" y="15" width="370" height="230" fill="none" stroke="#ffffff" strokeWidth="2" opacity="0.9" />
-          
-          {/* Two divided rondo boxes */}
-          <rect x="50" y="45" width="140" height="170" fill="none" stroke="#000000" strokeWidth="2" />
-          <rect x="210" y="45" width="140" height="170" fill="none" stroke="#000000" strokeWidth="2" />
-          
-          {/* Red players (Attackers / Outer) */}
-          <circle cx="55" cy="130" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          <circle cx="120" cy="50" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          <circle cx="120" cy="210" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          <circle cx="280" cy="50" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          <circle cx="280" cy="210" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          
-          {/* Yellow defenders inside */}
-          <circle cx="100" cy="120" r="9" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="140" cy="140" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          <circle cx="250" cy="130" r="9" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="345" cy="130" r="9" fill="#dc2626" stroke="#000000" strokeWidth="2" />
-          
-          {/* Dashed passing arrows */}
-          <path d="M 68 130 L 110 58" stroke="#000000" strokeWidth="2" strokeDasharray="4 3" markerEnd="url(#arrow)" />
-          <path d="M 120 62 L 120 198" stroke="#000000" strokeWidth="2" strokeDasharray="4 3" />
-          <path d="M 128 135 L 238 130" stroke="#000000" strokeWidth="2" strokeDasharray="4 3" />
-          <path d="M 280 62 L 335 122" stroke="#000000" strokeWidth="2" strokeDasharray="4 3" />
-          
-          {/* Transition solid arrows */}
-          <path d="M 132 50 L 268 50" stroke="#dc2626" strokeWidth="2.5" />
-          <path d="M 132 210 L 268 210" stroke="#dc2626" strokeWidth="2.5" />
-          <path d="M 152 130 L 198 130" stroke="#dc2626" strokeWidth="2.5" />
-          
-          {/* Ball */}
-          <circle cx="75" cy="130" r="4" fill="#ffffff" stroke="#000000" strokeWidth="1" />
-          <circle cx="330" cy="130" r="4" fill="#ffffff" stroke="#000000" strokeWidth="1" />
-        </svg>
-      );
-    } else if (type === 'game7v7') {
-      return (
-        <svg viewBox="0 0 400 260" className="w-full h-full object-cover">
-          {/* Pitch background */}
-          <rect width="400" height="260" fill="#4f9a2b" />
-          
-          {/* White boundary & field lines */}
-          <rect x="15" y="15" width="370" height="230" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <line x1="200" y1="15" x2="200" y2="245" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="200" cy="130" r="35" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="200" cy="130" r="3" fill="#ffffff" />
-          
-          {/* Left Penalty Area */}
-          <rect x="15" y="65" width="55" height="130" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <path d="M 70 100 A 30 30 0 0 1 70 160" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <rect x="5" y="100" width="10" height="60" fill="none" stroke="#000000" strokeWidth="3" />
-          
-          {/* Right Penalty Area */}
-          <rect x="330" y="65" width="55" height="130" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <path d="M 330 100 A 30 30 0 0 0 330 160" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <rect x="385" y="100" width="10" height="60" fill="none" stroke="#000000" strokeWidth="3" />
-          
-          {/* Red 7 Players */}
-          <circle cx="30" cy="130" r="8" fill="#000000" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="100" cy="60" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="100" cy="200" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="150" cy="100" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="150" cy="160" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="220" cy="80" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="220" cy="180" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          
-          {/* Yellow 7 Players */}
-          <circle cx="370" cy="130" r="8" fill="#000000" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="300" cy="70" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="300" cy="190" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="250" cy="110" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="250" cy="150" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="180" cy="90" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="180" cy="170" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          
-          {/* Ball */}
-          <circle cx="190" cy="125" r="4" fill="#ffffff" stroke="#000000" strokeWidth="1" />
-        </svg>
-      );
-    } else if (type === 'speed3v0') {
-      return (
-        <svg viewBox="0 0 400 260" className="w-full h-full object-cover">
-          {/* Pitch background */}
-          <rect width="400" height="260" fill="#4f9a2b" />
-          
-          {/* White boundary lines */}
-          <rect x="15" y="15" width="370" height="230" fill="none" stroke="#ffffff" strokeWidth="2" />
-          
-          {/* Left Penalty Box */}
-          <rect x="15" y="65" width="60" height="130" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <rect x="5" y="100" width="10" height="60" fill="none" stroke="#000000" strokeWidth="3" />
-          
-          {/* Center Circle segment */}
-          <path d="M 380 70 A 50 50 0 0 0 380 190" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="380" cy="130" r="8" fill="#000000" stroke="#ffffff" strokeWidth="2" />
-          
-          {/* Yellow 3 players on right */}
-          <circle cx="340" cy="65" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="340" cy="130" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="340" cy="195" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          
-          {/* Sprint vectors */}
-          <path d="M 330 65 L 120 30" stroke="#eab308" strokeWidth="2" strokeDasharray="5 3" />
-          <path d="M 330 195 L 120 230" stroke="#eab308" strokeWidth="2" strokeDasharray="5 3" />
-          <path d="M 330 130 L 80 110" stroke="#000000" strokeWidth="2.5" />
-          
-          {/* Shot arrow into goal */}
-          <path d="M 80 110 L 15 130" stroke="#eab308" strokeWidth="2" strokeDasharray="4 3" />
-          
-          {/* Ball */}
-          <circle cx="325" cy="130" r="4" fill="#ffffff" stroke="#000000" strokeWidth="1" />
-        </svg>
-      );
-    } else {
-      // Generic build-up or finishing pitch diagram
-      return (
-        <svg viewBox="0 0 400 260" className="w-full h-full object-cover">
-          <rect width="400" height="260" fill="#4f9a2b" />
-          <rect x="15" y="15" width="370" height="230" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <line x1="200" y1="15" x2="200" y2="245" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="200" cy="130" r="35" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <rect x="15" y="65" width="60" height="130" fill="none" stroke="#ffffff" strokeWidth="2" />
-          <rect x="325" y="65" width="60" height="130" fill="none" stroke="#ffffff" strokeWidth="2" />
-          
-          {/* Red & Yellow players */}
-          <circle cx="80" cy="80" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="80" cy="180" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="160" cy="130" r="8" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="240" cy="100" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <circle cx="240" cy="160" r="8" fill="#eab308" stroke="#000000" strokeWidth="2" />
-          <path d="M 90 80 L 150 120" stroke="#ffffff" strokeWidth="2" strokeDasharray="4 3" />
-          <circle cx="88" cy="80" r="4" fill="#ffffff" stroke="#000000" strokeWidth="1" />
-        </svg>
-      );
-    }
-  };
 
   const roleTitle = role === 'fitness'
     ? 'Fitness & Conditioning Hub'
