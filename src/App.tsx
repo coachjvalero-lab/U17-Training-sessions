@@ -1105,14 +1105,6 @@ export default function App() {
           gk: savedTime
         };
         lastSavedJsonRef.current = getSessionSyncSignature(newSession);
-        // Optimistically add to cloudSessions
-        setCloudSessions(prev => [{
-          ...newSession,
-          updatedAt: savedTime,
-          footballUpdatedAt: savedTime,
-          fitnessUpdatedAt: savedTime,
-          gkUpdatedAt: savedTime
-        }, ...prev]);
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCreateNewCloudSession] Cloud save failed:', cloudErr);

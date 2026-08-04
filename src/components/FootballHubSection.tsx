@@ -103,7 +103,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         updatedAt: sess.updatedAt,
         role
       }))
-      .filter((card) => card.sessionNumber > 0)
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }, [cloudSessions, role, session.id]);
 
