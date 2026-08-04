@@ -59,12 +59,64 @@ import {
   CloudTrainingSession 
 } from './firebase';
 import { initPermissionsCloudSync } from './utils/permissions';
+import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
 import { 
   FileText,
   Loader2,
   Moon,
   Sun
 } from 'lucide-react';
+
+const APP_CONTEXT_STORAGE_KEY = 'u17_app_context';
+
+type AppContextSnapshot = {
+  activeSection: PortalSection;
+  sessionId: string;
+  route: string;
+  scrollY: number;
+};
+
+function isPortalSection(value: string | null): value is PortalSection {
+  return value === 'hub' ||
+    value === 'football' ||
+    value === 'fitness' ||
+    value === 'gk' ||
+    value === 'squad' ||
+    value === 'attendance' ||
+    value === 'physio' ||
+    value === 'video' ||
+    value === 'exercises' ||
+    value === 'planning';
+}
+
+function readSavedAppContext(): AppContextSnapshot | null {
+  const parsed = readWorkspaceRestoreState<Partial<AppContextSnapshot> | null>(APP_CONTEXT_STORAGE_KEY, null);
+  if (!parsed || !isPortalSection(typeof parsed.activeSection === 'string' ? parsed.activeSection : null)) {
+    return null;
+  }
+
+  return {
+    activeSection: parsed.activeSection,
+    sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : '',
+    route: typeof parsed.route === 'string' ? parsed.route : '',
+    scrollY: typeof parsed.scrollY === 'number' ? parsed.scrollY : 0
+  };
+}
+
+function shouldRequireLoginForSharedLink(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.get('session')) return false;
+
+    const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const navType = navEntry?.type;
+    return navType === 'navigate';
+  } catch (e) {
+    return false;
+  }
+}
 
 // Fills missing fitness/GK blocks and normalizes the squad roster
 function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
@@ -98,7 +150,8 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
-  const [activeSection, setActiveSection] = useState<PortalSection>('hub');
+  const [requiresSharedLinkLogin, setRequiresSharedLinkLogin] = useState<boolean>(() => shouldRequireLoginForSharedLink());
+  const [activeSection, setActiveSection] = useState<PortalSection>(() => readSavedAppContext()?.activeSection || 'hub');
 
   // Squad Players ("Plantilla") — initial value is only a local cache for instant paint/offline;
   // Firestore is the source of truth (see subscription effect below).
@@ -255,13 +308,7 @@ export default function App() {
 
   const initialTeamLogoRef = useRef('');
   const [teamLogo, setTeamLogo] = useState<string>(() => {
-    const computed = (() => {
-      try {
-        const saved = localStorage.getItem('u17_uploaded_team_logo');
-        if (saved) return saved;
-      } catch (e) {}
-      return OFFICIAL_ALULA_LOGO_DATA_URL;
-    })();
+    const computed = OFFICIAL_ALULA_LOGO_DATA_URL;
     initialTeamLogoRef.current = computed;
     return computed;
   });
@@ -275,13 +322,8 @@ export default function App() {
       if (!cloudLogo && !hasTeamLogoMigrationSettledRef.current) {
         return;
       }
-      const nextLogo = cloudLogo || teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
+      const nextLogo = cloudLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
       setTeamLogo(nextLogo);
-      try {
-        localStorage.setItem('u17_uploaded_team_logo', nextLogo);
-      } catch (e) {
-        console.warn('Team logo local cache warning:', e);
-      }
     }, () => {
       // Offline or subscription error: keep working with whatever is cached locally
     });
@@ -289,17 +331,8 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('u17_uploaded_team_logo', teamLogo);
-    } catch (e) {}
-  }, [teamLogo]);
-
   const handleUpdateTeamLogo = (newLogo: string) => {
     setTeamLogo(newLogo);
-    try {
-      localStorage.setItem('u17_uploaded_team_logo', newLogo);
-    } catch (e) {}
     saveTeamLogoToCloud(newLogo).catch(err => console.warn('Cloud save failed for team logo:', err));
   };
 
@@ -412,7 +445,6 @@ export default function App() {
       sessionNumber: '001',
       date: new Date().toISOString().split('T')[0],
       teamName: 'U17 Women Al Ula',
-      teamLogo: OFFICIAL_ALULA_LOGO_DATA_URL,
     });
   });
 
@@ -488,6 +520,26 @@ export default function App() {
   const currentSessionIdRef = useRef<string>('');
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
+  const hasRestoredWorkspaceRef = useRef(false);
+
+  useEffect(() => {
+    const saved = readSavedAppContext();
+    if (!saved?.route) return;
+
+    try {
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.get('session')) return;
+
+      const savedUrl = new URL(saved.route, window.location.origin);
+      const nextRoute = `${savedUrl.pathname}${savedUrl.search}${savedUrl.hash}`;
+      const currentRoute = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+      if (nextRoute !== currentRoute && window.history.replaceState) {
+        window.history.replaceState({}, '', nextRoute);
+      }
+    } catch (e) {
+      console.warn('App context route restore failed:', e);
+    }
+  }, []);
 
   // teamLogo is intentionally local-only (not persisted in session docs), so it must
   // be excluded from sync comparisons to avoid false "unsaved/conflict" detections.
@@ -502,6 +554,42 @@ export default function App() {
     latestSessionRef.current = session;
   }, [session]);
 
+  useEffect(() => {
+    const persistContext = () => {
+      const route = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      writeWorkspaceRestoreState(APP_CONTEXT_STORAGE_KEY, {
+        activeSection,
+        sessionId: session.id,
+        route,
+        scrollY: window.scrollY
+      } satisfies AppContextSnapshot);
+    };
+
+    persistContext();
+    window.addEventListener('beforeunload', persistContext);
+    window.addEventListener('pagehide', persistContext);
+    return () => {
+      window.removeEventListener('beforeunload', persistContext);
+      window.removeEventListener('pagehide', persistContext);
+    };
+  }, [activeSection, session.id]);
+
+  useEffect(() => {
+    if (isAuthInitializing || !currentUser || requiresSharedLinkLogin || hasRestoredWorkspaceRef.current) {
+      return;
+    }
+
+    const saved = readSavedAppContext();
+    hasRestoredWorkspaceRef.current = true;
+    if (!saved) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: saved.scrollY || 0, behavior: 'auto' });
+      });
+    });
+  }, [currentUser, isAuthInitializing, requiresSharedLinkLogin]);
+
   // Applies a cloud session snapshot to local state/localStorage/URL. Shared by the initial
   // load, the "no local edits pending" auto-refresh case, and the conflict banner's Reload action.
   const applyCloudSessionToState = (sessionToLoad: CloudTrainingSession) => {
@@ -515,7 +603,7 @@ export default function App() {
     };
     currentSessionIdRef.current = sessionToLoad.id;
 
-    const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, ...baseSession } = sessionToLoad;
+    const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, teamLogo: _legacyLogo, ...baseSession } = sessionToLoad as CloudTrainingSession & { teamLogo?: string };
 
     // Normalize old team names if needed
     if (baseSession.teamName === 'U17 Girls A.D. San Pedro') {
@@ -525,12 +613,8 @@ export default function App() {
       baseSession.sessionNumber = '001';
     }
 
-    const restoredLogo = latestSessionRef.current?.teamLogo ||
-      localStorage.getItem('u17_uploaded_team_logo') || '';
-
     const unifiedSession: TrainingSession = buildUnifiedSession({
       ...baseSession,
-      teamLogo: restoredLogo,
     });
 
     isRemoteUpdateRef.current = true;
@@ -683,9 +767,10 @@ export default function App() {
     if (typeof fields.teamLogo === 'string') {
       handleUpdateTeamLogo(fields.teamLogo);
     }
+    const { teamLogo: _logo, ...safeFields } = fields;
     setSession(prev => ({
       ...prev,
-      ...fields
+      ...safeFields
     }));
   };
 
@@ -967,24 +1052,14 @@ export default function App() {
   };
 
   const getActiveLogo = () => {
-    if (teamLogo) {
-      return teamLogo;
-    }
-
-    if (session && session.teamLogo && !session.teamLogo.includes('%230f172a') && !session.teamLogo.includes('COACH') && !session.teamLogo.includes('default-u17')) {
-      return session.teamLogo;
-    }
-
-    return OFFICIAL_ALULA_LOGO_DATA_URL;
+    return teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
   };
 
   const handleClearSession = () => {
     if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for all section tabs.`)) {
-      const activeLogo = getActiveLogo();
       const empty = getEmptySession();
       setSession({
-        ...empty,
-        teamLogo: activeLogo
+        ...empty
       });
       setExpandedExercises({});
     }
@@ -1031,10 +1106,8 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      const activeLogo = getActiveLogo();
       const sessionToSave: TrainingSession = {
         ...session,
-        teamLogo: session.teamLogo || activeLogo,
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
@@ -1076,7 +1149,6 @@ export default function App() {
     const newNumber = prompt('Enter new session number:', '1');
     if (newNumber === null) return;
 
-    const activeLogo = getActiveLogo();
     const empty = getEmptySession();
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
@@ -1087,7 +1159,6 @@ export default function App() {
       sessionNumber: newNumber,
       date: today,
       teamName: 'U17 Women Al Ula',
-      teamLogo: activeLogo
     });
 
     try {
@@ -1121,14 +1192,11 @@ export default function App() {
 
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
-      const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, ...baseSession } = loadedSession;
-      const restoredLogo = latestSessionRef.current?.teamLogo ||
-        localStorage.getItem('u17_uploaded_team_logo') || '';
+      const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, teamLogo: _legacyLogo, ...baseSession } = loadedSession as CloudTrainingSession & { teamLogo?: string };
 
       // Upgrade fitness and GK fields if missing from loaded old document
       const unifiedSession: TrainingSession = buildUnifiedSession({
         ...baseSession,
-        teamLogo: restoredLogo,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
       });
 
@@ -1188,13 +1256,10 @@ export default function App() {
           const remaining = cloudSessions.filter(s => s.id !== sessionId);
           if (remaining.length > 0) {
             const nextSession = remaining[0];
-            const { updatedAt, ...baseSession } = nextSession;
-            const restoredLogo = latestSessionRef.current?.teamLogo ||
-              localStorage.getItem('u17_uploaded_team_logo') || '';
+            const { updatedAt, teamLogo: _legacyLogo, ...baseSession } = nextSession as CloudTrainingSession & { teamLogo?: string };
 
             const unifiedSession: TrainingSession = buildUnifiedSession({
               ...baseSession,
-              teamLogo: restoredLogo,
               teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
             });
 
@@ -1211,7 +1276,6 @@ export default function App() {
             const empty = getEmptySession();
             const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
             const today = new Date().toISOString().split('T')[0];
-            const activeLogo = getActiveLogo();
 
             const newSession: TrainingSession = {
               ...empty,
@@ -1219,7 +1283,6 @@ export default function App() {
               sessionNumber: '001',
               date: today,
               teamName: 'U17 Women Al Ula',
-              teamLogo: activeLogo
             };
 
             isRemoteUpdateRef.current = true;
@@ -1252,10 +1315,8 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      const activeLogo = getActiveLogo();
       const sessionToSave: TrainingSession = {
         ...session,
-        teamLogo: session.teamLogo || activeLogo,
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
       };
 
@@ -1387,6 +1448,16 @@ export default function App() {
     setRemoteSessionConflict(null);
   };
 
+  const handleLoginSuccess = () => {
+    setRequiresSharedLinkLogin(false);
+  };
+
+  const handleLogout = async () => {
+    setRequiresSharedLinkLogin(false);
+    clearWorkspaceRestoreState();
+    await logoutUser();
+  };
+
   // Visible cloud-sync feedback (Bloque 2, tarea 1): saving/retrying/offline-queued/conflict banners.
   const renderSyncBanner = () => {
     if (remoteSessionConflict) {
@@ -1451,10 +1522,10 @@ export default function App() {
     );
   }
 
-  if (!currentUser) {
+  if (!currentUser || requiresSharedLinkLogin) {
     return (
       <>
-        <LoginPage onSuccess={() => {}} />
+        <LoginPage onSuccess={handleLoginSuccess} currentLogo={teamLogo} />
         {renderThemeToggle()}
       </>
     );
@@ -1473,7 +1544,7 @@ export default function App() {
           physioRecords={physioRecords}
           videoSessions={videoSessions}
           currentUser={currentUser}
-          onLogout={logoutUser}
+          onLogout={handleLogout}
           currentLogo={teamLogo}
           onUpdateLogo={handleUpdateTeamLogo}
         />
@@ -1491,6 +1562,7 @@ export default function App() {
       {/* Lateral Dark Blue Navigation Sidebar */}
       <Sidebar
         session={session}
+        currentLogo={teamLogo}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
         totalLibraryExercisesCount={libraryCount}
@@ -1505,8 +1577,8 @@ export default function App() {
         copiedLink={copiedLink}
         onCopyShareLink={handleCopyShareLink}
         currentUser={currentUser}
-        onLogout={logoutUser}
-        onUpdateSession={handleUpdateSession}
+        onLogout={handleLogout}
+        onUpdateLogo={handleUpdateTeamLogo}
       />
 
       {/* Main Content Workspace Area */}
@@ -1567,6 +1639,8 @@ export default function App() {
                 <HeaderSection 
                   session={session}
                   onChange={handleUpdateSession}
+                  currentLogo={teamLogo}
+                  onUpdateLogo={handleUpdateTeamLogo}
                   onSave={handleSaveActiveToCloud}
                   isSaving={isCloudSaving}
                 />
@@ -1673,6 +1747,8 @@ export default function App() {
                 <HeaderSection 
                   session={session}
                   onChange={handleUpdateSession}
+                  currentLogo={teamLogo}
+                  onUpdateLogo={handleUpdateTeamLogo}
                   onSave={handleSaveActiveToCloud}
                   isSaving={isCloudSaving}
                 />
@@ -1779,6 +1855,8 @@ export default function App() {
                 <HeaderSection 
                   session={session}
                   onChange={handleUpdateSession}
+                  currentLogo={teamLogo}
+                  onUpdateLogo={handleUpdateTeamLogo}
                   onSave={handleSaveActiveToCloud}
                   isSaving={isCloudSaving}
                 />
@@ -1872,6 +1950,8 @@ export default function App() {
             <HeaderSection 
               session={session}
               onChange={handleUpdateSession}
+              currentLogo={teamLogo}
+              onUpdateLogo={handleUpdateTeamLogo}
               onSave={handleSaveActiveToCloud}
               isSaving={isCloudSaving}
             />

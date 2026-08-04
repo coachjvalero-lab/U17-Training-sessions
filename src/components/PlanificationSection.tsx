@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { TrainingSession, Exercise } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { 
@@ -20,6 +20,7 @@ import {
   Trophy,
   Minus
 } from 'lucide-react';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface PlanificationSectionProps {
   session: TrainingSession;
@@ -231,8 +232,8 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
   session,
   cloudSessions
 }) => {
-  const [scopeFilter, setScopeFilter] = useState<'all' | 'active'>('all');
-  const [expandedMoments, setExpandedMoments] = useState<Record<string, boolean>>({
+  const contextStorageKey = 'planification_section';
+  const defaultExpandedMoments = {
     'Attack': true,
     'Defense': true,
     'Transition A-D': false,
@@ -241,7 +242,17 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
     'Match': false,
     'Other': false,
     '-': false
+  };
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    scopeFilter: 'all' as 'all' | 'active',
+    expandedMoments: defaultExpandedMoments
   });
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'active'>(restoredContext.scopeFilter);
+  const [expandedMoments, setExpandedMoments] = useState<Record<string, boolean>>(restoredContext.expandedMoments);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { scopeFilter, expandedMoments });
+  }, [scopeFilter, expandedMoments]);
 
   // Combine sessions based on selected filter scope
   const allSessionsToAnalyze = useMemo(() => {

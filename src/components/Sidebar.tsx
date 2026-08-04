@@ -27,6 +27,7 @@ import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface SidebarProps {
   session: TrainingSession;
+  currentLogo?: string;
   activeSection: PortalSection;
   setActiveSection: (section: PortalSection) => void;
   onClearSession: () => void;
@@ -42,11 +43,12 @@ interface SidebarProps {
   totalLibraryExercisesCount?: number;
   currentUser?: User | null;
   onLogout?: () => void;
-  onUpdateSession?: (fields: Partial<TrainingSession>) => void;
+  onUpdateLogo?: (newLogo: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   session,
+  currentLogo,
   activeSection,
   setActiveSection,
   onClearSession,
@@ -62,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalLibraryExercisesCount: _totalLibraryExercisesCount = 0,
   currentUser,
   onLogout,
-  onUpdateSession
+  onUpdateLogo
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -77,12 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     try {
       const { processUploadedImageFile } = await import('../utils/heic');
       const dataUrl = await processUploadedImageFile(file);
-      try {
-        localStorage.setItem('u17_uploaded_team_logo', dataUrl);
-      } catch (err) {}
-      if (onUpdateSession) {
-        onUpdateSession({ teamLogo: dataUrl });
-      }
+      onUpdateLogo?.(dataUrl);
     } catch (err) {
       alert('Error procesando imagen del logo.');
     }
@@ -163,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Haz clic para cambiar el logo"
           >
             <img 
-              src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+              src={currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
               alt="Al Ula SC" 
               className="w-full h-full object-contain" 
               referrerPolicy="no-referrer"
@@ -405,7 +402,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="flex items-center space-x-2">
             <img 
-              src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+              src={currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
               alt="Logo" 
               className="w-7 h-7 object-contain"
             />

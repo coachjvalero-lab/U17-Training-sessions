@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Video, 
   PlusCircle, 
@@ -12,6 +12,7 @@ import {
   Plus
 } from 'lucide-react';
 import { VideoAnalysis, GameMoment } from '../types';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface VideoAnalysisSectionProps {
   sessions: VideoAnalysis[];
@@ -22,10 +23,19 @@ export const VideoAnalysisSection: React.FC<VideoAnalysisSectionProps> = ({
   sessions,
   onUpdateSessions
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [gameMomentFilter, setGameMomentFilter] = useState<string>('ALL');
+  const contextStorageKey = 'video_analysis_section';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    searchTerm: '',
+    gameMomentFilter: 'ALL'
+  });
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
+  const [gameMomentFilter, setGameMomentFilter] = useState<string>(restoredContext.gameMomentFilter);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<VideoAnalysis | null>(null);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { searchTerm, gameMomentFilter });
+  }, [searchTerm, gameMomentFilter]);
 
   const [formData, setFormData] = useState<{
     title: string;

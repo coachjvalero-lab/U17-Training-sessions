@@ -53,14 +53,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   currentLogo,
   onUpdateLogo
 }) => {
-  const [logoUrl, setLogoUrl] = useState<string>(() => {
-    if (currentLogo) return currentLogo;
-    try {
-      return localStorage.getItem('u17_uploaded_team_logo') || OFFICIAL_ALULA_LOGO_DATA_URL;
-    } catch (e) {
-      return OFFICIAL_ALULA_LOGO_DATA_URL;
-    }
-  });
+  const logoUrl = currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
 
   const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -75,13 +68,7 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   const videoCount = videoSessions.length;
 
   const handleApplyLogo = (newLogo: string) => {
-    setLogoUrl(newLogo);
-    try {
-      localStorage.setItem('u17_uploaded_team_logo', newLogo);
-    } catch (e) {}
-    if (onUpdateLogo) {
-      onUpdateLogo(newLogo);
-    }
+    onUpdateLogo?.(newLogo);
     setLogoSuccessMessage('Logo updated successfully!');
     setTimeout(() => {
       setLogoSuccessMessage('');

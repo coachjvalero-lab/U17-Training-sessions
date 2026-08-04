@@ -10,10 +10,12 @@ interface HeaderSectionProps {
   onChange: (fields: Partial<TrainingSession>) => void;
   onSave?: () => void;
   isSaving?: boolean;
+  currentLogo?: string;
+  onUpdateLogo?: (newLogo: string) => void;
 }
 
 
-export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving }) => {
+export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving, currentLogo, onUpdateLogo }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
@@ -27,10 +29,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
       setIsUploadingLogo(true);
       try {
         const logoData = await processUploadedImageFile(file);
-        try {
-          localStorage.setItem('u17_uploaded_team_logo', logoData);
-        } catch (e) {}
-        onChange({ teamLogo: logoData });
+        onUpdateLogo?.(logoData);
       } catch (err) {
         console.error('Failed to process logo image:', err);
         alert('Error processing image. If this is a HEIC photo, please try again or select a JPG/PNG.');
@@ -42,37 +41,19 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
 
   const removeLogo = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      localStorage.removeItem('u17_uploaded_team_logo');
-    } catch (e) {}
-    onChange({ teamLogo: '' });
+    onUpdateLogo?.(OFFICIAL_ALULA_LOGO_DATA_URL);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const savedLogo = (() => {
-    try {
-      return localStorage.getItem('u17_uploaded_team_logo') || OFFICIAL_ALULA_LOGO_DATA_URL;
-    } catch (e) {
-      return OFFICIAL_ALULA_LOGO_DATA_URL;
-    }
-  })();
-
-  const currentLogo = session.teamLogo || savedLogo;
-
-  // Auto-fill session.teamLogo if missing so it gets saved to Firestore for shared links
-  React.useEffect(() => {
-    if (!session.teamLogo && savedLogo && savedLogo !== OFFICIAL_ALULA_LOGO_DATA_URL) {
-      onChange({ teamLogo: savedLogo });
-    }
-  }, [session.teamLogo, savedLogo, onChange]);
+  const activeLogo = currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
 
   // Ensure logo ALWAYS falls back to the official Al Ula SC shield logo
-  const isOldOrInvalid = !currentLogo || 
-    currentLogo.includes('%230f172a') || 
-    currentLogo.includes('COACH') ||
-    currentLogo.includes('default-u17');
+  const isOldOrInvalid = !activeLogo || 
+    activeLogo.includes('%230f172a') || 
+    activeLogo.includes('COACH') ||
+    activeLogo.includes('default-u17');
 
-  const logoSrc = isOldOrInvalid ? OFFICIAL_ALULA_LOGO_DATA_URL : currentLogo;
+  const logoSrc = isOldOrInvalid ? OFFICIAL_ALULA_LOGO_DATA_URL : activeLogo;
 
   return (
     <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-2.5 print:rounded-lg print:border-t-4 print:border-t-[#002142] print:border-b-2 print:border-b-[#a79078]">
@@ -95,7 +76,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 src={logoSrc} 
                 alt="Club Badge" 
                 className="w-full h-full object-contain p-2 transition-transform duration-300 group-hover:scale-105 print:p-0"
-                onConverted={(convertedJpeg) => onChange({ teamLogo: convertedJpeg })}
+                onConverted={(convertedJpeg) => onUpdateLogo?.(convertedJpeg)}
               />
             )}
             
@@ -106,7 +87,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
             </div>
 
             {/* Remove button - Hidden in print */}
-            {session.teamLogo && (
+            {logoSrc !== OFFICIAL_ALULA_LOGO_DATA_URL && (
               <button
                 type="button"
                 onClick={removeLogo}

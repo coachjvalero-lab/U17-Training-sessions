@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Trophy, 
   Calendar, 
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TrainingSession, MatchFixture } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface CompetitionSectionProps {
   session?: TrainingSession;
@@ -112,10 +113,19 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const fixtures = fixturesProp ?? localFixtures;
 
-  const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup'>('fixtures');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'Scheduled' | 'Played'>('ALL');
+  const contextStorageKey = 'competition_section';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    activeTab: 'fixtures' as 'fixtures' | 'standings' | 'callup',
+    filterStatus: 'ALL' as 'ALL' | 'Scheduled' | 'Played'
+  });
+  const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup'>(restoredContext.activeTab);
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'Scheduled' | 'Played'>(restoredContext.filterStatus);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingFixture, setEditingFixture] = useState<MatchFixture | null>(null);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { activeTab, filterStatus });
+  }, [activeTab, filterStatus]);
 
   // Match Form State
   const [formData, setFormData] = useState<Partial<MatchFixture>>({

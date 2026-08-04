@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Users, 
   UserX, 
@@ -36,6 +36,7 @@ import { TrainingSession, AbsenceReason } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import { SessionAttendanceTracker } from './SessionAttendanceTracker';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface AttendanceSectionProps {
   session: TrainingSession;
@@ -56,12 +57,23 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   excludedPlayers = [],
   onExcludePlayer
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [reasonFilter, setReasonFilter] = useState<'all' | AbsenceReason>('all');
-  const [chartSort, setChartSort] = useState<'rate' | 'attended' | 'absences'>('rate');
-  const [chartView, setChartView] = useState<'classification' | 'race_progression'>('classification');
+  const contextStorageKey = 'attendance_section';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    searchTerm: '',
+    reasonFilter: 'all' as 'all' | AbsenceReason,
+    chartSort: 'rate' as 'rate' | 'attended' | 'absences',
+    chartView: 'classification' as 'classification' | 'race_progression'
+  });
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
+  const [reasonFilter, setReasonFilter] = useState<'all' | AbsenceReason>(restoredContext.reasonFilter);
+  const [chartSort, setChartSort] = useState<'rate' | 'attended' | 'absences'>(restoredContext.chartSort);
+  const [chartView, setChartView] = useState<'classification' | 'race_progression'>(restoredContext.chartView);
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { searchTerm, reasonFilter, chartSort, chartView });
+  }, [searchTerm, reasonFilter, chartSort, chartView]);
 
   // Collect all sessions (cloud sessions + current session if not in cloud)
   const allSessionsMap = new Map<string, TrainingSession | CloudTrainingSession>();

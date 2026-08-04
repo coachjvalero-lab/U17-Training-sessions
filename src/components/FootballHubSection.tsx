@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   FileText, 
   Calendar, 
@@ -18,6 +18,7 @@ import { CloudTrainingSession } from '../firebase';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 export interface DrillCard {
   id: string;
@@ -75,14 +76,21 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onNewSession,
   role = 'football'
 }) => {
+  const contextStorageKey = `u17_football_hub_context_${role}`;
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    footballSubTab: 'sessions' as const,
+    sessionSubNav: 'cards' as const,
+    searchTerm: ''
+  });
+
   // Main Football Sub-tab Navigation: 'sessions' | 'planning' | 'competition' | 'library'
-  const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition' | 'library'>('sessions');
+  const [footballSubTab, setFootballSubTab] = useState<'sessions' | 'planning' | 'competition' | 'library'>(restoredContext.footballSubTab);
 
   // Sub-navigation inside 'sessions': 'cards' | 'editor'
-  const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>('cards');
+  const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>(restoredContext.sessionSubNav);
 
   // Search term for filtering sessions
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
   const sessionCards = useMemo<DrillCard[]>(() => {
     return cloudSessions
       .map((sess) => ({
@@ -121,6 +129,10 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       const dateB = b.date || '';
       return dateB.localeCompare(dateA);
     });
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { footballSubTab, sessionSubNav, searchTerm });
+  }, [contextStorageKey, footballSubTab, sessionSubNav, searchTerm]);
 
   const roleTitle = role === 'fitness'
     ? 'Fitness & Conditioning Hub'

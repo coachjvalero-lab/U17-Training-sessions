@@ -8,6 +8,7 @@ import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 
 interface ControlPanelProps {
   session: TrainingSession;
+  currentLogo?: string;
   onImportSession: (session: TrainingSession) => void;
   onClearSession: () => void;
   onRestoreDemo: () => void;
@@ -16,6 +17,7 @@ interface ControlPanelProps {
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
   session,
+  currentLogo,
   onClearSession,
   onRestoreDemo,
   isSaving
@@ -34,7 +36,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="flex items-center space-x-2">
             <div className="w-9 h-9 rounded-xl bg-slate-950 border border-amber-800/40 flex items-center justify-center p-1 shadow-md shadow-slate-950/50">
               <img 
-                src={session.teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
+                src={currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL} 
                 alt="Al Ula SC" 
                 className="w-full h-full object-contain" 
                 referrerPolicy="no-referrer"

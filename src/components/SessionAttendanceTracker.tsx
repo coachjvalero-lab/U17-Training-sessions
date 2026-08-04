@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   UserCheck, 
   CheckCircle2, 
@@ -16,6 +16,7 @@ import {
   Dumbbell
 } from 'lucide-react';
 import { PlayerAttendance, AbsenceReason } from '../types';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 
 interface SessionAttendanceTrackerProps {
@@ -49,10 +50,19 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   excludedPlayers = [],
   onExcludePlayer
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'attending' | 'gym' | 'absent'>('all');
+  const contextStorageKey = 'session_attendance_tracker';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    isExpanded: true,
+    filter: 'all' as 'all' | 'attending' | 'gym' | 'absent'
+  });
+  const [isExpanded, setIsExpanded] = useState(restoredContext.isExpanded);
+  const [filter, setFilter] = useState<'all' | 'attending' | 'gym' | 'absent'>(restoredContext.filter);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { isExpanded, filter });
+  }, [isExpanded, filter]);
 
   // Filter out excluded players (e.g., Jalila) — the exclusion list is shared across the whole staff via Firestore (see App.tsx)
   const isPlayerExcluded = (name: string) => {

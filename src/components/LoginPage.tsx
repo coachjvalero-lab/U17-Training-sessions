@@ -5,9 +5,10 @@ import { loginUser, resetPasswordEmail } from '../firebase';
 
 interface LoginPageProps {
   onSuccess: () => void;
+  currentLogo?: string;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) => {
   const [authMode, setAuthMode] = useState<'login' | 'reset'>('login');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
@@ -17,14 +18,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Logo from localStorage or default
-  const [logoUrl] = useState<string>(() => {
-    try {
-      return localStorage.getItem('u17_uploaded_team_logo') || OFFICIAL_ALULA_LOGO_DATA_URL;
-    } catch (e) {
-      return OFFICIAL_ALULA_LOGO_DATA_URL;
-    }
-  });
+  const logoUrl = currentLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
 
   const switchMode = (mode: 'login' | 'reset') => {
     setAuthMode(mode);

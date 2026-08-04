@@ -1,5 +1,4 @@
 import { TrainingSession } from './types';
-import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 
 // Simple default soccer field diagram (encoded as standard base64 or inline SVG to serve as placeholder)
 const DEFAULT_TACTICAL_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
@@ -76,12 +75,6 @@ export const getDefaultSession = (): TrainingSession => {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  
-  let savedLogo = OFFICIAL_ALULA_LOGO_DATA_URL;
-  try {
-    const customLogo = localStorage.getItem('u17_uploaded_team_logo');
-    if (customLogo) savedLogo = customLogo;
-  } catch (e) {}
 
   return {
     id: 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
@@ -91,7 +84,6 @@ export const getDefaultSession = (): TrainingSession => {
     sessionNumber: '001',
     microcycleDay: '-2',
     mainObjective: 'High collective press after losing the ball in the middle block and fast transition from attack to defense.',
-    teamLogo: savedLogo,
     materialsNeeded: '20 Cones (10 Yellow, 10 Green), 12 Bibs (6 Blue, 6 Yellow), 15 Regulation Soccer Balls, 2 Portable Mini Goals, Stopwatch, Whistle.',
     observations: 'Good intensity during high-pressing drills. Note: Player #8 experienced slight ankle discomfort during 2nd interval.',
     warmUp: {
@@ -347,12 +339,6 @@ export const getEmptySession = (): TrainingSession => {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  
-  let savedLogo = OFFICIAL_ALULA_LOGO_DATA_URL;
-  try {
-    const customLogo = localStorage.getItem('u17_uploaded_team_logo');
-    if (customLogo) savedLogo = customLogo;
-  } catch (e) {}
 
   return {
     id: 'empty-session-' + Date.now(),
@@ -362,7 +348,6 @@ export const getEmptySession = (): TrainingSession => {
     sessionNumber: '1',
     microcycleDay: '-1',
     mainObjective: '',
-    teamLogo: savedLogo,
     materialsNeeded: '',
     observations: '',
     warmUp: {

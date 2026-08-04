@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -24,6 +24,7 @@ import { SquadPlayer, TrainingSession } from '../types';
 import { CloudTrainingSession } from '../firebase';
 import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -62,11 +63,23 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   excludedPlayers,
   onExcludePlayer
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'roster' | 'attendance'>(initialSubTab);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [positionFilter, setPositionFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const contextStorageKey = 'squad_roster_section';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    activeSubTab: initialSubTab,
+    searchTerm: '',
+    positionFilter: 'ALL',
+    statusFilter: 'ALL',
+    viewMode: 'grid' as const
+  });
+  const [activeSubTab, setActiveSubTab] = useState<'roster' | 'attendance'>(restoredContext.activeSubTab);
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
+  const [positionFilter, setPositionFilter] = useState<string>(restoredContext.positionFilter);
+  const [statusFilter, setStatusFilter] = useState<string>(restoredContext.statusFilter);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(restoredContext.viewMode);
+
+  useEffect(() => {
+    setActiveSubTab(initialSubTab);
+  }, [initialSubTab]);
   
   // Modal State for Adding/Editing player
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,6 +167,16 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     heightCm: '168',
     weightKg: '56'
   });
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, {
+      activeSubTab,
+      searchTerm,
+      positionFilter,
+      statusFilter,
+      viewMode
+    });
+  }, [activeSubTab, searchTerm, positionFilter, statusFilter, viewMode]);
 
   const handleOpenAddModal = () => {
     setEditingPlayer(null);

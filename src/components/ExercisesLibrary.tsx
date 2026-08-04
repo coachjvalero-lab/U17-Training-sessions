@@ -29,6 +29,7 @@ import {
 import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface ExercisesLibraryProps {
   currentSession: TrainingSession;
@@ -46,9 +47,18 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   cloudSessions,
   onAddExerciseToSession
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'football' | 'fitness' | 'gk'>('all');
-  const [momentFilter, setMomentFilter] = useState<string>('all');
+  const contextStorageKey = 'exercises_library';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    searchTerm: '',
+    categoryFilter: 'all' as 'all' | 'football' | 'fitness' | 'gk',
+    momentFilter: 'all',
+    targetSessionId: 'active',
+    targetCategory: 'football' as 'football' | 'fitness' | 'gk',
+    customSessionNum: ''
+  });
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'football' | 'fitness' | 'gk'>(restoredContext.categoryFilter);
+  const [momentFilter, setMomentFilter] = useState<string>(restoredContext.momentFilter);
   
   // Custom exercises saved specifically by the user in the library.
   // Initial value is only a local cache used for instant paint / offline; Firestore is the source of truth (see subscription effect below).
@@ -152,9 +162,9 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   };
 
   // Target session and department selector state when adding to session
-  const [targetSessionId, setTargetSessionId] = useState<string>('active');
-  const [targetCategory, setTargetCategory] = useState<'football' | 'fitness' | 'gk'>('football');
-  const [customSessionNum, setCustomSessionNum] = useState<string>('');
+  const [targetSessionId, setTargetSessionId] = useState<string>(restoredContext.targetSessionId);
+  const [targetCategory, setTargetCategory] = useState<'football' | 'fitness' | 'gk'>(restoredContext.targetCategory);
+  const [customSessionNum, setCustomSessionNum] = useState<string>(restoredContext.customSessionNum);
   const [isSubmittingCloudAdd, setIsSubmittingCloudAdd] = useState(false);
 
   // Notification toast when exercise is added to session
@@ -180,6 +190,17 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       console.error('Failed to save deleted exercise IDs:', e);
     }
   }, [deletedExerciseIds]);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, {
+      searchTerm,
+      categoryFilter,
+      momentFilter,
+      targetSessionId,
+      targetCategory,
+      customSessionNum
+    });
+  }, [searchTerm, categoryFilter, momentFilter, targetSessionId, targetCategory, customSessionNum]);
 
   // Extract exercises explicitly saved in user's library
   const allExercises = (() => {

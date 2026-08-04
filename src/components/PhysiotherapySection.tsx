@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Stethoscope, 
   PlusCircle, 
@@ -12,6 +12,7 @@ import {
   HeartPulse
 } from 'lucide-react';
 import { PhysioRecord, SquadPlayer } from '../types';
+import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface PhysiotherapySectionProps {
   records: PhysioRecord[];
@@ -26,10 +27,19 @@ export const PhysiotherapySection: React.FC<PhysiotherapySectionProps> = ({
   onUpdateRecords,
   onUpdateSquadPlayerStatus
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const contextStorageKey = 'physiotherapy_section';
+  const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
+    searchTerm: '',
+    statusFilter: 'ALL'
+  });
+  const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
+  const [statusFilter, setStatusFilter] = useState<string>(restoredContext.statusFilter);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PhysioRecord | null>(null);
+
+  useEffect(() => {
+    writeWorkspaceRestoreState(contextStorageKey, { searchTerm, statusFilter });
+  }, [searchTerm, statusFilter]);
 
   const [formData, setFormData] = useState<{
     playerId: string;
