@@ -18,6 +18,7 @@ import {
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { 
   CloudTrainingSession, 
+  saveSessionFieldsByRole,
   saveSessionToCloud, 
   subscribeToExerciseLibrary, 
   saveExerciseToLibraryCloud, 
@@ -413,16 +414,15 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
           exercises: []
         };
 
-        const updatedCloudSess: CloudTrainingSession = {
+        const updatedCloudSess: TrainingSession = {
           ...targetCloudSess,
           [blockPropName]: {
             ...existingBlock,
             exercises: [...(existingBlock.exercises || []), clonedEx]
-          },
-          updatedAt: Date.now()
+          }
         };
 
-        await saveSessionToCloud(updatedCloudSess);
+        await saveSessionFieldsByRole(targetCloudSess.id, sectionCat, updatedCloudSess);
         setOpenAddDropdownId(null);
         const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
         const sessNum = targetCloudSess.sessionNumber || '?';
