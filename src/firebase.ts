@@ -458,6 +458,17 @@ export async function saveSessionFieldsByRole(
   const saveTimestamp = Date.now();
   const ref = doc(db, SESSIONS_COLLECTION, sessionId);
 
+  if (role === 'gk') {
+    console.log('[GK TRACE][saveSessionFieldsByRole] received session', {
+      role,
+      sessionId,
+      gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
+      gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
+      gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
+      gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
+    });
+  }
+
   // Define which fields each role owns
   const fieldsToUpdate: Record<string, any> = {
     updatedAt: saveTimestamp
@@ -495,6 +506,14 @@ export async function saveSessionFieldsByRole(
 
   const sanitizedFieldsToUpdate = sanitizeForFirestore(fieldsToUpdate);
 
+  if (role === 'gk') {
+    console.log('[GK TRACE][saveSessionFieldsByRole] payload to Firestore', {
+      role,
+      sessionId,
+      payload: sanitizedFieldsToUpdate
+    });
+  }
+
   // Use setDoc with merge to only modify specific fields (creates document if it doesn't exist)
   let attempt = 0;
   while (true) {
@@ -508,6 +527,12 @@ export async function saveSessionFieldsByRole(
         setDoc(ref, sanitizedFieldsToUpdate, { merge: true }),
         timeoutPromise
       ]);
+      if (role === 'gk') {
+        console.log('[GK TRACE][saveSessionFieldsByRole] setDoc completed successfully', {
+          role,
+          sessionId
+        });
+      }
       clearQuotaExceeded(SESSIONS_COLLECTION);
       emitSyncStatus({ status: 'saved', scope: SESSIONS_COLLECTION });
       return saveTimestamp;
@@ -606,7 +631,18 @@ export function subscribeToSessions(
   return onSnapshot(q, (querySnapshot) => {
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
-      sessions.push(doc.data() as CloudTrainingSession);
+      const sessionData = doc.data() as CloudTrainingSession;
+      if (sessionData.gkUpdatedAt || sessionData.gkWarmUp || sessionData.gkMainPart || sessionData.gkCoolDown || sessionData.gkPlayerGroups) {
+        console.log('[GK TRACE][subscribeToSessions] snapshot session', {
+          id: sessionData.id,
+          docId: doc.id,
+          gkWarmUpLength: sessionData.gkWarmUp?.exercises?.length ?? 0,
+          gkMainPartLength: sessionData.gkMainPart?.exercises?.length ?? 0,
+          gkCoolDownLength: sessionData.gkCoolDown?.exercises?.length ?? 0,
+          gkPlayerGroupsLength: sessionData.gkPlayerGroups?.length ?? 0
+        });
+      }
+      sessions.push(sessionData);
     });
     callback(sessions);
   }, (error) => {

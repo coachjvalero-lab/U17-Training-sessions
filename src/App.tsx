@@ -134,7 +134,7 @@ function shouldRequireLoginForSharedLink(): boolean {
 // Fills missing fitness/GK blocks and normalizes the squad roster
 function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
   const gkTemplate = getDefaultSession();
-  return normalizeSessionRoster({
+  const unifiedSession = normalizeSessionRoster({
     ...base,
     fitnessWarmUp: base.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
     fitnessMainPart: base.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
@@ -145,6 +145,18 @@ function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
     gkCoolDown: base.gkCoolDown || gkTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
     gkPlayerGroups: base.gkPlayerGroups || [],
   } as TrainingSession);
+
+  if (base.gkWarmUp || base.gkMainPart || base.gkCoolDown || base.gkPlayerGroups) {
+    console.log('[GK TRACE][buildUnifiedSession] after normalize', {
+      sessionId: unifiedSession.id,
+      gkWarmUpLength: unifiedSession.gkWarmUp?.exercises?.length ?? 0,
+      gkMainPartLength: unifiedSession.gkMainPart?.exercises?.length ?? 0,
+      gkCoolDownLength: unifiedSession.gkCoolDown?.exercises?.length ?? 0,
+      gkPlayerGroupsLength: unifiedSession.gkPlayerGroups?.length ?? 0
+    });
+  }
+
+  return unifiedSession;
 }
 
 export default function App() {
@@ -633,6 +645,16 @@ export default function App() {
       baseSession.sessionNumber = '001';
     }
 
+    if (sessionToLoad.gkUpdatedAt || baseSession.gkWarmUp || baseSession.gkMainPart || baseSession.gkCoolDown || baseSession.gkPlayerGroups) {
+      console.log('[GK TRACE][applyCloudSessionToState] before buildUnifiedSession', {
+        id: sessionToLoad.id,
+        gkWarmUpLength: baseSession.gkWarmUp?.exercises?.length ?? 0,
+        gkMainPartLength: baseSession.gkMainPart?.exercises?.length ?? 0,
+        gkCoolDownLength: baseSession.gkCoolDown?.exercises?.length ?? 0,
+        gkPlayerGroupsLength: baseSession.gkPlayerGroups?.length ?? 0
+      });
+    }
+
     const unifiedSession: TrainingSession = buildUnifiedSession({
       ...baseSession,
     });
@@ -988,6 +1010,15 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
+      if (role === 'gk') {
+        console.log('[GK TRACE][before Save click flow] current session state', {
+          sessionId: session.id,
+          gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
+          gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
+          gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
+          gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
+        });
+      }
       const sessionToSave: TrainingSession = {
         ...session,
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName

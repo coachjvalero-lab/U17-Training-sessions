@@ -92,7 +92,16 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
     },
     playerGroupsField: 'gkPlayerGroups',
     gameMoments: GOALKEEPER_GAME_MOMENTS,
-    save: (session) => saveSessionFieldsByRole(session.id, 'gk', session),
+    save: (session) => {
+      console.log('[GK TRACE][GoalkeeperModule.save] before saveSessionFieldsByRole', {
+        sessionId: session.id,
+        gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
+        gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
+        gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
+        gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
+      });
+      return saveSessionFieldsByRole(session.id, 'gk', session);
+    },
     getCloudUpdatedAt: (session) => session.gkUpdatedAt || session.updatedAt || 0
   }
 };
