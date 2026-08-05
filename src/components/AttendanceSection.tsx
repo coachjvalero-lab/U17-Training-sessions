@@ -46,6 +46,7 @@ interface AttendanceSectionProps {
   onChangeRoster?: (roster: string[]) => void;
   excludedPlayers?: string[];
   onExcludePlayer?: (name: string) => void;
+  onIncludePlayer?: (name: string) => void;
 }
 
 export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
@@ -55,7 +56,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   onChangeSession,
   onChangeRoster,
   excludedPlayers = [],
-  onExcludePlayer
+  onExcludePlayer,
+  onIncludePlayer
 }) => {
   const contextStorageKey = 'attendance_section';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -95,7 +97,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const isPlayerExcluded = (name: string) => {
     if (!name) return true;
     const lower = name.trim().toLowerCase();
-    return lower === 'jalila' || excludedPlayers.some(e => e.toLowerCase() === lower);
+    return excludedPlayers.some(e => e.toLowerCase() === lower);
   };
 
   // Calculate global squad roster (union of squadRoster and any player appearing in attendance, minus excluded)
@@ -188,10 +190,12 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     e.preventDefault();
     if (!newPlayerName.trim()) return;
     const name = newPlayerName.trim();
+    const lower = name.toLowerCase();
     if (squadRoster.includes(name)) {
       alert('Player already in squad roster.');
       return;
     }
+    if (onIncludePlayer) onIncludePlayer(lower);
     const updatedRoster = [...squadRoster, name];
     if (onChangeRoster) onChangeRoster(updatedRoster);
 
@@ -280,6 +284,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         squadRoster={squadRoster}
         onChangeAttendance={(attendance) => onChangeSession({ attendance })}
         onChangeRoster={onChangeRoster}
+        excludedPlayers={excludedPlayers}
+        onExcludePlayer={onExcludePlayer}
+        onIncludePlayer={onIncludePlayer}
       />
 
       {/* Global Stat Cards Grid */}

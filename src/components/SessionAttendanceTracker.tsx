@@ -27,6 +27,7 @@ interface SessionAttendanceTrackerProps {
   compact?: boolean;
   excludedPlayers?: string[];
   onExcludePlayer?: (name: string) => void;
+  onIncludePlayer?: (name: string) => void;
 }
 
 export const ABSENCE_REASONS: { key: AbsenceReason; label: string; icon: any; color: string; bg: string }[] = [
@@ -48,7 +49,8 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   onChangeRoster,
   compact: _compact = false,
   excludedPlayers = [],
-  onExcludePlayer
+  onExcludePlayer,
+  onIncludePlayer
 }) => {
   const contextStorageKey = 'session_attendance_tracker';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -64,11 +66,10 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
     writeWorkspaceRestoreState(contextStorageKey, { isExpanded, filter });
   }, [isExpanded, filter]);
 
-  // Filter out excluded players (e.g., Jalila) — the exclusion list is shared across the whole staff via Firestore (see App.tsx)
+  // Filter out excluded players — the exclusion list is shared across the whole staff via Firestore (see App.tsx)
   const isPlayerExcluded = (name: string) => {
     if (!name) return true;
     const lower = name.trim().toLowerCase();
-    if (lower === 'jalila') return true;
     return excludedPlayers.some(p => p.toLowerCase() === lower);
   };
 
@@ -149,9 +150,13 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
     if (!newPlayerName.trim()) return;
 
     const trimmed = newPlayerName.trim();
+    const lower = trimmed.toLowerCase();
     if (squadRoster.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
       alert('Player already exists in squad roster!');
       return;
+    }
+    if (onIncludePlayer) {
+      onIncludePlayer(lower);
     }
 
     const updatedRoster = [...squadRoster, trimmed];

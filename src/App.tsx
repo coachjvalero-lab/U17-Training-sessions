@@ -43,6 +43,7 @@ import {
   deletePhysioRecordFromCloud,
   subscribeToExcludedPlayers,
   addExcludedPlayersCloud,
+  removeExcludedPlayersCloud,
   subscribeToTeamLogo,
   saveTeamLogoToCloud,
   subscribeToVideoAnalysis,
@@ -271,12 +272,9 @@ export default function App() {
       try {
         const saved = localStorage.getItem('u17_excluded_players');
         const list: string[] = saved ? JSON.parse(saved) : [];
-        if (!list.some(p => p.toLowerCase() === 'jalila')) {
-          list.push('jalila');
-        }
-        return list;
+        return list.filter(p => p.trim().toLowerCase() !== 'jalila');
       } catch {
-        return ['jalila'];
+        return [];
       }
     })();
     initialExcludedPlayersRef.current = computed;
@@ -294,10 +292,10 @@ export default function App() {
       if (names.length === 0 && !hasExcludedPlayersMigrationSettledRef.current) {
         return;
       }
-      const merged = names.some(n => n.toLowerCase() === 'jalila') ? names : [...names, 'jalila'];
-      setExcludedPlayers(merged);
+      const sanitized = names.filter(n => n.trim().toLowerCase() !== 'jalila');
+      setExcludedPlayers(sanitized);
       try {
-        localStorage.setItem('u17_excluded_players', JSON.stringify(merged));
+        localStorage.setItem('u17_excluded_players', JSON.stringify(sanitized));
       } catch (e) {
         console.warn('Excluded players local cache warning:', e);
       }
@@ -310,12 +308,22 @@ export default function App() {
 
   const handleExcludePlayer = (playerName: string) => {
     const lower = playerName.trim().toLowerCase();
-    const updated = Array.from(new Set([...excludedPlayers, lower, 'jalila']));
+    const updated = Array.from(new Set([...excludedPlayers, lower]));
     setExcludedPlayers(updated);
     try {
       localStorage.setItem('u17_excluded_players', JSON.stringify(updated));
     } catch (e) {}
-    addExcludedPlayersCloud([lower, 'jalila']).catch(err => console.warn('Cloud save failed for excluded player:', err));
+    addExcludedPlayersCloud([lower]).catch(err => console.warn('Cloud save failed for excluded player:', err));
+  };
+
+  const handleIncludePlayer = (playerName: string) => {
+    const lower = playerName.trim().toLowerCase();
+    const updated = excludedPlayers.filter(name => name.toLowerCase() !== lower);
+    setExcludedPlayers(updated);
+    try {
+      localStorage.setItem('u17_excluded_players', JSON.stringify(updated));
+    } catch (e) {}
+    removeExcludedPlayersCloud([lower]).catch(err => console.warn('Cloud remove failed for excluded player:', err));
   };
 
   const initialTeamLogoRef = useRef('');
@@ -1401,6 +1409,7 @@ export default function App() {
             initialSubTab={activeSection === 'attendance' ? 'attendance' : 'roster'}
             excludedPlayers={excludedPlayers}
             onExcludePlayer={handleExcludePlayer}
+            onIncludePlayer={handleIncludePlayer}
           />
         ) : activeSection === 'physio' ? (
           <PhysiotherapySection
@@ -1771,6 +1780,7 @@ export default function App() {
               onChangeRoster={handleUpdateRoster}
               excludedPlayers={excludedPlayers}
               onExcludePlayer={handleExcludePlayer}
+              onIncludePlayer={handleIncludePlayer}
             />
 
             {/* Section: Player Groups Manager */}

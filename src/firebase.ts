@@ -11,6 +11,7 @@ import {
   orderBy, 
   onSnapshot,
   arrayUnion,
+  arrayRemove,
   setLogLevel
 } from 'firebase/firestore';
 import { 
@@ -1068,6 +1069,14 @@ export async function addExcludedPlayersCloud(names: string[]): Promise<void> {
   const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayers');
   await runWriteWithErrorReporting(ATTENDANCE_META_COLLECTION, 'excludedPlayers', 'Update excluded players', async () => {
     await setDoc(metaRef, { names: arrayUnion(...names), updatedAt: Date.now() }, { merge: true });
+  });
+}
+
+export async function removeExcludedPlayersCloud(names: string[]): Promise<void> {
+  if (names.length === 0) return;
+  const metaRef = doc(db, ATTENDANCE_META_COLLECTION, 'excludedPlayers');
+  await runWriteWithErrorReporting(ATTENDANCE_META_COLLECTION, 'excludedPlayers', 'Remove excluded players', async () => {
+    await setDoc(metaRef, { names: arrayRemove(...names), updatedAt: Date.now() }, { merge: true });
   });
 }
 

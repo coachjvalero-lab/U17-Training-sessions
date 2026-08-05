@@ -36,6 +36,7 @@ interface SquadRosterSectionProps {
   initialSubTab?: 'roster' | 'attendance';
   excludedPlayers?: string[];
   onExcludePlayer?: (name: string) => void;
+  onIncludePlayer?: (name: string) => void;
 }
 
 // Preset Female Athlete Avatar Options
@@ -61,7 +62,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   onChangeRoster = () => {},
   initialSubTab = 'roster',
   excludedPlayers,
-  onExcludePlayer
+  onExcludePlayer,
+  onIncludePlayer
 }) => {
   const contextStorageKey = 'squad_roster_section';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -500,6 +502,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           onChangeRoster={onChangeRoster}
           excludedPlayers={excludedPlayers}
           onExcludePlayer={onExcludePlayer}
+          onIncludePlayer={onIncludePlayer}
         />
       ) : (
         <>
