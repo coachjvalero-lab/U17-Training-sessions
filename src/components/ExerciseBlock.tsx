@@ -14,7 +14,7 @@ interface ExerciseBlockProps {
   expandedExercises: Record<string, boolean>;
   toggleExpand: (id: string) => void;
   sessionGroups?: PlayerGroup[];
-  isGk?: boolean;
+  gameMoments?: GameMoment[];
 }
 
 export const GAME_MOMENTS: GameMoment[] = ['-', 'Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Match', 'Other'];
@@ -125,11 +125,12 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   expandedExercises, 
   toggleExpand,
   sessionGroups,
-  isGk
+  gameMoments
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
   const [addedToLibId, setAddedToLibId] = useState<string | null>(null);
+  const availableGameMoments = (gameMoments && gameMoments.length > 0) ? gameMoments : GAME_MOMENTS;
 
   const handleAddToLibrary = (ex: Exercise, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -713,7 +714,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           onChange={(e) => updateExercise(ex.id, { gameMoment: e.target.value as GameMoment })}
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-1 print:bg-slate-50 print:border print:border-slate-200 print:rounded print:text-[10px] print:font-bold truncate cursor-pointer"
                         >
-                          {((isGk || block.id?.includes('gk') || ex.playerGroups === 'Goalkeepers') ? GK_GAME_MOMENTS : GAME_MOMENTS).map(moment => (
+                          {availableGameMoments.map(moment => (
                             <option key={moment} value={moment}>{moment}</option>
                           ))}
                         </select>

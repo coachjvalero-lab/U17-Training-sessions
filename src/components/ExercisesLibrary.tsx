@@ -30,6 +30,7 @@ import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { getModuleGameMoments, resolveExerciseModule } from '../modules/trainingModules';
 
 interface ExercisesLibraryProps {
   currentSession: TrainingSession;
@@ -226,7 +227,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
     // Only custom exercises saved by the user in their library
     customExercises.forEach(ex => {
-      const cat = ex.isFitness ? 'fitness' : (ex.id.includes('gk') ? 'gk' : 'football');
+      const cat = resolveExerciseModule(ex);
       addEx(ex, 'Personal Library', cat, true);
     });
 
@@ -297,7 +298,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       image: ex.image || ''
     });
     
-    setNewExSection(ex.sectionCategory || (ex.isFitness ? 'fitness' : 'football'));
+    setNewExSection(ex.sectionCategory || resolveExerciseModule(ex));
     setIsDuplicatingModal(true);
     setShowCreateModal(true);
   };
@@ -511,8 +512,8 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     }
   };
 
-  const gameMomentsList: GameMoment[] = ['-', 'Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Match', 'Other'];
-  const gkGameMomentsList: GameMoment[] = ['-', 'Shot stop', 'Depth control', '1 vs 1', 'Feet distribution', 'Cross defending'];
+  const gameMomentsList: GameMoment[] = getModuleGameMoments('football');
+  const gkGameMomentsList: GameMoment[] = getModuleGameMoments('gk');
 
   // Reset momentFilter if switching between Goalkeeper and other categories
   useEffect(() => {

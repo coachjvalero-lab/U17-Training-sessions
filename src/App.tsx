@@ -21,7 +21,6 @@ import {
   TrainingSession, 
   Exercise, 
   PlayerGroup, 
-  TrainingBlock, 
   PlayerAttendance, 
   PortalSection,
   SquadPlayer,
@@ -30,10 +29,6 @@ import {
   MatchFixture 
 } from './types';
 import { 
-  saveSessionToCloud,
-  saveSessionFieldsByRole, 
-  deleteSessionFromCloud, 
-  subscribeToSessions, 
   subscribeToAuth,
   logoutUser,
   markQuotaExceeded,
@@ -60,6 +55,23 @@ import {
 } from './firebase';
 import { initPermissionsCloudSync } from './utils/permissions';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
+import {
+  DEFAULT_MODULE_ID,
+  addExerciseToSessionByModule,
+  getModuleCloudUpdatedAt,
+  getModuleGameMoments,
+  getModuleIdFromSection,
+  getModuleRoleLabel,
+  getModuleSessionView,
+  updateSessionExercisesByModule,
+  updateSessionGroupsByModule
+} from './modules/trainingModules';
+import {
+  createTrainingSession,
+  deleteTrainingSession,
+  saveTrainingSessionBySection,
+  subscribeTrainingSessions
+} from './modules/trainingSessionPersistence';
 import { 
   FileText,
   Loader2,
@@ -633,7 +645,7 @@ export default function App() {
   // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
   useEffect(() => {
     setIsLoadingCloud(true);
-    const unsubscribe = subscribeToSessions(
+    const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
         setCloudSessions(sessions);
         setIsLoadingCloud(false);
@@ -695,7 +707,6 @@ export default function App() {
         }
         hasInitialCloudLoadedRef.current = true;
       },
-      undefined,
       () => {
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
@@ -775,93 +786,8 @@ export default function App() {
   };
 
   const handleUpdateExercises = (blockKey: 'warmUp' | 'mainPart' | 'coolDown', exercises: Exercise[]) => {
-    setSession(prev => {
-      if (activeSection === 'football') {
-        if (blockKey === 'warmUp') {
-          const footballWarmUpExs = exercises.filter(ex => !ex.isFitness);
-          const updatedFitnessExs = exercises.filter(ex => ex.isFitness);
-
-          const fitnessWarmUpIds = new Set((prev.fitnessWarmUp?.exercises || []).map(e => e.id));
-          const fitnessMainPartIds = new Set((prev.fitnessMainPart?.exercises || []).map(e => e.id));
-
-          const newFitWarmUp = updatedFitnessExs.filter(e => fitnessWarmUpIds.has(e.id));
-          const newFitMain = updatedFitnessExs.filter(e => fitnessMainPartIds.has(e.id));
-
-          const unknownFitExs = updatedFitnessExs.filter(e => 
-            !fitnessWarmUpIds.has(e.id) && !fitnessMainPartIds.has(e.id)
-          );
-
-          return {
-            ...prev,
-            warmUp: {
-              ...prev.warmUp,
-              exercises: footballWarmUpExs
-            },
-            fitnessWarmUp: {
-              ...(prev.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] }),
-              exercises: [...newFitWarmUp, ...unknownFitExs]
-            },
-            fitnessMainPart: {
-              ...(prev.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] }),
-              exercises: newFitMain
-            }
-          };
-        } else if (blockKey === 'coolDown') {
-          const footballCoolDownExs = exercises.filter(ex => !ex.isFitness);
-          const updatedFitnessExs = exercises.filter(ex => ex.isFitness);
-
-          const fitnessCoolDownIds = new Set((prev.fitnessCoolDown?.exercises || []).map(e => e.id));
-          const newFitCool = updatedFitnessExs.filter(e => fitnessCoolDownIds.has(e.id));
-          const unknownFitCoolExs = updatedFitnessExs.filter(e => !fitnessCoolDownIds.has(e.id));
-
-          return {
-            ...prev,
-            coolDown: {
-              ...prev.coolDown,
-              exercises: footballCoolDownExs
-            },
-            fitnessCoolDown: {
-              ...(prev.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] }),
-              exercises: [...newFitCool, ...unknownFitCoolExs]
-            }
-          };
-        } else {
-          return {
-            ...prev,
-            [blockKey]: {
-              ...prev[blockKey],
-              exercises
-            }
-          };
-        }
-      } else if (activeSection === 'fitness') {
-        const fitnessKey = blockKey === 'warmUp' 
-          ? 'fitnessWarmUp' 
-          : blockKey === 'mainPart' 
-            ? 'fitnessMainPart' 
-            : 'fitnessCoolDown';
-        return {
-          ...prev,
-          [fitnessKey]: {
-            ...(prev[fitnessKey] || { id: `${blockKey}-block-fitness`, title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down', exercises: [] }),
-            exercises
-          }
-        };
-      } else {
-        const gkKey = blockKey === 'warmUp' 
-          ? 'gkWarmUp' 
-          : blockKey === 'mainPart' 
-            ? 'gkMainPart' 
-            : 'gkCoolDown';
-        return {
-          ...prev,
-          [gkKey]: {
-            ...(prev[gkKey] || { id: `${blockKey}-block-gk`, title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down', exercises: [] }),
-            exercises
-          }
-        };
-      }
-    });
+    const moduleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    setSession(prev => updateSessionExercisesByModule(prev, moduleId, blockKey, exercises));
   };
 
   const handleAddExerciseFromLibrary = (
@@ -869,31 +795,12 @@ export default function App() {
     exercise: Exercise,
     targetSection?: 'football' | 'fitness' | 'gk'
   ) => {
-    const section = targetSection || (activeSection === 'exercises' ? 'football' : activeSection);
-    setSession(prev => {
-      let blockPropName: keyof TrainingSession;
-      if (section === 'football') {
-        blockPropName = blockKey;
-      } else if (section === 'fitness') {
-        blockPropName = blockKey === 'warmUp' ? 'fitnessWarmUp' : blockKey === 'mainPart' ? 'fitnessMainPart' : 'fitnessCoolDown';
-      } else {
-        blockPropName = blockKey === 'warmUp' ? 'gkWarmUp' : blockKey === 'mainPart' ? 'gkMainPart' : 'gkCoolDown';
-      }
+    const section = targetSection || (activeSection === 'exercises' ? DEFAULT_MODULE_ID : activeSection);
+    const moduleId = section === 'football' || section === 'fitness' || section === 'gk'
+      ? section
+      : DEFAULT_MODULE_ID;
 
-      const existingBlock = (prev[blockPropName] as TrainingBlock) || {
-        id: `${blockKey}-block-${section}`,
-        title: blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down',
-        exercises: []
-      };
-
-      return {
-        ...prev,
-        [blockPropName]: {
-          ...existingBlock,
-          exercises: [...(existingBlock.exercises || []), exercise]
-        }
-      };
-    });
+    setSession(prev => addExerciseToSessionByModule(prev, moduleId, blockKey, exercise));
 
     if (exercise.id) {
       setExpandedExercises(prev => ({ ...prev, [exercise.id]: true }));
@@ -901,24 +808,8 @@ export default function App() {
   };
 
   const handleUpdateGroups = (playerGroups: PlayerGroup[]) => {
-    setSession(prev => {
-      if (activeSection === 'football') {
-        return {
-          ...prev,
-          playerGroups
-        };
-      } else if (activeSection === 'fitness') {
-        return {
-          ...prev,
-          fitnessPlayerGroups: playerGroups
-        };
-      } else {
-        return {
-          ...prev,
-          gkPlayerGroups: playerGroups
-        };
-      }
-    });
+    const moduleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    setSession(prev => updateSessionGroupsByModule(prev, moduleId, playerGroups));
   };
 
   const handleUpdateRoster = (squadRoster: string[]) => {
@@ -1066,33 +957,16 @@ export default function App() {
   };
 
   const handleSaveActiveToCloud = async () => {
-    // Determine which role is saving based on activeSection
-    let role: 'football' | 'fitness' | 'gk' = 'football';
-    if (activeSection === 'fitness') {
-      role = 'fitness';
-    } else if (activeSection === 'gk') {
-      role = 'gk';
-    }
+    const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
 
     // Role-specific conflict check: only compare the timestamp for fields this role owns
     const cloudCopy = cloudSessions.find(s => s.id === session.id);
     if (cloudCopy) {
-      let cloudRoleTime = 0;
-      let localRoleTime = 0;
-
-      if (role === 'football') {
-        cloudRoleTime = cloudCopy.footballUpdatedAt || cloudCopy.updatedAt || 0;
-        localRoleTime = lastLoadedSessionTimeRef.current.football;
-      } else if (role === 'fitness') {
-        cloudRoleTime = cloudCopy.fitnessUpdatedAt || cloudCopy.updatedAt || 0;
-        localRoleTime = lastLoadedSessionTimeRef.current.fitness;
-      } else if (role === 'gk') {
-        cloudRoleTime = cloudCopy.gkUpdatedAt || cloudCopy.updatedAt || 0;
-        localRoleTime = lastLoadedSessionTimeRef.current.gk;
-      }
+      const cloudRoleTime = getModuleCloudUpdatedAt(cloudCopy, role);
+      const localRoleTime = lastLoadedSessionTimeRef.current[role];
 
       if (cloudRoleTime > localRoleTime) {
-        const roleLabel = role === 'football' ? 'Football' : role === 'fitness' ? 'Fitness' : 'GK';
+        const roleLabel = getModuleRoleLabel(role);
         const overwrite = confirm(
           `Los campos de ${roleLabel} fueron actualizados por otra persona mientras editabas.\n\n` +
           'Aceptar = sobrescribir con TUS cambios.\nCancelar = mantener tus cambios sin subir y revisar la otra versión primero.'
@@ -1121,8 +995,7 @@ export default function App() {
       lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
 
       try {
-        // Save only the fields owned by this role to avoid overwriting other roles' changes
-        const savedTime = await saveSessionFieldsByRole(sessionToSave.id, role, sessionToSave);
+        const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         
         // Update with the actual server timestamp
         lastLoadedSessionTimeRef.current[role] = savedTime;
@@ -1168,7 +1041,7 @@ export default function App() {
 
       // Use full document save for new sessions (all fields are new)
       try {
-        const savedTime = await saveSessionToCloud(newSession);
+        const savedTime = await createTrainingSession(newSession);
         lastLoadedSessionTimeRef.current = {
           global: savedTime,
           football: savedTime,
@@ -1221,25 +1094,12 @@ export default function App() {
       
       // Expand exercises of loaded session
       const expanded: Record<string, boolean> = {};
-      const activeWarmUp = activeSection === 'football' 
-        ? unifiedSession.warmUp 
-        : activeSection === 'fitness'
-        ? unifiedSession.fitnessWarmUp
-        : unifiedSession.gkWarmUp;
-      const activeMainPart = activeSection === 'football' 
-        ? unifiedSession.mainPart 
-        : activeSection === 'fitness'
-        ? unifiedSession.fitnessMainPart
-        : unifiedSession.gkMainPart;
-      const activeCoolDown = activeSection === 'football' 
-        ? unifiedSession.coolDown 
-        : activeSection === 'fitness'
-        ? unifiedSession.fitnessCoolDown
-        : unifiedSession.gkCoolDown;
+      const moduleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+      const moduleSessionView = getModuleSessionView(unifiedSession, moduleId);
 
-      activeWarmUp?.exercises.forEach(ex => { expanded[ex.id] = true; });
-      activeMainPart?.exercises.forEach(ex => { expanded[ex.id] = true; });
-      activeCoolDown?.exercises.forEach(ex => { expanded[ex.id] = true; });
+      moduleSessionView.warmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
+      moduleSessionView.mainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
+      moduleSessionView.coolDown.exercises.forEach(ex => { expanded[ex.id] = true; });
       setExpandedExercises(expanded);
     }
   };
@@ -1249,7 +1109,7 @@ export default function App() {
     if (confirm(`Are you absolutely sure you want to delete session #${sessionNum} from the cloud database? This cannot be undone.`)) {
       try {
         setIsCloudSaving(true);
-        await deleteSessionFromCloud(sessionId);
+        await deleteTrainingSession(sessionId);
 
         // If the deleted session is currently active in React state:
         if (session.id === sessionId) {
@@ -1305,13 +1165,7 @@ export default function App() {
   };
 
   const handleCopyShareLink = async () => {
-    // Determine which role is saving based on activeSection
-    let role: 'football' | 'fitness' | 'gk' = 'football';
-    if (activeSection === 'fitness') {
-      role = 'fitness';
-    } else if (activeSection === 'gk') {
-      role = 'gk';
-    }
+    const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
 
     try {
       setIsCloudSaving(true);
@@ -1330,7 +1184,7 @@ export default function App() {
 
       // 3. Try Cloud Firestore save (only save fields for current role)
       try {
-        const savedTime = await saveSessionFieldsByRole(sessionToSave.id, role, sessionToSave);
+        const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         lastLoadedSessionTimeRef.current[role] = savedTime;
         lastLoadedSessionTimeRef.current.global = savedTime;
       } catch (cloudErr) {
@@ -1368,59 +1222,12 @@ export default function App() {
     }));
   };
 
-  // Dynamically map active blocks and exercises based on active tab
-  const fitnessWarmUpAndMainExercises = [
-    ...(session.fitnessWarmUp?.exercises || []),
-    ...(session.fitnessMainPart?.exercises || [])
-  ].map(ex => ({
-    ...ex,
-    isFitness: true,
-    hideGraphics: true
-  }));
-
-  const fitnessCoolDownExercises = [
-    ...(session.fitnessCoolDown?.exercises || [])
-  ].map(ex => ({
-    ...ex,
-    isFitness: true,
-    hideGraphics: true
-  }));
-
-  const activeWarmUp = activeSection === 'football'
-    ? {
-        ...session.warmUp,
-        exercises: [
-          ...session.warmUp.exercises,
-          ...fitnessWarmUpAndMainExercises
-        ]
-      }
-    : activeSection === 'fitness'
-    ? (session.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] })
-    : (session.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] });
-
-  const activeMainPart = activeSection === 'football'
-    ? session.mainPart
-    : activeSection === 'fitness'
-    ? (session.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] })
-    : (session.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] });
-
-  const activeCoolDown = activeSection === 'football'
-    ? {
-        ...session.coolDown,
-        exercises: [
-          ...session.coolDown.exercises,
-          ...fitnessCoolDownExercises
-        ]
-      }
-    : activeSection === 'fitness'
-    ? (session.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] })
-    : (session.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] });
-
-  const activePlayerGroups = activeSection === 'football'
-    ? session.playerGroups
-    : activeSection === 'fitness'
-    ? (session.fitnessPlayerGroups || [])
-    : (session.gkPlayerGroups || []);
+  const activeModuleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+  const activeModuleSessionView = getModuleSessionView(session, activeModuleId);
+  const activeWarmUp = activeModuleSessionView.warmUp;
+  const activeMainPart = activeModuleSessionView.mainPart;
+  const activeCoolDown = activeModuleSessionView.coolDown;
+  const activePlayerGroups = activeModuleSessionView.playerGroups;
 
   const renderThemeToggle = () => (
     <div className="fixed top-4 right-4 z-[90] print:hidden">
@@ -1671,7 +1478,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('football')}
                 />
 
                 {/* Section: Main Part Block */}
@@ -1681,7 +1488,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('football')}
                 />
 
                 {/* Section: Cool Down Block */}
@@ -1691,7 +1498,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('football')}
                 />
 
                 {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
@@ -1779,7 +1586,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('fitness')}
                 />
 
                 {/* Section: Main Part Block */}
@@ -1789,7 +1596,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('fitness')}
                 />
 
                 {/* Section: Cool Down Block */}
@@ -1799,7 +1606,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={false}
+                  gameMoments={getModuleGameMoments('fitness')}
                 />
 
                 {/* Section: Observations & Notes */}
@@ -1887,7 +1694,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={true}
+                  gameMoments={getModuleGameMoments('gk')}
                 />
 
                 {/* Section: Main Part Block */}
@@ -1897,7 +1704,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={true}
+                  gameMoments={getModuleGameMoments('gk')}
                 />
 
                 {/* Section: Cool Down Block */}
@@ -1907,7 +1714,7 @@ export default function App() {
                   expandedExercises={expandedExercises}
                   toggleExpand={toggleExpand}
                   sessionGroups={activePlayerGroups}
-                  isGk={true}
+                  gameMoments={getModuleGameMoments('gk')}
                 />
 
                 {/* Section: Observations & Notes */}
@@ -1982,7 +1789,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
-              isGk={activeSection === 'gk'}
+              gameMoments={getModuleGameMoments(activeModuleId)}
             />
 
             {/* Section: Main Part Block */}
@@ -1992,7 +1799,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
-              isGk={activeSection === 'gk'}
+              gameMoments={getModuleGameMoments(activeModuleId)}
             />
 
             {/* Section: Cool Down Block */}
@@ -2002,7 +1809,7 @@ export default function App() {
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
               sessionGroups={activePlayerGroups}
-              isGk={activeSection === 'gk'}
+              gameMoments={getModuleGameMoments(activeModuleId)}
             />
 
             {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}

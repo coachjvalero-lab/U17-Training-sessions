@@ -438,7 +438,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
           currentSession={session}
           cloudSessions={cloudSessions}
           onAddExerciseToSession={onAddExerciseToSession || (() => {})}
-          activeSection="football"
+          activeSection={role}
         />
       ) : (
         /* TRAINING SESSIONS SUB MODULE WORKSPACE */
