@@ -44,6 +44,36 @@ export interface DrillCard {
   role?: 'football' | 'fitness' | 'gk';
 }
 
+const MODULE_PRESENTATION: Record<'football' | 'fitness' | 'gk', {
+  title: string;
+  subtitle: string;
+  badge: string;
+  intensity: string;
+  groupsField: 'playerGroups' | 'fitnessPlayerGroups' | 'gkPlayerGroups';
+}> = {
+  football: {
+    title: 'Football Management Hub',
+    subtitle: 'Select a module to view daily training sessions, planification microcycles, or match fixtures',
+    badge: 'Al Ula FC',
+    intensity: 'Football',
+    groupsField: 'playerGroups'
+  },
+  fitness: {
+    title: 'Fitness & Conditioning Hub',
+    subtitle: 'Create and review conditioning blocks, physical themes, and training cards for the fitness department.',
+    badge: 'Fitness Department',
+    intensity: 'Fitness',
+    groupsField: 'fitnessPlayerGroups'
+  },
+  gk: {
+    title: 'Goalkeeper Hub',
+    subtitle: 'Create and review goalkeeper-specific cards, shot-stopping themes, and distribution drills.',
+    badge: 'GK Department',
+    intensity: 'GK',
+    groupsField: 'gkPlayerGroups'
+  }
+};
+
 interface FootballHubSectionProps {
   session: TrainingSession;
   cloudSessions: CloudTrainingSession[];
@@ -76,6 +106,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onNewSession,
   role = 'football'
 }) => {
+  const modulePresentation = MODULE_PRESENTATION[role];
   const contextStorageKey = `u17_football_hub_context_${role}`;
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
     footballSubTab: 'sessions' as const,
@@ -101,18 +132,18 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         category: 'Tactical' as const,
         description: sess.observations || 'No description',
         duration: 'Session',
-        intensity: role === 'fitness' ? 'Fitness' : role === 'gk' ? 'GK' : 'Football',
+          intensity: modulePresentation.intensity,
         drillType: 'rondo5v2' as const,
         likesCount: 0,
         isBookmarked: false,
-        groupCount: (sess.playerGroups || []).length,
+          groupCount: ((sess[modulePresentation.groupsField] as any[]) || []).length,
         rating: '—',
         status: (session.id === sess.id ? 'active' : 'draft') as DrillCard['status'],
         updatedAt: sess.updatedAt,
         role
       }))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  }, [cloudSessions, role, session.id]);
+        }, [cloudSessions, modulePresentation.groupsField, modulePresentation.intensity, role, session.id]);
 
   // Filter cloud sessions
   const filteredSessions = sessionCards
@@ -134,23 +165,9 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     writeWorkspaceRestoreState(contextStorageKey, { footballSubTab, sessionSubNav, searchTerm });
   }, [contextStorageKey, footballSubTab, sessionSubNav, searchTerm]);
 
-  const roleTitle = role === 'fitness'
-    ? 'Fitness & Conditioning Hub'
-    : role === 'gk'
-      ? 'Goalkeeper Hub'
-      : 'Football Management Hub';
-
-  const roleSubtitle = role === 'fitness'
-    ? 'Create and review conditioning blocks, physical themes, and training cards for the fitness department.'
-    : role === 'gk'
-      ? 'Create and review goalkeeper-specific cards, shot-stopping themes, and distribution drills.'
-      : 'Select a module to view daily training sessions, planification microcycles, or match fixtures';
-
-  const roleBadge = role === 'fitness'
-    ? 'Fitness Department'
-    : role === 'gk'
-      ? 'GK Department'
-      : 'Al Ula FC';
+  const roleTitle = modulePresentation.title;
+  const roleSubtitle = modulePresentation.subtitle;
+  const roleBadge = modulePresentation.badge;
 
   return (
     <div className="space-y-6">

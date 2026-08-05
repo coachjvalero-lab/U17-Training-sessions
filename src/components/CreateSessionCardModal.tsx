@@ -31,6 +31,52 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
 }) => {
   const [form, setForm] = useState(initialForm);
 
+  const roleCopyByModule: Record<'football' | 'fitness' | 'gk', {
+    title: string;
+    subtitle: string;
+    titleLabel: string;
+    titlePlaceholder: string;
+    descriptionPlaceholder: string;
+    defaultCategory: string;
+    defaultDuration: string;
+    defaultIntensity: string;
+    saveLabel: string;
+  }> = {
+    football: {
+      title: 'New Session Card',
+      subtitle: 'Create a reusable football session card in Firestore.',
+      titleLabel: 'Title',
+      titlePlaceholder: 'e.g. Positional game 4v4',
+      descriptionPlaceholder: 'Describe the purpose and details of the session card',
+      defaultCategory: 'Tactical',
+      defaultDuration: '20 min',
+      defaultIntensity: 'Alta',
+      saveLabel: 'Save card'
+    },
+    fitness: {
+      title: 'New Fitness Card',
+      subtitle: 'Create a reusable fitness and conditioning card in Firestore.',
+      titleLabel: 'Block title',
+      titlePlaceholder: 'e.g. Acceleration circuit',
+      descriptionPlaceholder: 'Describe the physical objective, load, and coaching cues for this block.',
+      defaultCategory: 'Conditioning',
+      defaultDuration: '25 min',
+      defaultIntensity: 'Moderate-High',
+      saveLabel: 'Save fitness card'
+    },
+    gk: {
+      title: 'New GK Card',
+      subtitle: 'Create a reusable goalkeeper-specific card in Firestore.',
+      titleLabel: 'Drill title',
+      titlePlaceholder: 'e.g. 1v1 reaction series',
+      descriptionPlaceholder: 'Describe the technical focus, distribution goal, and coaching points for this drill.',
+      defaultCategory: 'GK',
+      defaultDuration: '18 min',
+      defaultIntensity: 'High',
+      saveLabel: 'Save GK card'
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) {
       setForm(initialForm);
@@ -39,41 +85,7 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
 
   if (!isOpen) return null;
 
-  const roleCopy = role === 'fitness'
-    ? {
-        title: 'New Fitness Card',
-        subtitle: 'Create a reusable fitness and conditioning card in Firestore.',
-        titleLabel: 'Block title',
-        titlePlaceholder: 'e.g. Acceleration circuit',
-        descriptionPlaceholder: 'Describe the physical objective, load, and coaching cues for this block.',
-        defaultCategory: 'Conditioning',
-        defaultDuration: '25 min',
-        defaultIntensity: 'Moderate-High',
-        saveLabel: 'Save fitness card'
-      }
-    : role === 'gk'
-      ? {
-          title: 'New GK Card',
-          subtitle: 'Create a reusable goalkeeper-specific card in Firestore.',
-          titleLabel: 'Drill title',
-          titlePlaceholder: 'e.g. 1v1 reaction series',
-          descriptionPlaceholder: 'Describe the technical focus, distribution goal, and coaching points for this drill.',
-          defaultCategory: 'GK',
-          defaultDuration: '18 min',
-          defaultIntensity: 'High',
-          saveLabel: 'Save GK card'
-        }
-      : {
-          title: 'New Session Card',
-          subtitle: 'Create a reusable football session card in Firestore.',
-          titleLabel: 'Title',
-          titlePlaceholder: 'e.g. Positional game 4v4',
-          descriptionPlaceholder: 'Describe the purpose and details of the session card',
-          defaultCategory: 'Tactical',
-          defaultDuration: '20 min',
-          defaultIntensity: 'Alta',
-          saveLabel: 'Save card'
-        };
+  const roleCopy = roleCopyByModule[role];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

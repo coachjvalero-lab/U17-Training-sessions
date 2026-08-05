@@ -1,5 +1,6 @@
 import { CloudTrainingSession, saveSessionFieldsByRole } from '../firebase';
-import { Exercise, GameMoment, PortalSection, PlayerGroup, TrainingBlock, TrainingSession } from '../types';
+import { getEmptySession } from '../defaultSession';
+import { Exercise, GameMoment, PortalSection, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingBlock, TrainingSession } from '../types';
 
 export type TrainingModuleId = 'football' | 'fitness' | 'gk';
 export type SessionBlockKey = 'warmUp' | 'mainPart' | 'coolDown';
@@ -127,6 +128,52 @@ export function getModuleRoleLabel(moduleId: TrainingModuleId): string {
   return TRAINING_MODULES[moduleId].label;
 }
 
+export function getSharedSessionHeader(session: TrainingSession, updatedAt?: number): SharedSessionHeader {
+  return {
+    id: session.id,
+    sessionNumber: session.sessionNumber,
+    date: session.date,
+    time: session.time,
+    teamName: session.teamName,
+    microcycleDay: session.microcycleDay,
+    attendance: session.attendance || [],
+    squadRoster: session.squadRoster || [],
+    updatedAt
+  };
+}
+
+export function hydrateTrainingSession(base: Partial<TrainingSession>): TrainingSession {
+  const empty = getEmptySession();
+
+  return {
+    ...empty,
+    ...base,
+    attendance: Array.isArray(base.attendance) ? base.attendance : (empty.attendance || []),
+    squadRoster: Array.isArray(base.squadRoster) ? base.squadRoster : (empty.squadRoster || []),
+    warmUp: base.warmUp || empty.warmUp,
+    mainPart: base.mainPart || empty.mainPart,
+    coolDown: base.coolDown || empty.coolDown,
+    playerGroups: base.playerGroups || empty.playerGroups,
+    fitnessWarmUp: base.fitnessWarmUp || empty.fitnessWarmUp,
+    fitnessMainPart: base.fitnessMainPart || empty.fitnessMainPart,
+    fitnessCoolDown: base.fitnessCoolDown || empty.fitnessCoolDown,
+    fitnessPlayerGroups: base.fitnessPlayerGroups || empty.fitnessPlayerGroups,
+    gkWarmUp: base.gkWarmUp || empty.gkWarmUp,
+    gkMainPart: base.gkMainPart || empty.gkMainPart,
+    gkCoolDown: base.gkCoolDown || empty.gkCoolDown,
+    gkPlayerGroups: base.gkPlayerGroups || empty.gkPlayerGroups,
+    observations: base.observations ?? empty.observations,
+    materialsNeeded: base.materialsNeeded ?? empty.materialsNeeded,
+    mainObjective: base.mainObjective ?? empty.mainObjective,
+    microcycleDay: base.microcycleDay ?? empty.microcycleDay,
+    sessionNumber: base.sessionNumber ?? empty.sessionNumber,
+    date: base.date ?? empty.date,
+    time: base.time ?? empty.time,
+    teamName: base.teamName ?? empty.teamName,
+    id: base.id ?? empty.id
+  };
+}
+
 function defaultBlock(blockKey: SessionBlockKey, moduleId: TrainingModuleId): TrainingBlock {
   const blockTitle = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
   return {
@@ -143,9 +190,8 @@ function getModuleBlock(session: TrainingSession, moduleId: TrainingModuleId, bl
 }
 
 function withFootballFitnessOverlay(session: TrainingSession): { warmUp: TrainingBlock; mainPart: TrainingBlock; coolDown: TrainingBlock } {
-  const fitnessWarmUpAndMainExercises = [
-    ...(session.fitnessWarmUp?.exercises || []),
-    ...(session.fitnessMainPart?.exercises || [])
+  const fitnessWarmUpExercises = [
+    ...(session.fitnessWarmUp?.exercises || [])
   ].map((ex) => ({
     ...ex,
     isFitness: true,
@@ -161,7 +207,7 @@ function withFootballFitnessOverlay(session: TrainingSession): { warmUp: Trainin
   return {
     warmUp: {
       ...session.warmUp,
-      exercises: [...session.warmUp.exercises, ...fitnessWarmUpAndMainExercises]
+      exercises: [...session.warmUp.exercises, ...fitnessWarmUpExercises]
     },
     mainPart: session.mainPart,
     coolDown: {
@@ -205,54 +251,12 @@ export function updateSessionExercisesByModule(
   exercises: Exercise[]
 ): TrainingSession {
   if (moduleId === 'football') {
-    if (blockKey === 'warmUp') {
-      const footballWarmUpExercises = exercises.filter((ex) => !ex.isFitness);
-      const updatedFitnessExercises = exercises.filter((ex) => ex.isFitness);
-
-      const fitnessWarmUpIds = new Set((session.fitnessWarmUp?.exercises || []).map((e) => e.id));
-      const fitnessMainPartIds = new Set((session.fitnessMainPart?.exercises || []).map((e) => e.id));
-
-      const nextFitnessWarmUp = updatedFitnessExercises.filter((e) => fitnessWarmUpIds.has(e.id));
-      const nextFitnessMainPart = updatedFitnessExercises.filter((e) => fitnessMainPartIds.has(e.id));
-      const unknownFitness = updatedFitnessExercises.filter((e) => !fitnessWarmUpIds.has(e.id) && !fitnessMainPartIds.has(e.id));
-
-      return {
-        ...session,
-        warmUp: { ...session.warmUp, exercises: footballWarmUpExercises },
-        fitnessWarmUp: {
-          ...(session.fitnessWarmUp || defaultBlock('warmUp', 'fitness')),
-          exercises: [...nextFitnessWarmUp, ...unknownFitness]
-        },
-        fitnessMainPart: {
-          ...(session.fitnessMainPart || defaultBlock('mainPart', 'fitness')),
-          exercises: nextFitnessMainPart
-        }
-      };
-    }
-
-    if (blockKey === 'coolDown') {
-      const footballCoolDownExercises = exercises.filter((ex) => !ex.isFitness);
-      const updatedFitnessExercises = exercises.filter((ex) => ex.isFitness);
-
-      const fitnessCoolDownIds = new Set((session.fitnessCoolDown?.exercises || []).map((e) => e.id));
-      const nextFitnessCoolDown = updatedFitnessExercises.filter((e) => fitnessCoolDownIds.has(e.id));
-      const unknownFitness = updatedFitnessExercises.filter((e) => !fitnessCoolDownIds.has(e.id));
-
-      return {
-        ...session,
-        coolDown: { ...session.coolDown, exercises: footballCoolDownExercises },
-        fitnessCoolDown: {
-          ...(session.fitnessCoolDown || defaultBlock('coolDown', 'fitness')),
-          exercises: [...nextFitnessCoolDown, ...unknownFitness]
-        }
-      };
-    }
-
     return {
       ...session,
       [blockKey]: {
         ...session[blockKey],
-        exercises
+        // Football can never mutate Fitness-owned overlay exercises.
+        exercises: exercises.filter((ex) => !ex.isFitness)
       }
     };
   }
@@ -314,13 +318,11 @@ export async function saveSessionBySection(section: PortalSection, session: Trai
 }
 
 export function resolveExerciseModule(exercise: Exercise): TrainingModuleId {
-  if (exercise.isFitness) {
-    return 'fitness';
-  }
+  const moduleByPredicate: Array<{ moduleId: TrainingModuleId; matches: (ex: Exercise) => boolean }> = [
+    { moduleId: 'fitness', matches: (ex) => Boolean(ex.isFitness) },
+    { moduleId: 'gk', matches: (ex) => GOALKEEPER_SPECIFIC_MOMENTS.has(ex.gameMoment) }
+  ];
 
-  if (GOALKEEPER_SPECIFIC_MOMENTS.has(exercise.gameMoment)) {
-    return 'gk';
-  }
-
-  return 'football';
+  const matchingModule = moduleByPredicate.find((entry) => entry.matches(exercise));
+  return matchingModule?.moduleId || 'football';
 }

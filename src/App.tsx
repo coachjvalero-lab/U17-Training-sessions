@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
-import { getDefaultSession, getEmptySession } from './defaultSession';
+import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { normalizeSessionRoster, DEFAULT_DETAILED_SQUAD } from './constants/squad';
 import { HeaderSection } from './components/HeaderSection';
@@ -17,6 +17,7 @@ import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
 import { DEFAULT_MATCHES } from './components/CompetitionSection';
 import { FootballHubSection } from './components/FootballHubSection';
+import { ModuleSessionEditor } from './components/ModuleSessionEditor';
 import { 
   TrainingSession, 
   Exercise, 
@@ -63,7 +64,9 @@ import {
   getModuleGameMoments,
   getModuleIdFromSection,
   getModuleRoleLabel,
+  getSharedSessionHeader,
   getModuleSessionView,
+  hydrateTrainingSession,
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
@@ -133,30 +136,7 @@ function shouldRequireLoginForSharedLink(): boolean {
 
 // Fills missing fitness/GK blocks and normalizes the squad roster
 function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
-  const gkTemplate = getDefaultSession();
-  const unifiedSession = normalizeSessionRoster({
-    ...base,
-    fitnessWarmUp: base.fitnessWarmUp || { id: 'warmup-block-fitness', title: 'Warm Up', exercises: [] },
-    fitnessMainPart: base.fitnessMainPart || { id: 'main-block-fitness', title: 'Main Part', exercises: [] },
-    fitnessCoolDown: base.fitnessCoolDown || { id: 'cooldown-block-fitness', title: 'Cool Down', exercises: [] },
-    fitnessPlayerGroups: base.fitnessPlayerGroups || [],
-    gkWarmUp: base.gkWarmUp || gkTemplate.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
-    gkMainPart: base.gkMainPart || gkTemplate.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] },
-    gkCoolDown: base.gkCoolDown || gkTemplate.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
-    gkPlayerGroups: base.gkPlayerGroups || [],
-  } as TrainingSession);
-
-  if (base.gkWarmUp || base.gkMainPart || base.gkCoolDown || base.gkPlayerGroups) {
-    console.log('[GK TRACE][buildUnifiedSession] after normalize', {
-      sessionId: unifiedSession.id,
-      gkWarmUpLength: unifiedSession.gkWarmUp?.exercises?.length ?? 0,
-      gkMainPartLength: unifiedSession.gkMainPart?.exercises?.length ?? 0,
-      gkCoolDownLength: unifiedSession.gkCoolDown?.exercises?.length ?? 0,
-      gkPlayerGroupsLength: unifiedSession.gkPlayerGroups?.length ?? 0
-    });
-  }
-
-  return unifiedSession;
+  return hydrateTrainingSession(base);
 }
 
 export default function App() {
@@ -552,7 +532,66 @@ export default function App() {
   const currentSessionIdRef = useRef<string>('');
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
+  const lastKnownRemoteTimestampRef = useRef<{
+    sessionId: string;
+    global: number;
+    football: number;
+    fitness: number;
+    gk: number;
+  }>({
+    sessionId: '',
+    global: 0,
+    football: 0,
+    fitness: 0,
+    gk: 0
+  });
   const hasRestoredWorkspaceRef = useRef(false);
+
+  const initializeSessionSyncState = (
+    targetSession: TrainingSession,
+    timestamps?: {
+      global?: number;
+      football?: number;
+      fitness?: number;
+      gk?: number;
+    }
+  ) => {
+    const globalTime = timestamps?.global ?? 0;
+    const nextTimestamps = {
+      global: globalTime,
+      football: timestamps?.football ?? globalTime,
+      fitness: timestamps?.fitness ?? globalTime,
+      gk: timestamps?.gk ?? globalTime
+    };
+
+    currentSessionIdRef.current = targetSession.id;
+    lastSavedJsonRef.current = getSessionSyncSignature(targetSession);
+    lastLoadedSessionTimeRef.current = nextTimestamps;
+    lastKnownRemoteTimestampRef.current = {
+      sessionId: targetSession.id,
+      ...nextTimestamps
+    };
+    setRemoteSessionConflict(null);
+  };
+
+  const markActiveSessionSyncProgress = (
+    role: 'football' | 'fitness' | 'gk',
+    timestamp: number,
+    sessionSignature: string
+  ) => {
+    const nextTimestamps = {
+      ...lastLoadedSessionTimeRef.current,
+      [role]: timestamp,
+      global: timestamp
+    };
+
+    lastLoadedSessionTimeRef.current = nextTimestamps;
+    lastSavedJsonRef.current = sessionSignature;
+    lastKnownRemoteTimestampRef.current = {
+      sessionId: currentSessionIdRef.current,
+      ...nextTimestamps
+    };
+  };
 
   useEffect(() => {
     const saved = readSavedAppContext();
@@ -585,6 +624,13 @@ export default function App() {
   useEffect(() => {
     latestSessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    setRemoteSessionConflict((prev) => {
+      if (!prev) return prev;
+      return prev.id === session.id ? prev : null;
+    });
+  }, [session.id]);
 
   useEffect(() => {
     const persistContext = () => {
@@ -627,13 +673,6 @@ export default function App() {
   const applyCloudSessionToState = (sessionToLoad: CloudTrainingSession) => {
     const cloudTime = sessionToLoad.updatedAt || 0;
     hasInitialCloudLoadedRef.current = true;
-    lastLoadedSessionTimeRef.current = {
-      global: cloudTime,
-      football: sessionToLoad.footballUpdatedAt || cloudTime,
-      fitness: sessionToLoad.fitnessUpdatedAt || cloudTime,
-      gk: sessionToLoad.gkUpdatedAt || cloudTime
-    };
-    currentSessionIdRef.current = sessionToLoad.id;
 
     const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, teamLogo: _legacyLogo, ...baseSession } = sessionToLoad as CloudTrainingSession & { teamLogo?: string };
 
@@ -645,22 +684,17 @@ export default function App() {
       baseSession.sessionNumber = '001';
     }
 
-    if (sessionToLoad.gkUpdatedAt || baseSession.gkWarmUp || baseSession.gkMainPart || baseSession.gkCoolDown || baseSession.gkPlayerGroups) {
-      console.log('[GK TRACE][applyCloudSessionToState] before buildUnifiedSession', {
-        id: sessionToLoad.id,
-        gkWarmUpLength: baseSession.gkWarmUp?.exercises?.length ?? 0,
-        gkMainPartLength: baseSession.gkMainPart?.exercises?.length ?? 0,
-        gkCoolDownLength: baseSession.gkCoolDown?.exercises?.length ?? 0,
-        gkPlayerGroupsLength: baseSession.gkPlayerGroups?.length ?? 0
-      });
-    }
-
-    const unifiedSession: TrainingSession = buildUnifiedSession({
+    const unifiedSession: TrainingSession = normalizeSessionRoster(buildUnifiedSession({
       ...baseSession,
-    });
+    }));
 
     isRemoteUpdateRef.current = true;
-    lastSavedJsonRef.current = getSessionSyncSignature(unifiedSession);
+    initializeSessionSyncState(unifiedSession, {
+      global: cloudTime,
+      football: sessionToLoad.footballUpdatedAt || cloudTime,
+      fitness: sessionToLoad.fitnessUpdatedAt || cloudTime,
+      gk: sessionToLoad.gkUpdatedAt || cloudTime
+    });
     setSession(unifiedSession);
 
     if (unifiedSession.id && window.history.replaceState) {
@@ -706,11 +740,17 @@ export default function App() {
 
           if (sessionToLoad) {
             const cloudTime = sessionToLoad.updatedAt || 0;
+            const syncBaseline = lastKnownRemoteTimestampRef.current.sessionId === sessionToLoad.id
+              ? lastKnownRemoteTimestampRef.current
+              : {
+                  sessionId: sessionToLoad.id,
+                  ...lastLoadedSessionTimeRef.current
+                };
             const hasRemoteChanges =
-              cloudTime !== lastLoadedSessionTimeRef.current.global ||
-              (sessionToLoad.footballUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.football ||
-              (sessionToLoad.fitnessUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.fitness ||
-              (sessionToLoad.gkUpdatedAt || 0) !== lastLoadedSessionTimeRef.current.gk;
+              cloudTime !== syncBaseline.global ||
+              (sessionToLoad.footballUpdatedAt || 0) !== syncBaseline.football ||
+              (sessionToLoad.fitnessUpdatedAt || 0) !== syncBaseline.fitness ||
+              (sessionToLoad.gkUpdatedAt || 0) !== syncBaseline.gk;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
             if (isFirstLoad) {
@@ -979,6 +1019,13 @@ export default function App() {
   const handleClearSession = () => {
     if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for all section tabs.`)) {
       const empty = getEmptySession();
+      const optimisticTime = Date.now();
+      initializeSessionSyncState(empty, {
+        global: optimisticTime,
+        football: optimisticTime,
+        fitness: optimisticTime,
+        gk: optimisticTime
+      });
       setSession({
         ...empty
       });
@@ -1010,15 +1057,6 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
-      if (role === 'gk') {
-        console.log('[GK TRACE][before Save click flow] current session state', {
-          sessionId: session.id,
-          gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
-          gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
-          gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
-          gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
-        });
-      }
       const sessionToSave: TrainingSession = {
         ...session,
         teamName: session.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : session.teamName
@@ -1029,16 +1067,13 @@ export default function App() {
       // Optimistically update references BEFORE cloud save to avoid false conflict detection
       // when our own write echoes back through the subscription listener
       const optimisticTime = Date.now();
-      lastLoadedSessionTimeRef.current[role] = optimisticTime;
-      lastLoadedSessionTimeRef.current.global = optimisticTime;
-      lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
+      markActiveSessionSyncProgress(role, optimisticTime, getSessionSyncSignature(sessionToSave));
 
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         
         // Update with the actual server timestamp
-        lastLoadedSessionTimeRef.current[role] = savedTime;
-        lastLoadedSessionTimeRef.current.global = savedTime;
+        markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
         clearQuotaExceeded();
         alert('Changes saved to the cloud and synced across all your devices!');
       } catch (cloudErr) {
@@ -1075,19 +1110,24 @@ export default function App() {
 
     try {
       setIsCloudSaving(true);
+      const optimisticTime = Date.now();
+      initializeSessionSyncState(newSession, {
+        global: optimisticTime,
+        football: optimisticTime,
+        fitness: optimisticTime,
+        gk: optimisticTime
+      });
       setSession(newSession);
-      currentSessionIdRef.current = newId;
 
       // Use full document save for new sessions (all fields are new)
       try {
         const savedTime = await createTrainingSession(newSession);
-        lastLoadedSessionTimeRef.current = {
+        initializeSessionSyncState(newSession, {
           global: savedTime,
           football: savedTime,
           fitness: savedTime,
           gk: savedTime
-        };
-        lastSavedJsonRef.current = getSessionSyncSignature(newSession);
+        });
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCreateNewCloudSession] Cloud save failed:', cloudErr);
@@ -1104,13 +1144,13 @@ export default function App() {
 
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
-      const { updatedAt, footballUpdatedAt, fitnessUpdatedAt, gkUpdatedAt, teamLogo: _legacyLogo, ...baseSession } = loadedSession as CloudTrainingSession & { teamLogo?: string };
+      const { teamLogo: _legacyLogo, ...baseSession } = loadedSession as CloudTrainingSession & { teamLogo?: string };
 
       // Upgrade fitness and GK fields if missing from loaded old document
-      const unifiedSession: TrainingSession = buildUnifiedSession({
+      const unifiedSession: TrainingSession = normalizeSessionRoster(buildUnifiedSession({
         ...baseSession,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
-      });
+      }));
 
       if (unifiedSession.id && window.history.replaceState) {
         const url = new URL(window.location.href);
@@ -1118,18 +1158,10 @@ export default function App() {
         window.history.replaceState({}, '', url.toString());
       }
 
-      isRemoteUpdateRef.current = true;
-      const cloudTime = loadedSession.updatedAt || Date.now();
-      lastLoadedSessionTimeRef.current = {
-        global: cloudTime,
-        football: footballUpdatedAt || cloudTime,
-        fitness: fitnessUpdatedAt || cloudTime,
-        gk: gkUpdatedAt || cloudTime
-      };
-      currentSessionIdRef.current = unifiedSession.id;
-      lastSavedJsonRef.current = getSessionSyncSignature(unifiedSession);
-
-      setSession(unifiedSession);
+      applyCloudSessionToState({
+        ...loadedSession,
+        ...unifiedSession
+      });
       
       // Expand exercises of loaded session
       const expanded: Record<string, boolean> = {};
@@ -1155,21 +1187,7 @@ export default function App() {
           const remaining = cloudSessions.filter(s => s.id !== sessionId);
           if (remaining.length > 0) {
             const nextSession = remaining[0];
-            const { updatedAt, teamLogo: _legacyLogo, ...baseSession } = nextSession as CloudTrainingSession & { teamLogo?: string };
-
-            const unifiedSession: TrainingSession = buildUnifiedSession({
-              ...baseSession,
-              teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
-            });
-
-            isRemoteUpdateRef.current = true;
-            setSession(unifiedSession);
-
-            if (unifiedSession.id && window.history.replaceState) {
-              const url = new URL(window.location.href);
-              url.searchParams.set('session', unifiedSession.id);
-              window.history.replaceState({}, '', url.toString());
-            }
+            applyCloudSessionToState(nextSession);
           } else {
             // No sessions left in cloud, create a fresh session
             const empty = getEmptySession();
@@ -1184,7 +1202,13 @@ export default function App() {
               teamName: 'U17 Women Al Ula',
             };
 
-            isRemoteUpdateRef.current = true;
+            const optimisticTime = Date.now();
+            initializeSessionSyncState(newSession, {
+              global: optimisticTime,
+              football: optimisticTime,
+              fitness: optimisticTime,
+              gk: optimisticTime
+            });
             setSession(newSession);
 
             if (window.history.replaceState) {
@@ -1217,15 +1241,12 @@ export default function App() {
 
       // 2. Optimistically update references to prevent false conflict detection
       const optimisticTime = Date.now();
-      lastLoadedSessionTimeRef.current[role] = optimisticTime;
-      lastLoadedSessionTimeRef.current.global = optimisticTime;
-      lastSavedJsonRef.current = getSessionSyncSignature(sessionToSave);
+      markActiveSessionSyncProgress(role, optimisticTime, getSessionSyncSignature(sessionToSave));
 
       // 3. Try Cloud Firestore save (only save fields for current role)
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
-        lastLoadedSessionTimeRef.current[role] = savedTime;
-        lastLoadedSessionTimeRef.current.global = savedTime;
+        markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCopyShareLink] Cloud save failed:', cloudErr);
@@ -1267,6 +1288,11 @@ export default function App() {
   const activeMainPart = activeModuleSessionView.mainPart;
   const activeCoolDown = activeModuleSessionView.coolDown;
   const activePlayerGroups = activeModuleSessionView.playerGroups;
+  const sharedHeader = getSharedSessionHeader(session, lastLoadedSessionTimeRef.current.global);
+  const fullSquadRoster = session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`);
+  const goalkeeperRoster = squadPlayers
+    .filter((player) => player.position === 'GK')
+    .map((player) => `${player.firstName} (GK)`);
 
   const renderThemeToggle = () => (
     <div className="fixed top-4 right-4 z-[90] print:hidden">
@@ -1286,7 +1312,6 @@ export default function App() {
   const handleReloadRemoteSession = () => {
     if (remoteSessionConflict) {
       applyCloudSessionToState(remoteSessionConflict);
-      setRemoteSessionConflict(null);
     }
   };
 
@@ -1475,103 +1500,30 @@ export default function App() {
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
-            squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            squadRoster={fullSquadRoster}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="football"
             renderActiveSessionEditor={() => (
-              <main className="space-y-6 md:space-y-8 print:space-y-1.5">
-                
-                {/* Header Section */}
-                <HeaderSection 
-                  session={session}
-                  onChange={handleUpdateSession}
-                  currentLogo={teamLogo}
-                  onUpdateLogo={handleUpdateTeamLogo}
-                  onSave={handleSaveActiveToCloud}
-                  isSaving={isCloudSaving}
-                />
-
-                {/* Section: Session Attendance Quick Tracker */}
-                <SessionAttendanceTracker
-                  attendance={session.attendance}
-                  squadRoster={session.squadRoster}
-                  onChangeAttendance={handleUpdateAttendance}
-                  onChangeRoster={handleUpdateRoster}
-                  excludedPlayers={excludedPlayers}
-                  onExcludePlayer={handleExcludePlayer}
-                />
-
-                {/* Section: Player Groups Manager */}
-                <PlayerGroupsSection
-                  groups={activePlayerGroups}
-                  squadRoster={session.squadRoster}
-                  attendance={session.attendance}
-                  onChangeGroups={handleUpdateGroups}
-                  onChangeRoster={handleUpdateRoster}
-                />
-
-                {/* Section: Warm-Up Block */}
-                <ExerciseBlock 
-                  block={activeWarmUp}
-                  onChange={(exs) => handleUpdateExercises('warmUp', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('football')}
-                />
-
-                {/* Section: Main Part Block */}
-                <ExerciseBlock 
-                  block={activeMainPart}
-                  onChange={(exs) => handleUpdateExercises('mainPart', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('football')}
-                />
-
-                {/* Section: Cool Down Block */}
-                <ExerciseBlock 
-                  block={activeCoolDown}
-                  onChange={(exs) => handleUpdateExercises('coolDown', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('football')}
-                />
-
-                {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
-                <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                          Session Observations & Notes
-                        </h2>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                          Private coaching staff notes (Screen view only — hidden when printing PDF)
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
-                      Screen Only
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={session.observations || ''}
-                    onChange={(e) => handleUpdateSession({ observations: e.target.value })}
-                    rows={4}
-                    placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
-                    className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
-                  />
-                </section>
-
-              </main>
+              <ModuleSessionEditor
+                moduleId="football"
+                session={session}
+                sharedHeader={sharedHeader}
+                currentLogo={teamLogo}
+                isSaving={isCloudSaving}
+                expandedExercises={expandedExercises}
+                excludedPlayers={excludedPlayers}
+                onUpdateHeader={handleUpdateSession}
+                onSave={handleSaveActiveToCloud}
+                onUpdateAttendance={handleUpdateAttendance}
+                onUpdateRoster={handleUpdateRoster}
+                onUpdateGroups={handleUpdateGroups}
+                onUpdateExercises={handleUpdateExercises}
+                onToggleExpand={toggleExpand}
+                onExcludePlayer={handleExcludePlayer}
+                onIncludePlayer={handleIncludePlayer}
+                onUpdateLogo={handleUpdateTeamLogo}
+              />
             )}
           />
         ) : activeSection === 'fitness' ? (
@@ -1583,103 +1535,30 @@ export default function App() {
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
-            squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            squadRoster={fullSquadRoster}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="fitness"
             renderActiveSessionEditor={() => (
-              <main className="space-y-6 md:space-y-8 print:space-y-1.5">
-                
-                {/* Header Section */}
-                <HeaderSection 
-                  session={session}
-                  onChange={handleUpdateSession}
-                  currentLogo={teamLogo}
-                  onUpdateLogo={handleUpdateTeamLogo}
-                  onSave={handleSaveActiveToCloud}
-                  isSaving={isCloudSaving}
-                />
-
-                {/* Section: Session Attendance Quick Tracker */}
-                <SessionAttendanceTracker
-                  attendance={session.attendance}
-                  squadRoster={session.squadRoster}
-                  onChangeAttendance={handleUpdateAttendance}
-                  onChangeRoster={handleUpdateRoster}
-                  excludedPlayers={excludedPlayers}
-                  onExcludePlayer={handleExcludePlayer}
-                />
-
-                {/* Section: Player Groups Manager */}
-                <PlayerGroupsSection
-                  groups={activePlayerGroups}
-                  squadRoster={session.squadRoster}
-                  attendance={session.attendance}
-                  onChangeGroups={handleUpdateGroups}
-                  onChangeRoster={handleUpdateRoster}
-                />
-
-                {/* Section: Warm-Up Block */}
-                <ExerciseBlock 
-                  block={activeWarmUp}
-                  onChange={(exs) => handleUpdateExercises('warmUp', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('fitness')}
-                />
-
-                {/* Section: Main Part Block */}
-                <ExerciseBlock 
-                  block={activeMainPart}
-                  onChange={(exs) => handleUpdateExercises('mainPart', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('fitness')}
-                />
-
-                {/* Section: Cool Down Block */}
-                <ExerciseBlock 
-                  block={activeCoolDown}
-                  onChange={(exs) => handleUpdateExercises('coolDown', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('fitness')}
-                />
-
-                {/* Section: Observations & Notes */}
-                <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                          Session Observations & Notes
-                        </h2>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                          Private coaching staff notes (Screen view only — hidden when printing PDF)
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
-                      Screen Only
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={session.observations || ''}
-                    onChange={(e) => handleUpdateSession({ observations: e.target.value })}
-                    rows={4}
-                    placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
-                    className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
-                  />
-                </section>
-
-              </main>
+              <ModuleSessionEditor
+                moduleId="fitness"
+                session={session}
+                sharedHeader={sharedHeader}
+                currentLogo={teamLogo}
+                isSaving={isCloudSaving}
+                expandedExercises={expandedExercises}
+                excludedPlayers={excludedPlayers}
+                onUpdateHeader={handleUpdateSession}
+                onSave={handleSaveActiveToCloud}
+                onUpdateAttendance={handleUpdateAttendance}
+                onUpdateRoster={handleUpdateRoster}
+                onUpdateGroups={handleUpdateGroups}
+                onUpdateExercises={handleUpdateExercises}
+                onToggleExpand={toggleExpand}
+                onExcludePlayer={handleExcludePlayer}
+                onIncludePlayer={handleIncludePlayer}
+                onUpdateLogo={handleUpdateTeamLogo}
+              />
             )}
           />
         ) : activeSection === 'gk' ? (
@@ -1691,103 +1570,30 @@ export default function App() {
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
-            squadRoster={session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`)}
+            squadRoster={goalkeeperRoster}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="gk"
             renderActiveSessionEditor={() => (
-              <main className="space-y-6 md:space-y-8 print:space-y-1.5">
-                
-                {/* Header Section */}
-                <HeaderSection 
-                  session={session}
-                  onChange={handleUpdateSession}
-                  currentLogo={teamLogo}
-                  onUpdateLogo={handleUpdateTeamLogo}
-                  onSave={handleSaveActiveToCloud}
-                  isSaving={isCloudSaving}
-                />
-
-                {/* Section: Session Attendance Quick Tracker */}
-                <SessionAttendanceTracker
-                  attendance={session.attendance}
-                  squadRoster={session.squadRoster}
-                  onChangeAttendance={handleUpdateAttendance}
-                  onChangeRoster={handleUpdateRoster}
-                  excludedPlayers={excludedPlayers}
-                  onExcludePlayer={handleExcludePlayer}
-                />
-
-                {/* Section: Player Groups Manager */}
-                <PlayerGroupsSection
-                  groups={activePlayerGroups}
-                  squadRoster={session.squadRoster}
-                  attendance={session.attendance}
-                  onChangeGroups={handleUpdateGroups}
-                  onChangeRoster={handleUpdateRoster}
-                />
-
-                {/* Section: Warm-Up Block */}
-                <ExerciseBlock 
-                  block={activeWarmUp}
-                  onChange={(exs) => handleUpdateExercises('warmUp', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('gk')}
-                />
-
-                {/* Section: Main Part Block */}
-                <ExerciseBlock 
-                  block={activeMainPart}
-                  onChange={(exs) => handleUpdateExercises('mainPart', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('gk')}
-                />
-
-                {/* Section: Cool Down Block */}
-                <ExerciseBlock 
-                  block={activeCoolDown}
-                  onChange={(exs) => handleUpdateExercises('coolDown', exs)}
-                  expandedExercises={expandedExercises}
-                  toggleExpand={toggleExpand}
-                  sessionGroups={activePlayerGroups}
-                  gameMoments={getModuleGameMoments('gk')}
-                />
-
-                {/* Section: Observations & Notes */}
-                <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl shadow-sm">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-                          Session Observations & Notes
-                        </h2>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                          Private coaching staff notes (Screen view only — hidden when printing PDF)
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">
-                      Screen Only
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={session.observations || ''}
-                    onChange={(e) => handleUpdateSession({ observations: e.target.value })}
-                    rows={4}
-                    placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
-                    className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
-                  />
-                </section>
-
-              </main>
+              <ModuleSessionEditor
+                moduleId="gk"
+                session={{ ...session, squadRoster: goalkeeperRoster }}
+                sharedHeader={{ ...sharedHeader, squadRoster: goalkeeperRoster }}
+                currentLogo={teamLogo}
+                isSaving={isCloudSaving}
+                expandedExercises={expandedExercises}
+                excludedPlayers={excludedPlayers}
+                onUpdateHeader={handleUpdateSession}
+                onSave={handleSaveActiveToCloud}
+                onUpdateAttendance={handleUpdateAttendance}
+                onUpdateRoster={handleUpdateRoster}
+                onUpdateGroups={handleUpdateGroups}
+                onUpdateExercises={handleUpdateExercises}
+                onToggleExpand={toggleExpand}
+                onExcludePlayer={handleExcludePlayer}
+                onIncludePlayer={handleIncludePlayer}
+                onUpdateLogo={handleUpdateTeamLogo}
+              />
             )}
           />
         ) : (

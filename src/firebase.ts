@@ -458,61 +458,44 @@ export async function saveSessionFieldsByRole(
   const saveTimestamp = Date.now();
   const ref = doc(db, SESSIONS_COLLECTION, sessionId);
 
-  if (role === 'gk') {
-    console.log('[GK TRACE][saveSessionFieldsByRole] received session', {
-      role,
-      sessionId,
-      gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
-      gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
-      gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
-      gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
-    });
-  }
-
-  // Define which fields each role owns
-  const fieldsToUpdate: Record<string, any> = {
-    updatedAt: saveTimestamp
+  const roleOwnedFields: Record<'football' | 'fitness' | 'gk', (input: TrainingSession, savedAt: number) => Record<string, any>> = {
+    football: (input, savedAt) => ({
+      footballUpdatedAt: savedAt,
+      warmUp: input.warmUp,
+      mainPart: input.mainPart,
+      coolDown: input.coolDown,
+      playerGroups: input.playerGroups,
+      observations: input.observations || '',
+      teamName: input.teamName,
+      date: input.date,
+      time: input.time,
+      sessionNumber: input.sessionNumber,
+      microcycleDay: input.microcycleDay,
+      mainObjective: input.mainObjective,
+      materialsNeeded: input.materialsNeeded,
+      squadRoster: input.squadRoster,
+      attendance: input.attendance
+    }),
+    fitness: (input, savedAt) => ({
+      fitnessUpdatedAt: savedAt,
+      fitnessWarmUp: input.fitnessWarmUp,
+      fitnessMainPart: input.fitnessMainPart,
+      fitnessCoolDown: input.fitnessCoolDown,
+      fitnessPlayerGroups: input.fitnessPlayerGroups
+    }),
+    gk: (input, savedAt) => ({
+      gkUpdatedAt: savedAt,
+      gkWarmUp: input.gkWarmUp,
+      gkMainPart: input.gkMainPart,
+      gkCoolDown: input.gkCoolDown,
+      gkPlayerGroups: input.gkPlayerGroups
+    })
   };
 
-  if (role === 'football') {
-    fieldsToUpdate.footballUpdatedAt = saveTimestamp;
-    fieldsToUpdate.warmUp = session.warmUp;
-    fieldsToUpdate.mainPart = session.mainPart;
-    fieldsToUpdate.coolDown = session.coolDown;
-    fieldsToUpdate.playerGroups = session.playerGroups;
-    fieldsToUpdate.observations = session.observations || '';
-    fieldsToUpdate.teamName = session.teamName;
-    fieldsToUpdate.date = session.date;
-    fieldsToUpdate.time = session.time;
-    fieldsToUpdate.sessionNumber = session.sessionNumber;
-    fieldsToUpdate.microcycleDay = session.microcycleDay;
-    fieldsToUpdate.mainObjective = session.mainObjective;
-    fieldsToUpdate.materialsNeeded = session.materialsNeeded;
-    if (session.squadRoster) fieldsToUpdate.squadRoster = session.squadRoster;
-    if (session.attendance) fieldsToUpdate.attendance = session.attendance;
-  } else if (role === 'fitness') {
-    fieldsToUpdate.fitnessUpdatedAt = saveTimestamp;
-    fieldsToUpdate.fitnessWarmUp = session.fitnessWarmUp;
-    fieldsToUpdate.fitnessMainPart = session.fitnessMainPart;
-    fieldsToUpdate.fitnessCoolDown = session.fitnessCoolDown;
-    fieldsToUpdate.fitnessPlayerGroups = session.fitnessPlayerGroups;
-  } else if (role === 'gk') {
-    fieldsToUpdate.gkUpdatedAt = saveTimestamp;
-    fieldsToUpdate.gkWarmUp = session.gkWarmUp;
-    fieldsToUpdate.gkMainPart = session.gkMainPart;
-    fieldsToUpdate.gkCoolDown = session.gkCoolDown;
-    fieldsToUpdate.gkPlayerGroups = session.gkPlayerGroups;
-  }
-
-  const sanitizedFieldsToUpdate = sanitizeForFirestore(fieldsToUpdate);
-
-  if (role === 'gk') {
-    console.log('[GK TRACE][saveSessionFieldsByRole] payload to Firestore', {
-      role,
-      sessionId,
-      payload: sanitizedFieldsToUpdate
-    });
-  }
+  const sanitizedFieldsToUpdate = sanitizeForFirestore({
+    updatedAt: saveTimestamp,
+    ...roleOwnedFields[role](session, saveTimestamp)
+  });
 
   // Use setDoc with merge to only modify specific fields (creates document if it doesn't exist)
   let attempt = 0;
@@ -527,12 +510,6 @@ export async function saveSessionFieldsByRole(
         setDoc(ref, sanitizedFieldsToUpdate, { merge: true }),
         timeoutPromise
       ]);
-      if (role === 'gk') {
-        console.log('[GK TRACE][saveSessionFieldsByRole] setDoc completed successfully', {
-          role,
-          sessionId
-        });
-      }
       clearQuotaExceeded(SESSIONS_COLLECTION);
       emitSyncStatus({ status: 'saved', scope: SESSIONS_COLLECTION });
       return saveTimestamp;
@@ -552,7 +529,7 @@ export async function saveSessionFieldsByRole(
         key: `${SESSIONS_COLLECTION}:${sessionId}:${role}`, 
         scope: SESSIONS_COLLECTION, 
         docId: sessionId, 
-        data: fieldsToUpdate, 
+        data: sanitizedFieldsToUpdate,
         queuedAt: Date.now() 
       });
       if (isQuota) markQuotaExceeded(SESSIONS_COLLECTION);
@@ -632,16 +609,6 @@ export function subscribeToSessions(
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
       const sessionData = doc.data() as CloudTrainingSession;
-      if (sessionData.gkUpdatedAt || sessionData.gkWarmUp || sessionData.gkMainPart || sessionData.gkCoolDown || sessionData.gkPlayerGroups) {
-        console.log('[GK TRACE][subscribeToSessions] snapshot session', {
-          id: sessionData.id,
-          docId: doc.id,
-          gkWarmUpLength: sessionData.gkWarmUp?.exercises?.length ?? 0,
-          gkMainPartLength: sessionData.gkMainPart?.exercises?.length ?? 0,
-          gkCoolDownLength: sessionData.gkCoolDown?.exercises?.length ?? 0,
-          gkPlayerGroupsLength: sessionData.gkPlayerGroups?.length ?? 0
-        });
-      }
       sessions.push(sessionData);
     });
     callback(sessions);

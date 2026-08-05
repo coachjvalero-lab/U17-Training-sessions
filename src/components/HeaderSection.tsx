@@ -12,14 +12,16 @@ interface HeaderSectionProps {
   isSaving?: boolean;
   currentLogo?: string;
   onUpdateLogo?: (newLogo: string) => void;
+  readOnly?: boolean;
 }
 
 
-export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving, currentLogo, onUpdateLogo }) => {
+export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving, currentLogo, onUpdateLogo, readOnly = false }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly) return;
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
@@ -40,6 +42,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
   };
 
   const removeLogo = (e: React.MouseEvent) => {
+    if (readOnly) return;
     e.stopPropagation();
     onUpdateLogo?.(OFFICIAL_ALULA_LOGO_DATA_URL);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -63,8 +66,12 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
         {/* Column 1: Team Badge upload (Span 3) */}
         <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:col-span-2 print:border-r print:border-slate-200 print:pb-0 print:pr-2">
           <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="group relative cursor-pointer w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 hover:border-emerald-500 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 hover:bg-slate-100 print:w-11 print:h-11 print:border-none print:bg-transparent"
+            onClick={() => {
+              if (!readOnly) {
+                fileInputRef.current?.click();
+              }
+            }}
+            className={`group relative w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 print:w-11 print:h-11 print:border-none print:bg-transparent ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-emerald-500 hover:bg-slate-100'}`}
           >
             {isUploadingLogo ? (
               <div className="flex flex-col items-center justify-center p-2 text-emerald-600 text-xs font-semibold">
@@ -81,13 +88,13 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
             )}
             
             {/* Hover Overlay - Hidden in print */}
-            <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-xs font-semibold rounded-2xl print:hidden">
+            {!readOnly && <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity text-xs font-semibold rounded-2xl print:hidden">
               <Upload className="w-5 h-5 mb-1 text-emerald-400" />
               <span>Change Logo</span>
-            </div>
+            </div>}
 
             {/* Remove button - Hidden in print */}
-            {logoSrc !== OFFICIAL_ALULA_LOGO_DATA_URL && (
+            {!readOnly && logoSrc !== OFFICIAL_ALULA_LOGO_DATA_URL && (
               <button
                 type="button"
                 onClick={removeLogo}
@@ -121,6 +128,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 type="text"
                 value={session.teamName}
                 onChange={(e) => onChange({ teamName: e.target.value })}
+                readOnly={readOnly}
                 placeholder="e.g., A.D. San Pedro U17"
                 className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-sm print:font-black print:pb-0 print:text-[#002142]"
               />
@@ -161,6 +169,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                   type="date"
                   value={session.date}
                   onChange={(e) => onChange({ date: e.target.value })}
+                  readOnly={readOnly}
                   className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none print:text-slate-900 print:text-[9px] print:font-bold"
                 />
               </div>
@@ -176,6 +185,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                   type="text"
                   value={session.time}
                   onChange={(e) => onChange({ time: e.target.value })}
+                  readOnly={readOnly}
                   placeholder="18:30 - 20:00"
                   className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none print:text-slate-900 print:text-[9px] print:font-bold"
                 />
@@ -192,6 +202,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                   type="text"
                   value={session.sessionNumber}
                   onChange={(e) => onChange({ sessionNumber: e.target.value })}
+                  readOnly={readOnly}
                   placeholder="e.g. Session 1"
                   className="w-full bg-transparent text-sm sm:text-base font-black text-emerald-950 placeholder:text-emerald-300 focus:outline-none print:text-slate-900 print:text-[9px] print:font-bold"
                 />
@@ -207,6 +218,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                   id="header-microcycle-day"
                   value={session.microcycleDay || ''}
                   onChange={(e) => onChange({ microcycleDay: e.target.value })}
+                  disabled={readOnly}
                   className="w-full bg-transparent text-xs sm:text-sm font-black text-slate-800 focus:outline-none cursor-pointer print:text-slate-900 print:text-[9px] print:font-bold"
                 >
                   <option value="">Select Day</option>
@@ -243,6 +255,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 value={session.mainObjective}
                 onChange={(e) => onChange({ mainObjective: e.target.value })}
                 rows={2}
+                readOnly={readOnly}
                 placeholder="Describe the technical, tactical, or physical focus of this training session..."
                 className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-[7pt] print:leading-tight print:mt-0.5 print:h-5 print:min-h-0"
               />
@@ -264,6 +277,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 value={session.materialsNeeded || ''}
                 onChange={(e) => onChange({ materialsNeeded: e.target.value })}
                 rows={2}
+                readOnly={readOnly}
                 placeholder="e.g., 20 Cones (10 Yellow), 12 Bibs (6 Green, 6 Blue), 15 Balls, 2 Portable Goals..."
                 className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-[7pt] print:leading-tight print:mt-0.5 print:h-5 print:min-h-0"
               />

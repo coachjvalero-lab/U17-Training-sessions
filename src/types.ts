@@ -155,3 +155,15 @@ export interface TrainingSession {
   gkPlayerGroups?: PlayerGroup[];
   attendance?: PlayerAttendance[];
 }
+
+export interface SharedSessionHeader {
+  id: string;
+  sessionNumber: string;
+  date: string;
+  time: string;
+  teamName: string;
+  microcycleDay: string;
+  attendance: PlayerAttendance[];
+  squadRoster: string[];
+  updatedAt?: number;
+}

@@ -9,6 +9,7 @@ interface PlayerGroupsSectionProps {
   attendance?: PlayerAttendance[];
   onChangeGroups: (groups: PlayerGroup[]) => void;
   onChangeRoster?: (roster: string[]) => void;
+  rosterReadOnly?: boolean;
 }
 
 export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
@@ -16,7 +17,8 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   squadRoster = DEFAULT_SQUAD_PLAYERS,
   attendance = [],
   onChangeGroups,
-  onChangeRoster
+  onChangeRoster,
+  rosterReadOnly = false
 }) => {
   const [isEditingRoster, setIsEditingRoster] = useState(false);
   const [rosterInput, setRosterInput] = useState(squadRoster.join(', '));
@@ -163,6 +165,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Save edited roster
   const handleSaveRoster = () => {
+    if (rosterReadOnly) return;
     const parsed = rosterInput
       .split(',')
       .map(s => s.trim())
@@ -176,6 +179,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Reset to default U17 squad
   const handleResetRoster = () => {
+    if (rosterReadOnly) return;
     if (onChangeRoster) {
       onChangeRoster(DEFAULT_SQUAD_PLAYERS);
       setRosterInput(DEFAULT_SQUAD_PLAYERS.join(', '));
@@ -245,7 +249,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
             <span>Add Group</span>
           </button>
 
-          <button
+          {!rosterReadOnly && <button
             type="button"
             onClick={() => setIsEditingRoster(!isEditingRoster)}
             className="flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-2.5 py-2 rounded-xl transition-all border border-slate-200"
@@ -253,7 +257,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
           >
             <Edit3 className="w-3.5 h-3.5" />
             <span>Roster</span>
-          </button>
+          </button>}
 
           {groups.length > 0 && (
             <button
@@ -269,7 +273,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
       </div>
 
       {/* Roster Editor Drawer */}
-      {isEditingRoster && (
+      {isEditingRoster && !rosterReadOnly && (
         <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold uppercase text-slate-700 tracking-wider">

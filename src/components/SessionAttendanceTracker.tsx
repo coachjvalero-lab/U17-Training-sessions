@@ -28,6 +28,7 @@ interface SessionAttendanceTrackerProps {
   excludedPlayers?: string[];
   onExcludePlayer?: (name: string) => void;
   onIncludePlayer?: (name: string) => void;
+  readOnly?: boolean;
 }
 
 export const ABSENCE_REASONS: { key: AbsenceReason; label: string; icon: any; color: string; bg: string }[] = [
@@ -50,7 +51,8 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   compact: _compact = false,
   excludedPlayers = [],
   onExcludePlayer,
-  onIncludePlayer
+  onIncludePlayer,
+  readOnly = false
 }) => {
   const contextStorageKey = 'session_attendance_tracker';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -100,6 +102,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const unknownCount = effectiveAttendance.filter(a => a.status === 'Absent' && (!a.absenceReason || a.absenceReason === 'Unknown')).length;
 
   const handleAttendanceStateChange = (playerName: string, value: string) => {
+    if (readOnly) return;
     const updated = effectiveAttendance.map(a => {
       if (a.playerName.toLowerCase() === playerName.toLowerCase()) {
         if (value === 'Attending') {
@@ -128,6 +131,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const handleMarkAllAttending = () => {
+    if (readOnly) return;
     const updated = effectiveAttendance.map(a => ({
       ...a,
       status: 'Attending' as const,
@@ -137,6 +141,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const handleMarkAllAbsent = () => {
+    if (readOnly) return;
     const updated = effectiveAttendance.map(a => ({
       ...a,
       status: 'Absent' as const,
@@ -146,6 +151,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const handleAddPlayer = (e: React.FormEvent) => {
+    if (readOnly) return;
     e.preventDefault();
     if (!newPlayerName.trim()) return;
 
@@ -175,6 +181,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const handleRemovePlayer = (playerName: string) => {
+    if (readOnly) return;
     if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla?`)) {
       const lower = playerName.toLowerCase();
       if (onExcludePlayer) {
@@ -231,6 +238,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
           <button
             type="button"
             onClick={handleMarkAllAttending}
+            disabled={readOnly}
             className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[11px] rounded-xl border border-emerald-200 transition-all flex items-center space-x-1 cursor-pointer"
             title="Mark all players as attending"
           >
@@ -241,6 +249,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
           <button
             type="button"
             onClick={handleMarkAllAbsent}
+            disabled={readOnly}
             className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] rounded-xl border border-rose-200 transition-all flex items-center space-x-1 cursor-pointer"
             title="Mark all players as absent"
           >
@@ -250,7 +259,12 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              if (!readOnly) {
+                setShowAddModal(true);
+              }
+            }}
+            disabled={readOnly}
             className="px-2.5 py-1.5 bg-[#002142] hover:bg-[#002e5c] text-white font-bold text-[11px] rounded-xl transition-all flex items-center space-x-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-[#a79078]" />
@@ -424,7 +438,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                         </span>
                       </div>
                     </div>
-                    {onChangeRoster && (
+                    {onChangeRoster && !readOnly && (
                       <button
                         type="button"
                         onClick={() => handleRemovePlayer(record.playerName)}
@@ -444,6 +458,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                     <select
                       value={currentSelectValue}
                       onChange={(e) => handleAttendanceStateChange(record.playerName, e.target.value)}
+                      disabled={readOnly}
                       className={`w-full text-xs font-black rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 cursor-pointer transition-all border shadow-sm ${selectBg}`}
                     >
                       <option value="Attending" className="bg-white text-emerald-900 font-bold py-1">
@@ -477,7 +492,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
       )}
 
       {/* Add Player Modal */}
-      {showAddModal && (
+      {showAddModal && !readOnly && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4">
             <h3 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
