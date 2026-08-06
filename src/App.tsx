@@ -84,6 +84,7 @@ import {
 } from 'lucide-react';
 
 const APP_CONTEXT_STORAGE_KEY = 'u17_app_context';
+const CLOUD_SESSIONS_CACHE_KEY = 'u17_cloud_sessions_cache';
 
 type AppContextSnapshot = {
   activeSection: PortalSection;
@@ -117,6 +118,17 @@ function readSavedAppContext(): AppContextSnapshot | null {
     route: typeof parsed.route === 'string' ? parsed.route : '',
     scrollY: typeof parsed.scrollY === 'number' ? parsed.scrollY : 0
   };
+}
+
+function readCachedCloudSessions(): CloudTrainingSession[] {
+  try {
+    const raw = localStorage.getItem(CLOUD_SESSIONS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 function shouldRequireLoginForSharedLink(): boolean {
@@ -457,7 +469,7 @@ export default function App() {
 
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
 
-  const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>([]);
+  const [cloudSessions, setCloudSessions] = useState<CloudTrainingSession[]>(() => readCachedCloudSessions());
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -722,6 +734,9 @@ export default function App() {
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
         setCloudSessions(sessions);
+        try {
+          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
+        } catch (e) {}
         setIsLoadingCloud(false);
 
         if (sessions.length > 0) {
@@ -797,6 +812,10 @@ export default function App() {
       () => {
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
+        const cachedSessions = readCachedCloudSessions();
+        if (cachedSessions.length > 0) {
+          setCloudSessions(cachedSessions);
+        }
         markQuotaExceeded();
         console.warn('Firestore subscription offline or quota limit reached.');
       }

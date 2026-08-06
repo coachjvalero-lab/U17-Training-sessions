@@ -24,6 +24,7 @@ import {
   User 
 } from 'firebase/auth';
 import { TrainingSession, Exercise, SquadPlayer, PhysioRecord, VideoAnalysis, MatchFixture } from './types';
+import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
 
@@ -41,6 +42,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with a safe fallback database ID
 export const db = getFirestore(app, import.meta.env.VITE_FIREBASE_DATABASE_ID || 'default');
+const defaultDb = getFirestore(app, 'default');
 setLogLevel('silent');
 
 // Initialize Firebase Auth
@@ -589,12 +591,37 @@ export function subscribeToSessions(
     throw new Error('Callback function must be provided to subscribeToSessions');
   }
 
-  const q = query(
-    collection(db, SESSIONS_COLLECTION),
-    orderBy('updatedAt', 'desc')
-  );
-  
-  return onSnapshot(q, (querySnapshot) => {
+  const sortSessions = (items: CloudTrainingSession[]) => {
+    return [...items].sort((a, b) => {
+      const tsA = a.updatedAt || 0;
+      const tsB = b.updatedAt || 0;
+      if (tsA !== tsB) return tsB - tsA;
+      return (b.date || '').localeCompare(a.date || '');
+    });
+  };
+
+  const mapLegacyCardsToSessions = (items: Array<{ id: string; data: Partial<SessionCardDocument> }>): CloudTrainingSession[] => {
+    const sessions = items.map(({ id, data }) => {
+      const empty = getEmptySession();
+      return {
+        ...empty,
+        id,
+        sessionNumber: String(data.sessionNumber ?? empty.sessionNumber),
+        date: data.date || empty.date,
+        mainObjective: data.title || empty.mainObjective,
+        observations: data.description || empty.observations,
+        updatedAt: data.updatedAt || data.createdAt || 0
+      } as CloudTrainingSession;
+    });
+
+    return sortSessions(sessions);
+  };
+
+  const sessionsRef = collection(db, SESSIONS_COLLECTION);
+  let legacyFallbackCache: CloudTrainingSession[] = [];
+  let hasTriedLegacyFallback = false;
+
+  return onSnapshot(sessionsRef, (querySnapshot) => {
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
       const sessionData = doc.data() as CloudTrainingSession;
@@ -604,7 +631,61 @@ export function subscribeToSessions(
       };
       sessions.push(sessionWithId);
     });
-    callback(sessions);
+
+    const sortedPrimarySessions = sortSessions(sessions);
+
+    if (sortedPrimarySessions.length > 0) {
+      callback(sortedPrimarySessions);
+      return;
+    }
+
+    if (hasTriedLegacyFallback) {
+      callback(legacyFallbackCache);
+      return;
+    }
+
+    hasTriedLegacyFallback = true;
+    Promise.all([
+      getDocs(collection(defaultDb, SESSIONS_COLLECTION)).then((snap) => {
+        const docs: CloudTrainingSession[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as CloudTrainingSession;
+          docs.push({
+            ...data,
+            id: data.id || docSnap.id
+          });
+        });
+        return sortSessions(docs);
+      }),
+      getDocs(collection(db, SESSION_CARDS_COLLECTION)).then((snap) => {
+        const docs: Array<{ id: string; data: Partial<SessionCardDocument> }> = [];
+        snap.forEach((docSnap) => {
+          docs.push({ id: docSnap.id, data: docSnap.data() as Partial<SessionCardDocument> });
+        });
+        return mapLegacyCardsToSessions(docs);
+      }),
+      getDocs(collection(defaultDb, SESSION_CARDS_COLLECTION)).then((snap) => {
+        const docs: Array<{ id: string; data: Partial<SessionCardDocument> }> = [];
+        snap.forEach((docSnap) => {
+          docs.push({ id: docSnap.id, data: docSnap.data() as Partial<SessionCardDocument> });
+        });
+        return mapLegacyCardsToSessions(docs);
+      })
+    ]).then(([defaultDbSessions, legacyPrimaryCards, legacyDefaultCards]) => {
+      const fallbackSessions =
+        defaultDbSessions.length > 0 ? defaultDbSessions :
+        legacyPrimaryCards.length > 0 ? legacyPrimaryCards :
+        legacyDefaultCards;
+
+      legacyFallbackCache = fallbackSessions;
+      callback(legacyFallbackCache);
+    }).catch((legacyError) => {
+      console.warn('Legacy session cards fallback failed:', legacyError);
+      callback([]);
+      if (onError) {
+        onError(legacyError);
+      }
+    });
   }, (error) => {
     console.warn('Subscription error:', error);
     if (onError) {
