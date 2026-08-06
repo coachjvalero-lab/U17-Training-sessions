@@ -319,10 +319,10 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
   const renderCoachRoles = (ex: Exercise) => (
     <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-2.5 print:bg-transparent print:border-none print:p-0">
-      <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5 mb-1 print:border-none">
+      <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5 mb-1 print:border-none print:pb-0.5 print:mb-0.5">
         <div className="flex items-center space-x-1.5">
-          <ShieldAlert className="w-3.5 h-3.5 text-slate-500 print:text-black shrink-0" />
-          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest print:text-black">
+          <ShieldAlert className="w-3.5 h-3.5 text-slate-500 print:text-black print:w-3 print:h-3 shrink-0" />
+          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest print:text-black print:text-[8px]">
             Coaches' Roles
           </span>
         </div>
@@ -330,7 +330,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       
       {/* Columns Headers */}
       {parseCoachRolesList(ex.coachRoles || '').length > 0 && (
-        <div className="grid grid-cols-12 gap-2 px-2 text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">
+        <div className="grid grid-cols-12 gap-2 px-2 text-[9px] font-extrabold text-slate-400 uppercase tracking-wider print:px-0 print:gap-1 print:text-[7px]">
           <div className="col-span-4">Coach</div>
           <div className="col-span-8">Role</div>
         </div>
@@ -391,15 +391,15 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       </div>
 
       {/* Display list for print view */}
-      <div className="hidden print:block space-y-1">
+      <div className="hidden print:block space-y-0.5">
         {parseCoachRolesList(ex.coachRoles || '').map((roleEntry, idx) => (
-          <div key={idx} className="grid grid-cols-12 gap-2 text-xs text-slate-800 py-0.5 border-b border-slate-100/50">
-            <div className="col-span-4 font-bold">{roleEntry.name}</div>
+          <div key={idx} className="grid grid-cols-12 gap-2 text-xs text-slate-800 py-0.5 border-b border-slate-100/50 print:gap-1 print:text-[7px] print:py-0">
+            <div className="col-span-4 font-bold truncate">{roleEntry.name}</div>
             <div className="col-span-8 font-semibold text-slate-600">{roleEntry.role || '—'}</div>
           </div>
         ))}
         {parseCoachRolesList(ex.coachRoles || '').length === 0 && (
-          <div className="text-xs italic text-slate-400">No coaches' roles assigned</div>
+          <div className="text-xs italic text-slate-400 print:text-[7px]">No coaches' roles assigned</div>
         )}
       </div>
     </div>
@@ -564,7 +564,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   
                   {/* Left col: Image / tactical drawer (Span 4) - Hidden if hideGraphics is true */}
                   {!ex.hideGraphics && (
-                    <div className="md:col-span-4 space-y-2.5 print:col-span-4">
+                    <div className="md:col-span-4 space-y-2.5 print:col-span-5 print:space-y-1.5">
                       <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block print:hidden">
                         Tactical Diagram / Pitch
                       </label>
@@ -648,7 +648,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   )}
 
                   {/* Right col: Form controls (Span 8 if graphics shown, Span 12 if hideGraphics is true) */}
-                  <div className={`space-y-3.5 print:space-y-2 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-8'}`}>
+                  <div className={`space-y-3.5 print:space-y-2 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-7'}`}>
                     
                     {/* Series, Tiempo y Descanso (Timing & Structure) Card */}
                     <div className="bg-slate-50/90 border border-slate-200/80 p-3 rounded-2xl space-y-2 print:bg-slate-50 print:border print:border-slate-200 print:p-2 print:rounded-lg">
@@ -763,7 +763,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         className="w-full text-xs font-semibold bg-white border border-slate-200 px-3 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-y transition-all print:hidden"
                       />
                       <div className={`hidden print:block font-semibold text-slate-800 whitespace-pre-wrap bg-slate-50/60 border border-slate-200/80 rounded-lg ${getPrintFontSizeClass(ex.description)}`}>
-                        {ex.description || <span className="italic text-slate-400">No description</span>}
+                        {ex.description}
                       </div>
                     </div>
 

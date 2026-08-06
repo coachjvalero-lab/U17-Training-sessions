@@ -109,6 +109,13 @@ html.dark textarea::placeholder {
     print-color-adjust: exact !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
   /* Force clean structured cards for print */
@@ -131,7 +138,8 @@ html.dark textarea::placeholder {
   /* Compact form of tactical pitch diagrams */
   .relative.aspect-\[4\/3\] {
     aspect-ratio: 16/9 !important;
-    max-height: 65px !important;
+    min-height: 78px !important;
+    max-height: 84px !important;
     border-radius: 4px !important;
     border: 1px solid #cbd5e1 !important;
     background-color: #f8fafc !important;
@@ -200,15 +208,17 @@ html.dark textarea::placeholder {
 
   /* Professional signature footer */
   footer {
-    margin-top: 3px !important;
-    padding: 2px 6px !important;
+    margin-top: 1px !important;
+    padding: 1px 6px !important;
     border-top: 1.5px solid #002142 !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+    page-break-before: auto !important;
+    page-break-after: avoid !important;
   }
 
   footer p {
-    font-size: 6.5pt !important;
+    font-size: 6pt !important;
     color: #475569 !important;
   }
 
