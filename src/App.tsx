@@ -134,11 +134,6 @@ function shouldRequireLoginForSharedLink(): boolean {
   }
 }
 
-// Fills missing fitness/GK blocks and normalizes the squad roster
-function buildUnifiedSession(base: Partial<TrainingSession>): TrainingSession {
-  return hydrateTrainingSession(base);
-}
-
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     try {
@@ -530,6 +525,7 @@ export default function App() {
     gk: 0
   });
   const currentSessionIdRef = useRef<string>('');
+  const activeSectionRef = useRef<PortalSection>(activeSection);
   const latestSessionRef = useRef<TrainingSession>(session);
   const lastSavedJsonRef = useRef<string>('');
   const lastKnownRemoteTimestampRef = useRef<{
@@ -592,6 +588,10 @@ export default function App() {
       ...nextTimestamps
     };
   };
+
+  useEffect(() => {
+    activeSectionRef.current = activeSection;
+  }, [activeSection]);
 
   useEffect(() => {
     const saved = readSavedAppContext();
@@ -684,7 +684,7 @@ export default function App() {
       baseSession.sessionNumber = '001';
     }
 
-    const unifiedSession: TrainingSession = normalizeSessionRoster(buildUnifiedSession({
+    const unifiedSession: TrainingSession = normalizeSessionRoster(hydrateTrainingSession({
       ...baseSession,
     }));
 
@@ -755,17 +755,18 @@ export default function App() {
               }
             } else if (activeSessionSnapshot) {
               const cloudTime = activeSessionSnapshot.updatedAt || 0;
+              const currentModuleId = getModuleIdFromSection(activeSectionRef.current) || DEFAULT_MODULE_ID;
               const syncBaseline = lastKnownRemoteTimestampRef.current.sessionId === activeSessionSnapshot.id
                 ? lastKnownRemoteTimestampRef.current
                 : {
                     sessionId: activeSessionSnapshot.id,
                     ...lastLoadedSessionTimeRef.current
                   };
-              const hasRemoteChanges =
-                cloudTime !== syncBaseline.global ||
-                (activeSessionSnapshot.footballUpdatedAt || 0) !== syncBaseline.football ||
-                (activeSessionSnapshot.fitnessUpdatedAt || 0) !== syncBaseline.fitness ||
-                (activeSessionSnapshot.gkUpdatedAt || 0) !== syncBaseline.gk;
+              const hasRemoteChanges = currentModuleId === 'gk'
+                ? (activeSessionSnapshot.gkUpdatedAt || cloudTime) !== syncBaseline.gk
+                : currentModuleId === 'fitness'
+                  ? cloudTime !== syncBaseline.global || (activeSessionSnapshot.fitnessUpdatedAt || cloudTime) !== syncBaseline.fitness
+                  : cloudTime !== syncBaseline.global || (activeSessionSnapshot.footballUpdatedAt || cloudTime) !== syncBaseline.football;
 
               if (hasRemoteChanges) {
                 const hasUnsavedChanges = getSessionSyncSignature(latestSessionRef.current) !== lastSavedJsonRef.current;
@@ -1153,7 +1154,7 @@ export default function App() {
       const { teamLogo: _legacyLogo, ...baseSession } = loadedSession as CloudTrainingSession & { teamLogo?: string };
 
       // Upgrade fitness and GK fields if missing from loaded old document
-      const unifiedSession: TrainingSession = normalizeSessionRoster(buildUnifiedSession({
+      const unifiedSession: TrainingSession = normalizeSessionRoster(hydrateTrainingSession({
         ...baseSession,
         teamName: baseSession.teamName === 'U17 Girls A.D. San Pedro' ? 'U17 Women Al Ula' : baseSession.teamName,
       }));
@@ -1288,12 +1289,6 @@ export default function App() {
     }));
   };
 
-  const activeModuleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
-  const activeModuleSessionView = getModuleSessionView(session, activeModuleId);
-  const activeWarmUp = activeModuleSessionView.warmUp;
-  const activeMainPart = activeModuleSessionView.mainPart;
-  const activeCoolDown = activeModuleSessionView.coolDown;
-  const activePlayerGroups = activeModuleSessionView.playerGroups;
   const sharedHeader = getSharedSessionHeader(session, lastLoadedSessionTimeRef.current.global);
   const fullSquadRoster = session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`);
   const goalkeeperRoster = squadPlayers
@@ -1515,6 +1510,7 @@ export default function App() {
                 moduleId="football"
                 session={session}
                 sharedHeader={sharedHeader}
+                planningRoster={fullSquadRoster}
                 currentLogo={teamLogo}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
@@ -1550,6 +1546,7 @@ export default function App() {
                 moduleId="fitness"
                 session={session}
                 sharedHeader={sharedHeader}
+                planningRoster={fullSquadRoster}
                 currentLogo={teamLogo}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
@@ -1583,8 +1580,9 @@ export default function App() {
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="gk"
-                session={{ ...session, squadRoster: goalkeeperRoster }}
-                sharedHeader={{ ...sharedHeader, squadRoster: goalkeeperRoster }}
+                session={session}
+                sharedHeader={sharedHeader}
+                planningRoster={goalkeeperRoster}
                 currentLogo={teamLogo}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
@@ -1628,7 +1626,7 @@ export default function App() {
 
             {/* Section: Player Groups Manager */}
             <PlayerGroupsSection
-              groups={activePlayerGroups}
+              groups={session.playerGroups}
               squadRoster={session.squadRoster}
               attendance={session.attendance}
               onChangeGroups={handleUpdateGroups}
@@ -1637,32 +1635,32 @@ export default function App() {
 
             {/* Section: Warm-Up Block */}
             <ExerciseBlock 
-              block={activeWarmUp}
+              block={session.warmUp}
               onChange={(exs) => handleUpdateExercises('warmUp', exs)}
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
-              sessionGroups={activePlayerGroups}
-              gameMoments={getModuleGameMoments(activeModuleId)}
+              sessionGroups={session.playerGroups}
+              gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
             />
 
             {/* Section: Main Part Block */}
             <ExerciseBlock 
-              block={activeMainPart}
+              block={session.mainPart}
               onChange={(exs) => handleUpdateExercises('mainPart', exs)}
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
-              sessionGroups={activePlayerGroups}
-              gameMoments={getModuleGameMoments(activeModuleId)}
+              sessionGroups={session.playerGroups}
+              gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
             />
 
             {/* Section: Cool Down Block */}
             <ExerciseBlock 
-              block={activeCoolDown}
+              block={session.coolDown}
               onChange={(exs) => handleUpdateExercises('coolDown', exs)}
               expandedExercises={expandedExercises}
               toggleExpand={toggleExpand}
-              sessionGroups={activePlayerGroups}
-              gameMoments={getModuleGameMoments(activeModuleId)}
+              sessionGroups={session.playerGroups}
+              gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
             />
 
             {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}

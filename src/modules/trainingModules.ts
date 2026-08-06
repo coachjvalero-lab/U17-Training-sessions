@@ -18,11 +18,21 @@ type SessionBlockField =
 
 type SessionGroupsField = 'playerGroups' | 'fitnessPlayerGroups' | 'gkPlayerGroups';
 
+type OverlayDecoration = Pick<Exercise, 'isFitness' | 'hideGraphics'>;
+
+interface SessionOverlayBinding {
+  fromModuleId: TrainingModuleId;
+  fromBlock: SessionBlockKey;
+  toBlock: SessionBlockKey;
+  decorate?: OverlayDecoration;
+}
+
 export interface TrainingModuleContract {
   id: TrainingModuleId;
   label: string;
   blockFields: Record<SessionBlockKey, SessionBlockField>;
   playerGroupsField: SessionGroupsField;
+  overlayReads?: SessionOverlayBinding[];
   gameMoments: GameMoment[];
   save: (session: TrainingSession) => Promise<number>;
   getCloudUpdatedAt: (session: CloudTrainingSession) => number;
@@ -66,6 +76,26 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
       coolDown: 'coolDown'
     },
     playerGroupsField: 'playerGroups',
+    overlayReads: [
+      {
+        fromModuleId: 'fitness',
+        fromBlock: 'warmUp',
+        toBlock: 'warmUp',
+        decorate: {
+          isFitness: true,
+          hideGraphics: true
+        }
+      },
+      {
+        fromModuleId: 'fitness',
+        fromBlock: 'coolDown',
+        toBlock: 'coolDown',
+        decorate: {
+          isFitness: true,
+          hideGraphics: true
+        }
+      }
+    ],
     gameMoments: FOOTBALL_GAME_MOMENTS,
     save: (session) => saveSessionFieldsByRole(session.id, 'football', session),
     getCloudUpdatedAt: (session) => session.footballUpdatedAt || session.updatedAt || 0
@@ -93,23 +123,10 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
     },
     playerGroupsField: 'gkPlayerGroups',
     gameMoments: GOALKEEPER_GAME_MOMENTS,
-    save: (session) => {
-      console.log('[GK TRACE][GoalkeeperModule.save] before saveSessionFieldsByRole', {
-        sessionId: session.id,
-        gkWarmUpLength: session.gkWarmUp?.exercises?.length ?? 0,
-        gkMainPartLength: session.gkMainPart?.exercises?.length ?? 0,
-        gkCoolDownLength: session.gkCoolDown?.exercises?.length ?? 0,
-        gkPlayerGroupsLength: session.gkPlayerGroups?.length ?? 0
-      });
-      return saveSessionFieldsByRole(session.id, 'gk', session);
-    },
+    save: (session) => saveSessionFieldsByRole(session.id, 'gk', session),
     getCloudUpdatedAt: (session) => session.gkUpdatedAt || session.updatedAt || 0
   }
 };
-
-export const FootballModule = TRAINING_MODULES.football;
-export const FitnessModule = TRAINING_MODULES.fitness;
-export const GoalkeeperModule = TRAINING_MODULES.gk;
 
 export const DEFAULT_MODULE_ID: TrainingModuleId = 'football';
 
@@ -189,59 +206,70 @@ function getModuleBlock(session: TrainingSession, moduleId: TrainingModuleId, bl
   return existing || defaultBlock(blockKey, moduleId);
 }
 
-function withFootballFitnessOverlay(session: TrainingSession): { warmUp: TrainingBlock; mainPart: TrainingBlock; coolDown: TrainingBlock } {
-  const fitnessWarmUpExercises = [
-    ...(session.fitnessWarmUp?.exercises || [])
-  ].map((ex) => ({
+function decorateOverlayExercises(exercises: Exercise[], decorate?: OverlayDecoration): Exercise[] {
+  if (!decorate) return exercises;
+  return exercises.map((ex) => ({
     ...ex,
-    isFitness: true,
-    hideGraphics: true
+    ...decorate
   }));
-
-  const fitnessCoolDownExercises = [...(session.fitnessCoolDown?.exercises || [])].map((ex) => ({
-    ...ex,
-    isFitness: true,
-    hideGraphics: true
-  }));
-
-  return {
-    warmUp: {
-      ...session.warmUp,
-      exercises: [...session.warmUp.exercises, ...fitnessWarmUpExercises]
-    },
-    mainPart: session.mainPart,
-    coolDown: {
-      ...session.coolDown,
-      exercises: [...session.coolDown.exercises, ...fitnessCoolDownExercises]
-    }
-  };
 }
 
-export function getModuleSessionView(session: TrainingSession, moduleId: TrainingModuleId): {
+type ModuleSessionView = {
   warmUp: TrainingBlock;
   mainPart: TrainingBlock;
   coolDown: TrainingBlock;
   playerGroups: PlayerGroup[];
-} {
-  if (moduleId === 'football') {
-    const footballView = withFootballFitnessOverlay(session);
-    return {
-      warmUp: footballView.warmUp,
-      mainPart: footballView.mainPart,
-      coolDown: footballView.coolDown,
-      playerGroups: session.playerGroups
-    };
-  }
+};
 
+const moduleSessionViewCache = new WeakMap<TrainingSession, Partial<Record<TrainingModuleId, ModuleSessionView>>>();
+
+function buildModuleSessionView(session: TrainingSession, moduleId: TrainingModuleId): ModuleSessionView {
   const moduleDef = TRAINING_MODULES[moduleId];
+  const baseWarmUp = getModuleBlock(session, moduleId, 'warmUp');
+  const baseMainPart = getModuleBlock(session, moduleId, 'mainPart');
+  const baseCoolDown = getModuleBlock(session, moduleId, 'coolDown');
+
   const playerGroups = (session[moduleDef.playerGroupsField] as PlayerGroup[] | undefined) || [];
 
+  const blocksByKey: Record<SessionBlockKey, TrainingBlock> = {
+    warmUp: baseWarmUp,
+    mainPart: baseMainPart,
+    coolDown: baseCoolDown
+  };
+
+  (moduleDef.overlayReads || []).forEach((binding) => {
+    const sourceBlock = getModuleBlock(session, binding.fromModuleId, binding.fromBlock);
+    const targetBlock = blocksByKey[binding.toBlock];
+    const overlayExercises = decorateOverlayExercises(sourceBlock.exercises || [], binding.decorate);
+
+    blocksByKey[binding.toBlock] = {
+      ...targetBlock,
+      exercises: [...(targetBlock.exercises || []), ...overlayExercises]
+    };
+  });
+
   return {
-    warmUp: getModuleBlock(session, moduleId, 'warmUp'),
-    mainPart: getModuleBlock(session, moduleId, 'mainPart'),
-    coolDown: getModuleBlock(session, moduleId, 'coolDown'),
+    warmUp: blocksByKey.warmUp,
+    mainPart: blocksByKey.mainPart,
+    coolDown: blocksByKey.coolDown,
     playerGroups
   };
+}
+
+export function getModuleSessionView(session: TrainingSession, moduleId: TrainingModuleId): ModuleSessionView {
+  const cachedByModule = moduleSessionViewCache.get(session);
+  const cachedView = cachedByModule?.[moduleId];
+  if (cachedView) {
+    return cachedView;
+  }
+
+  const computed = buildModuleSessionView(session, moduleId);
+  if (cachedByModule) {
+    cachedByModule[moduleId] = computed;
+  } else {
+    moduleSessionViewCache.set(session, { [moduleId]: computed });
+  }
+  return computed;
 }
 
 export function updateSessionExercisesByModule(
@@ -281,12 +309,19 @@ export function addExerciseToSessionByModule(
 ): TrainingSession {
   const blockField = TRAINING_MODULES[moduleId].blockFields[blockKey];
   const existingBlock = (session[blockField] as TrainingBlock | undefined) || defaultBlock(blockKey, moduleId);
+  const normalizedExercise = moduleId === 'football' && exercise.isFitness
+    ? {
+        ...exercise,
+        isFitness: false,
+        hideGraphics: false
+      }
+    : exercise;
 
   return {
     ...session,
     [blockField]: {
       ...existingBlock,
-      exercises: [...(existingBlock.exercises || []), exercise]
+      exercises: [...(existingBlock.exercises || []), normalizedExercise]
     }
   };
 }

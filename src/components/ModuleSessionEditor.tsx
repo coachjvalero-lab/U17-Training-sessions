@@ -11,6 +11,7 @@ interface ModuleSessionEditorProps {
   moduleId: TrainingModuleId;
   session: TrainingSession;
   sharedHeader: SharedSessionHeader;
+  planningRoster: string[];
   currentLogo: string;
   isSaving: boolean;
   expandedExercises: Record<string, boolean>;
@@ -31,6 +32,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   moduleId,
   session,
   sharedHeader,
+  planningRoster,
   currentLogo,
   isSaving,
   expandedExercises,
@@ -48,6 +50,10 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
   const isSharedHeaderReadOnly = moduleId !== 'football';
+  const planningRosterLookup = new Set(planningRoster.map((name) => name.trim().toLowerCase()));
+  const filteredAttendance = (session.attendance || []).filter((playerAttendance) =>
+    planningRosterLookup.has(playerAttendance.playerName.trim().toLowerCase())
+  );
 
   const sessionWithSharedHeader: TrainingSession = {
     ...session,
@@ -56,9 +62,12 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
     date: sharedHeader.date,
     time: sharedHeader.time,
     teamName: sharedHeader.teamName,
-    microcycleDay: sharedHeader.microcycleDay,
-    attendance: sharedHeader.attendance,
-    squadRoster: sharedHeader.squadRoster
+    microcycleDay: sharedHeader.microcycleDay
+  };
+
+  const modulePlanningSession: TrainingSession = {
+    ...session,
+    squadRoster: planningRoster
   };
 
   const updateHeaderFields = isSharedHeaderReadOnly ? (() => {}) : onUpdateHeader;
@@ -78,8 +87,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
       />
 
       <SessionAttendanceTracker
-        attendance={sessionWithSharedHeader.attendance}
-        squadRoster={sessionWithSharedHeader.squadRoster}
+        attendance={filteredAttendance}
+        squadRoster={planningRoster}
         onChangeAttendance={updateAttendance}
         onChangeRoster={updateRoster}
         excludedPlayers={excludedPlayers}
@@ -90,8 +99,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
 
       <PlayerGroupsSection
         groups={moduleView.playerGroups}
-        squadRoster={sessionWithSharedHeader.squadRoster}
-        attendance={sessionWithSharedHeader.attendance}
+        squadRoster={modulePlanningSession.squadRoster}
+        attendance={filteredAttendance}
         onChangeGroups={onUpdateGroups}
         onChangeRoster={updateRoster}
         rosterReadOnly={isSharedHeaderReadOnly}

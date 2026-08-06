@@ -18,7 +18,6 @@ import {
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { 
   CloudTrainingSession, 
-  saveSessionFieldsByRole,
   saveSessionToCloud, 
   subscribeToExerciseLibrary, 
   saveExerciseToLibraryCloud, 
@@ -31,6 +30,7 @@ import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { getModuleGameMoments, resolveExerciseModule } from '../modules/trainingModules';
+import { saveTrainingSessionBySection } from '../modules/trainingSessionPersistence';
 
 interface ExercisesLibraryProps {
   currentSession: TrainingSession;
@@ -444,7 +444,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
           }
         };
 
-        await saveSessionFieldsByRole(targetCloudSess.id, sectionCat, updatedCloudSess);
+        await saveTrainingSessionBySection(sectionCat, updatedCloudSess);
         setOpenAddDropdownId(null);
         const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
         const sessNum = targetCloudSess.sessionNumber || '?';
