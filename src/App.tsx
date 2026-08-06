@@ -721,6 +721,9 @@ export default function App() {
           const isFirstLoad = !hasInitialCloudLoadedRef.current;
           const currentId = currentSessionIdRef.current;
           const activeSessionStillExists = currentId ? sessions.some(s => s.id === currentId) : false;
+          const activeSessionSnapshot = currentId
+            ? sessions.find(s => s.id === currentId)
+            : undefined;
 
           // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
           // (most recent session by date) ONLY on the very first cold start.
@@ -739,18 +742,6 @@ export default function App() {
           }
 
           if (sessionToLoad) {
-            const cloudTime = sessionToLoad.updatedAt || 0;
-            const syncBaseline = lastKnownRemoteTimestampRef.current.sessionId === sessionToLoad.id
-              ? lastKnownRemoteTimestampRef.current
-              : {
-                  sessionId: sessionToLoad.id,
-                  ...lastLoadedSessionTimeRef.current
-                };
-            const hasRemoteChanges =
-              cloudTime !== syncBaseline.global ||
-              (sessionToLoad.footballUpdatedAt || 0) !== syncBaseline.football ||
-              (sessionToLoad.fitnessUpdatedAt || 0) !== syncBaseline.fitness ||
-              (sessionToLoad.gkUpdatedAt || 0) !== syncBaseline.gk;
             const isDifferentSession = sessionToLoad.id !== currentSessionIdRef.current;
 
             if (isFirstLoad) {
@@ -762,15 +753,30 @@ export default function App() {
               if (!activeSessionStillExists) {
                 applyCloudSessionToState(sessionToLoad);
               }
-            } else if (hasRemoteChanges) {
-              const hasUnsavedChanges = getSessionSyncSignature(latestSessionRef.current) !== lastSavedJsonRef.current;
-              if (!hasUnsavedChanges) {
-                // No local edits at risk — safe to silently pick up the remote update.
-                applyCloudSessionToState(sessionToLoad);
-              } else {
-                // Someone else saved this same session while we have unsaved local edits.
-                // Surface it instead of silently overwriting (Bloque 2, tarea 3/4).
-                setRemoteSessionConflict(sessionToLoad);
+            } else if (activeSessionSnapshot) {
+              const cloudTime = activeSessionSnapshot.updatedAt || 0;
+              const syncBaseline = lastKnownRemoteTimestampRef.current.sessionId === activeSessionSnapshot.id
+                ? lastKnownRemoteTimestampRef.current
+                : {
+                    sessionId: activeSessionSnapshot.id,
+                    ...lastLoadedSessionTimeRef.current
+                  };
+              const hasRemoteChanges =
+                cloudTime !== syncBaseline.global ||
+                (activeSessionSnapshot.footballUpdatedAt || 0) !== syncBaseline.football ||
+                (activeSessionSnapshot.fitnessUpdatedAt || 0) !== syncBaseline.fitness ||
+                (activeSessionSnapshot.gkUpdatedAt || 0) !== syncBaseline.gk;
+
+              if (hasRemoteChanges) {
+                const hasUnsavedChanges = getSessionSyncSignature(latestSessionRef.current) !== lastSavedJsonRef.current;
+                if (!hasUnsavedChanges) {
+                  // No local edits at risk — safe to silently pick up the remote update.
+                  applyCloudSessionToState(activeSessionSnapshot);
+                } else {
+                  // Someone else saved this same session while we have unsaved local edits.
+                  // Surface it instead of silently overwriting (Bloque 2, tarea 3/4).
+                  setRemoteSessionConflict(activeSessionSnapshot);
+                }
               }
             }
           }
