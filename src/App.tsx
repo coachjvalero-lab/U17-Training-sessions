@@ -71,7 +71,6 @@ import {
   updateSessionGroupsByModule
 } from './modules/trainingModules';
 import {
-  createTrainingSession,
   deleteTrainingSession,
   saveTrainingSessionBySection,
   subscribeTrainingSessions
@@ -692,7 +691,7 @@ export default function App() {
     initializeSessionSyncState(unifiedSession, {
       global: cloudTime,
       football: sessionToLoad.footballUpdatedAt || cloudTime,
-      fitness: sessionToLoad.fitnessUpdatedAt || cloudTime,
+      fitness: sessionToLoad.fitnessUpdatedAt || 0,
       gk: sessionToLoad.gkUpdatedAt || cloudTime
     });
     setSession(unifiedSession);
@@ -765,7 +764,7 @@ export default function App() {
               const hasRemoteChanges = currentModuleId === 'gk'
                 ? (activeSessionSnapshot.gkUpdatedAt || cloudTime) !== syncBaseline.gk
                 : currentModuleId === 'fitness'
-                  ? cloudTime !== syncBaseline.global || (activeSessionSnapshot.fitnessUpdatedAt || cloudTime) !== syncBaseline.fitness
+                  ? (activeSessionSnapshot.fitnessUpdatedAt || 0) !== syncBaseline.fitness
                   : cloudTime !== syncBaseline.global || (activeSessionSnapshot.footballUpdatedAt || cloudTime) !== syncBaseline.football;
 
               if (hasRemoteChanges) {
@@ -1103,6 +1102,8 @@ export default function App() {
     const newNumber = prompt('Enter new session number:', '1');
     if (newNumber === null) return;
 
+    const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+
     const empty = getEmptySession();
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
@@ -1120,20 +1121,20 @@ export default function App() {
       const optimisticTime = Date.now();
       initializeSessionSyncState(newSession, {
         global: optimisticTime,
-        football: optimisticTime,
-        fitness: optimisticTime,
-        gk: optimisticTime
+        football: role === 'football' ? optimisticTime : 0,
+        fitness: role === 'fitness' ? optimisticTime : 0,
+        gk: role === 'gk' ? optimisticTime : 0
       });
       setSession(newSession);
 
-      // Use full document save for new sessions (all fields are new)
+      // New sessions are created through the same modular save pipeline as any other save.
       try {
-        const savedTime = await createTrainingSession(newSession);
+        const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, newSession);
         initializeSessionSyncState(newSession, {
           global: savedTime,
-          football: savedTime,
-          fitness: savedTime,
-          gk: savedTime
+          football: role === 'football' ? savedTime : 0,
+          fitness: role === 'fitness' ? savedTime : 0,
+          gk: role === 'gk' ? savedTime : 0
         });
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';

@@ -412,24 +412,6 @@ async function saveDocWithRetry(scope: string, docId: string, data: any | null):
   }
 }
 
-/**
- * Saves or updates a session in Firestore. Returns the timestamp used for updatedAt.
- */
-export async function saveSessionToCloud(session: TrainingSession): Promise<number> {
-  const saveTimestamp = Date.now();
-
-  // Strip teamLogo (base64 can exceed Firestore's 1MB document limit); stored only in localStorage
-  const { teamLogo: _logo, ...sessionWithoutLogo } = session;
-  const cleanSession = JSON.parse(JSON.stringify(sessionWithoutLogo));
-  const cloudData: CloudTrainingSession = {
-    ...cleanSession,
-    updatedAt: saveTimestamp
-  };
-
-  await saveDocWithRetry(SESSIONS_COLLECTION, session.id, cloudData);
-  return saveTimestamp;
-}
-
 export async function saveSessionCardToCloud(card: SessionCardDocument): Promise<number> {
   const saveTimestamp = Date.now();
   const payload: SessionCardDocument = {
@@ -609,7 +591,11 @@ export function subscribeToSessions(
     const sessions: CloudTrainingSession[] = [];
     querySnapshot.forEach((doc) => {
       const sessionData = doc.data() as CloudTrainingSession;
-      sessions.push(sessionData);
+      const sessionWithId: CloudTrainingSession = {
+        ...sessionData,
+        id: sessionData.id || doc.id
+      };
+      sessions.push(sessionWithId);
     });
     callback(sessions);
   }, (error) => {

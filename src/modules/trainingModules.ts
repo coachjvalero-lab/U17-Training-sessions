@@ -111,7 +111,7 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
     playerGroupsField: 'fitnessPlayerGroups',
     gameMoments: FOOTBALL_GAME_MOMENTS,
     save: (session) => saveSessionFieldsByRole(session.id, 'fitness', session),
-    getCloudUpdatedAt: (session) => session.fitnessUpdatedAt || session.updatedAt || 0
+    getCloudUpdatedAt: (session) => session.fitnessUpdatedAt || 0
   },
   gk: {
     id: 'gk',

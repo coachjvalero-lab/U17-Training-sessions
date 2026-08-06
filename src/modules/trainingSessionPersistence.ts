@@ -1,7 +1,6 @@
 import {
   CloudTrainingSession,
   deleteSessionFromCloud,
-  saveSessionToCloud,
   subscribeToSessions
 } from '../firebase';
 import { PortalSection, TrainingSession } from '../types';
@@ -12,10 +11,6 @@ export function subscribeTrainingSessions(
   onError?: (error: any) => void
 ) {
   return subscribeToSessions(callback, undefined, onError);
-}
-
-export async function createTrainingSession(session: TrainingSession): Promise<number> {
-  return saveSessionToCloud(session);
 }
 
 export async function deleteTrainingSession(sessionId: string): Promise<void> {

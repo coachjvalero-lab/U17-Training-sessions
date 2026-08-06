@@ -18,7 +18,6 @@ import {
 import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import { 
   CloudTrainingSession, 
-  saveSessionToCloud, 
   subscribeToExerciseLibrary, 
   saveExerciseToLibraryCloud, 
   deleteExerciseFromLibraryCloud, 
@@ -498,7 +497,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
           exercises: [clonedEx]
         };
 
-        await saveSessionToCloud(newSessionData);
+        await saveTrainingSessionBySection(sectionCat, newSessionData);
         setOpenAddDropdownId(null);
         const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
         setAddedToast(`Created Session #${newSessNum} and added "${ex.name}" to ${blockName}!`);
