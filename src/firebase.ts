@@ -27,6 +27,7 @@ import { TrainingSession, Exercise, SquadPlayer, PhysioRecord, VideoAnalysis, Ma
 import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
+import { isSupabaseEnabled, supabase } from './supabaseClient';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
@@ -50,14 +51,79 @@ export const auth = getAuth(app);
 
 let authListeners: ((user: User | null) => void)[] = [];
 
+const SUPABASE_USER_ROLES_TABLE = 'user_roles';
+
+type SupabaseUserRoleRow = {
+  email: string;
+  role: UserPermission['role'];
+  allowed_sections: string[] | null;
+  updated_at?: string | null;
+};
+
+function normalizeUserEmail(usernameOrEmail: string): string {
+  let cleanInput = usernameOrEmail.trim().toLowerCase();
+  if (!cleanInput.includes('@')) {
+    cleanInput = `${cleanInput}@alula.com`;
+  }
+  return cleanInput;
+}
+
+function toFirebaseLikeUser(supabaseUser: { id: string; email?: string | null } | null): User | null {
+  if (!supabaseUser) return null;
+  return {
+    uid: supabaseUser.id,
+    email: supabaseUser.email || null
+  } as unknown as User;
+}
+
+function mapSupabaseRoleRowToPermission(row: SupabaseUserRoleRow): UserPermission {
+  const allowedSections = Array.isArray(row.allowed_sections)
+    ? row.allowed_sections.filter((section): section is UserPermission['allowedSections'][number] => typeof section === 'string')
+    : [];
+
+  return {
+    email: row.email,
+    role: row.role,
+    allowedSections
+  };
+}
+
+async function fetchSupabasePermissionsList(): Promise<UserPermission[]> {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from(SUPABASE_USER_ROLES_TABLE)
+    .select('email, role, allowed_sections')
+    .order('email', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data || []) as SupabaseUserRoleRow[]).map(mapSupabaseRoleRowToPermission);
+}
+
 /**
  * Sign in with username or email and password.
  * Converts plain usernames like 'admin' to 'admin@alula.com' automatically.
  */
 export async function loginUser(usernameOrEmail: string, pass: string): Promise<User> {
-  let cleanInput = usernameOrEmail.trim().toLowerCase();
-  if (!cleanInput.includes('@')) {
-    cleanInput = `${cleanInput}@alula.com`;
+  const cleanInput = normalizeUserEmail(usernameOrEmail);
+
+  if (isSupabaseEnabled() && supabase) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanInput,
+      password: pass
+    });
+    if (error) {
+      throw error;
+    }
+
+    const mapped = toFirebaseLikeUser(data.user);
+    if (!mapped) {
+      throw new Error('Supabase login succeeded but no user session was returned.');
+    }
+    return mapped;
   }
 
   const cred = await signInWithEmailAndPassword(auth, cleanInput, pass);
@@ -72,6 +138,12 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
  * rules are the real access boundary, this is just so admins don't lose their session.
  */
 export async function adminCreateUserAccount(email: string, pass: string): Promise<void> {
+  if (isSupabaseEnabled()) {
+    const error = new Error('Supabase account creation from client is not enabled yet. Use Supabase dashboard/admin API during migration.');
+    (error as any).code = 'auth/operation-not-supported-in-this-environment';
+    throw error;
+  }
+
   const cleanEmail = email.trim().toLowerCase();
   const secondaryApp = initializeApp(firebaseConfig, `admin-create-user-${Date.now()}`);
   try {
@@ -87,9 +159,14 @@ export async function adminCreateUserAccount(email: string, pass: string): Promi
  * Send password reset email to user
  */
 export async function resetPasswordEmail(email: string): Promise<void> {
-  let cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail.includes('@')) {
-    cleanEmail = `${cleanEmail}@alula.com`;
+  const cleanEmail = normalizeUserEmail(email);
+
+  if (isSupabaseEnabled() && supabase) {
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    if (error) {
+      throw error;
+    }
+    return;
   }
 
   await sendPasswordResetEmail(auth, cleanEmail);
@@ -99,6 +176,15 @@ export async function resetPasswordEmail(email: string): Promise<void> {
  * Log out current user
  */
 export async function logoutUser(): Promise<void> {
+  if (isSupabaseEnabled() && supabase) {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // ignore
+    }
+    return;
+  }
+
   try {
     await signOut(auth);
   } catch (e) {
@@ -110,6 +196,25 @@ export async function logoutUser(): Promise<void> {
  * Subscribe to auth state changes
  */
 export function subscribeToAuth(callback: (user: User | null) => void) {
+  if (isSupabaseEnabled() && supabase) {
+    authListeners.push(callback);
+
+    supabase.auth.getSession().then(({ data }) => {
+      callback(toFirebaseLikeUser(data.session?.user || null));
+    }).catch(() => {
+      callback(null);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      callback(toFirebaseLikeUser(session?.user || null));
+    });
+
+    return () => {
+      authListeners = authListeners.filter(cb => cb !== callback);
+      data.subscription.unsubscribe();
+    };
+  }
+
   authListeners.push(callback);
 
   const initialUser = auth.currentUser;
@@ -1194,6 +1299,40 @@ export function subscribeToUserPermissions(
   callback: (list: UserPermission[]) => void,
   onError?: (error: any) => void
 ) {
+  if (isSupabaseEnabled() && supabase) {
+    const loadAndEmit = async () => {
+      const list = await fetchSupabasePermissionsList();
+      callback(list);
+    };
+
+    loadAndEmit().catch((error) => {
+      console.warn('Supabase user roles load error:', error);
+      if (onError) onError(error);
+    });
+
+    const channel = supabase
+      .channel('u17-user-roles-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: SUPABASE_USER_ROLES_TABLE },
+        () => {
+          loadAndEmit().catch((error) => {
+            console.warn('Supabase user roles subscription error:', error);
+            if (onError) onError(error);
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' && onError) {
+          onError(new Error('Supabase realtime channel error for user roles'));
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
   const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
   return onSnapshot(docRef, (docSnap) => {
     callback((docSnap.data()?.users as UserPermission[]) || []);
@@ -1235,6 +1374,49 @@ async function syncUserRolesCloud(list: UserPermission[]): Promise<void> {
  * changes from the Admin Permissions modal (a single, deliberate batch edit).
  */
 export async function saveUserPermissionsListCloud(list: UserPermission[]): Promise<void> {
+  if (isSupabaseEnabled() && supabase) {
+    const normalized = list.map((u) => ({
+      email: u.email.trim().toLowerCase(),
+      role: u.role,
+      allowed_sections: u.allowedSections,
+      updated_at: new Date().toISOString()
+    }));
+
+    const nextIds = new Set(normalized.map((u) => u.email));
+
+    const { data: existing, error: existingError } = await supabase
+      .from(SUPABASE_USER_ROLES_TABLE)
+      .select('email');
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const existingIds = new Set(((existing || []) as Array<{ email: string }>).map((row) => row.email));
+
+    const { error: upsertError } = await supabase
+      .from(SUPABASE_USER_ROLES_TABLE)
+      .upsert(normalized as Record<string, unknown>[], { onConflict: 'email' });
+
+    if (upsertError) {
+      throw upsertError;
+    }
+
+    const toDelete = [...existingIds].filter((id) => !nextIds.has(id));
+    if (toDelete.length > 0) {
+      const { error: deleteError } = await supabase
+        .from(SUPABASE_USER_ROLES_TABLE)
+        .delete()
+        .in('email', toDelete);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+    }
+
+    return;
+  }
+
   const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
   await runWriteWithErrorReporting(PERMISSIONS_COLLECTION, 'list', 'Save permissions list', async () => {
     await setDoc(docRef, { users: list, updatedAt: Date.now() }, { merge: true });
@@ -1249,6 +1431,23 @@ export async function saveUserPermissionsListCloud(list: UserPermission[]): Prom
  * localStorage to the shared cloud config, guarded so it only runs once.
  */
 export async function migrateLocalPermissionsIfNeeded(localList: UserPermission[]): Promise<void> {
+  if (isSupabaseEnabled() && supabase) {
+    const { count, error } = await supabase
+      .from(SUPABASE_USER_ROLES_TABLE)
+      .select('email', { count: 'exact', head: true });
+
+    if (error) {
+      throw error;
+    }
+
+    if ((count || 0) > 0) {
+      return;
+    }
+
+    await saveUserPermissionsListCloud(localList);
+    return;
+  }
+
   const docRef = doc(db, PERMISSIONS_COLLECTION, 'list');
   try {
     const docSnap = await getDoc(docRef);
