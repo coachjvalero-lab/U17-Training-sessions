@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
@@ -70,6 +70,7 @@ import {
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
+import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
   deleteTrainingSession,
   saveTrainingSessionBySection,
@@ -477,6 +478,16 @@ export default function App() {
       return 0;
     }
   });
+
+  const squadStatistics = useMemo(() => {
+    return calculateSquadStatistics({
+      players: squadPlayers,
+      sessions: [session, ...cloudSessions],
+      excludedPlayers
+    });
+  }, [cloudSessions, excludedPlayers, session, squadPlayers]);
+
+  const squadPlayersWithStats = squadStatistics.players;
 
   // Single app-level permissions sync initialization (avoids duplicate initializations across components).
   useEffect(() => {
@@ -926,6 +937,79 @@ export default function App() {
     handleUpdateRoster(formattedRoster);
   };
 
+  const attendanceStatsChanged = (previous?: SquadPlayer['attendanceStats'], next?: SquadPlayer['attendanceStats']) => {
+    if (!previous && !next) return false;
+    if (!previous || !next) return true;
+    return (
+      previous.attended !== next.attended ||
+      previous.total !== next.total ||
+      previous.percentage !== next.percentage ||
+      previous.ranking !== next.ranking
+    );
+  };
+
+  useEffect(() => {
+    if (!cloudSessions.some((s) => Array.isArray(s.attendance) && s.attendance.length > 0) && !(session.attendance || []).length) {
+      return;
+    }
+
+    const previousById = new Map(squadPlayers.map((player) => [player.id, player]));
+    const nextPlayers = squadStatistics.players;
+    const needsSync = nextPlayers.some((player) => {
+      const previous = previousById.get(player.id);
+      return attendanceStatsChanged(previous?.attendanceStats, player.attendanceStats);
+    });
+
+    if (!needsSync) return;
+
+    handleUpdateSquadPlayers(nextPlayers);
+  }, [cloudSessions, session.attendance, squadPlayers, squadStatistics.players]);
+
+  const handleApplyMalikaPoints = ({
+    sessionId,
+    exerciseId,
+    challenge,
+    awards
+  }: {
+    sessionId: string;
+    exerciseId: string;
+    challenge: string;
+    awards: Array<{ playerId: string; points: number }>;
+  }) => {
+    if (!sessionId || !exerciseId || awards.length === 0) return;
+
+    const awardedAt = Date.now();
+    const currentById = new Map(squadPlayers.map((player) => [player.id, player]));
+    const updatedPlayers = [...squadPlayers];
+
+    awards.forEach(({ playerId, points }) => {
+      const current = currentById.get(playerId);
+      if (!current) return;
+
+      const nextHistory = [
+        {
+          sessionId,
+          exerciseId,
+          date: awardedAt,
+          challenge,
+          points
+        },
+        ...(current.malikaHistory || [])
+      ];
+
+      const nextPlayer: SquadPlayer = {
+        ...current,
+        malikaPoints: (current.malikaPoints || 0) + points,
+        malikaHistory: nextHistory
+      };
+
+      currentById.set(playerId, nextPlayer);
+    });
+
+    const nextPlayers = updatedPlayers.map((player) => currentById.get(player.id) || player);
+    handleUpdateSquadPlayers(nextPlayers);
+  };
+
   const handleUpdatePhysioRecords = (records: PhysioRecord[]) => {
     const previous = physioRecords;
     setPhysioRecords(records);
@@ -1291,8 +1375,8 @@ export default function App() {
   };
 
   const sharedHeader = getSharedSessionHeader(session, lastLoadedSessionTimeRef.current.global);
-  const fullSquadRoster = session.squadRoster || squadPlayers.map(p => `${p.firstName} ${p.lastName}`);
-  const goalkeeperRoster = squadPlayers
+  const fullSquadRoster = session.squadRoster || squadPlayersWithStats.map(p => `${p.firstName} ${p.lastName}`);
+  const goalkeeperRoster = squadPlayersWithStats
     .filter((player) => player.position === 'GK')
     .map((player) => `${player.firstName} (GK)`);
 
@@ -1410,10 +1494,10 @@ export default function App() {
       <>
         <PortalHub
           onSelectSection={setActiveSection}
-          squadCount={squadPlayers.length}
+          squadCount={squadPlayersWithStats.length}
           activeSessionDate={session.date}
           totalExercisesCount={libraryCount}
-          squadPlayers={squadPlayers}
+          squadPlayers={squadPlayersWithStats}
           physioRecords={physioRecords}
           videoSessions={videoSessions}
           currentUser={currentUser}
@@ -1458,7 +1542,7 @@ export default function App() {
       <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
         {activeSection === 'squad' || activeSection === 'attendance' ? (
           <SquadRosterSection
-            players={squadPlayers}
+            players={squadPlayersWithStats}
             onUpdatePlayers={handleUpdateSquadPlayers}
             session={session}
             cloudSessions={cloudSessions}
@@ -1513,6 +1597,7 @@ export default function App() {
                 sharedHeader={sharedHeader}
                 planningRoster={fullSquadRoster}
                 currentLogo={teamLogo}
+                squadPlayers={squadPlayersWithStats}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
                 excludedPlayers={excludedPlayers}
@@ -1526,6 +1611,7 @@ export default function App() {
                 onExcludePlayer={handleExcludePlayer}
                 onIncludePlayer={handleIncludePlayer}
                 onUpdateLogo={handleUpdateTeamLogo}
+                onApplyMalikaPoints={handleApplyMalikaPoints}
               />
             )}
           />
@@ -1549,6 +1635,7 @@ export default function App() {
                 sharedHeader={sharedHeader}
                 planningRoster={fullSquadRoster}
                 currentLogo={teamLogo}
+                squadPlayers={squadPlayersWithStats}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
                 excludedPlayers={excludedPlayers}
@@ -1562,6 +1649,7 @@ export default function App() {
                 onExcludePlayer={handleExcludePlayer}
                 onIncludePlayer={handleIncludePlayer}
                 onUpdateLogo={handleUpdateTeamLogo}
+                onApplyMalikaPoints={handleApplyMalikaPoints}
               />
             )}
           />
@@ -1585,6 +1673,7 @@ export default function App() {
                 sharedHeader={sharedHeader}
                 planningRoster={goalkeeperRoster}
                 currentLogo={teamLogo}
+                squadPlayers={squadPlayersWithStats}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
                 excludedPlayers={excludedPlayers}
@@ -1598,6 +1687,7 @@ export default function App() {
                 onExcludePlayer={handleExcludePlayer}
                 onIncludePlayer={handleIncludePlayer}
                 onUpdateLogo={handleUpdateTeamLogo}
+                onApplyMalikaPoints={handleApplyMalikaPoints}
               />
             )}
           />

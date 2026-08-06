@@ -15,6 +15,28 @@ export type GameMoment =
 
 export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Unknown';
 
+export interface AttendanceStats {
+  attended: number;
+  total: number;
+  percentage: number;
+  ranking: number;
+  updatedAt: number;
+}
+
+export interface MalikaEntry {
+  sessionId: string;
+  exerciseId: string;
+  date: number;
+  challenge: string;
+  points: number;
+}
+
+export interface MalikaChallenge {
+  enabled: boolean;
+  title: string;
+  defaultPoints: number;
+}
+
 export interface SquadPlayer {
   id: string;
   firstName: string;
@@ -30,6 +52,9 @@ export interface SquadPlayer {
   preferredFoot?: 'Right' | 'Left' | 'Both';
   heightCm?: number;
   weightKg?: number;
+  attendanceStats?: AttendanceStats;
+  malikaPoints?: number;
+  malikaHistory?: MalikaEntry[];
 }
 
 export interface PhysioRecord {
@@ -94,6 +119,7 @@ export interface Exercise {
   playerGroups?: string; // Player groups assignment for this exercise
   hideGraphics?: boolean; // Hide tactical diagram graphics box
   isFitness?: boolean; // Indicates exercise belongs to Fitness tab
+  malikaChallenge?: MalikaChallenge;
 }
 
 export interface TrainingBlock {

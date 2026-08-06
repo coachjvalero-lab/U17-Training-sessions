@@ -39,6 +39,8 @@ interface SquadRosterSectionProps {
   onIncludePlayer?: (name: string) => void;
 }
 
+type SquadSubTab = 'roster' | 'attendance' | 'malika';
+
 // Preset Female Athlete Avatar Options
 const AVATAR_PRESETS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
@@ -73,7 +75,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     statusFilter: 'ALL',
     viewMode: 'grid' as const
   });
-  const [activeSubTab, setActiveSubTab] = useState<'roster' | 'attendance'>(restoredContext.activeSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<SquadSubTab>(restoredContext.activeSubTab as SquadSubTab);
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
   const [positionFilter, setPositionFilter] = useState<string>(restoredContext.positionFilter);
   const [statusFilter, setStatusFilter] = useState<string>(restoredContext.statusFilter);
@@ -341,6 +343,29 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     );
   };
 
+  const malikaRanking = [...players]
+    .map((player, index) => {
+      const points = player.malikaPoints || 0;
+      const previousPoints = player.malikaHistory && player.malikaHistory.length > 0
+        ? player.malikaHistory.slice(1).reduce((sum, entry) => sum + entry.points, 0)
+        : 0;
+      return {
+        ...player,
+        points,
+        evolution: points - previousPoints,
+        ranking: index + 1
+      };
+    })
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      const aName = `${a.firstName} ${a.lastName}`;
+      const bName = `${b.firstName} ${b.lastName}`;
+      return aName.localeCompare(bName);
+    })
+    .map((player, index) => ({ ...player, ranking: index + 1 }));
+
+  const topMalika = malikaRanking.slice(0, 3);
+
   return (
     <div className="space-y-6">
       {/* SQUAD HUB MODULE NAVIGATION CARDS (Football Hub Grid Style) */}
@@ -372,7 +397,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         </div>
 
         {/* TOP 2 MODULE NAVIGATION CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           
           {/* Card 1: Squad Roster & Profiles */}
           <button
@@ -490,6 +515,64 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             </div>
           </button>
 
+          {/* Card 3: Malika Golden League */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('malika')}
+            className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
+              activeSubTab === 'malika'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
+                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+            }`}
+          >
+            <div className={`absolute top-0 inset-x-0 h-1 transition-colors ${
+              activeSubTab === 'malika' ? 'bg-amber-500' : 'bg-slate-800 group-hover:bg-amber-600'
+            }`} />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  INTERNAL COMPETITION
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  activeSubTab === 'malika'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                    : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                }`}>
+                  Malika League
+                </span>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <div className={`p-3 rounded-xl border shrink-0 transition-transform ${
+                  activeSubTab === 'malika'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 scale-105'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 group-hover:text-amber-400'
+                }`}>
+                  <span className="text-lg">👑</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-amber-300 transition-colors">
+                    Malika Golden League
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
+                    Internal points ranking for challenge winners and training bonuses.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span className="text-[11px] font-mono text-slate-400">
+                {players.filter((player) => (player.malikaPoints || 0) > 0).length} Players Scored
+              </span>
+              <div className="flex items-center space-x-1 text-amber-400 font-bold group-hover:translate-x-1 transition-transform">
+                <span>View Ranking</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </button>
+
         </div>
       </div>
 
@@ -504,6 +587,115 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           onExcludePlayer={onExcludePlayer}
           onIncludePlayer={onIncludePlayer}
         />
+      ) : activeSubTab === 'malika' ? (
+        <div className="space-y-6">
+          <div className="bg-[#001d3a] border border-[#5ea4c5]/20 text-white rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden print:bg-white print:text-slate-900 print:border-slate-300 print:p-4">
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-3 bg-[#002b54] text-amber-300 rounded-2xl border border-amber-300/30 shadow-inner">
+                  <span className="text-xl">👑</span>
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-300">
+                      Squad Master Ranking
+                    </span>
+                    <span className="bg-amber-500/20 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-500/30">
+                      Malika Golden League
+                    </span>
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-display font-black tracking-tight uppercase text-white mt-0.5">
+                    Internal challenge leaderboard
+                  </h1>
+                  <p className="text-xs text-sky-200/70 font-semibold max-w-xl mt-1">
+                    Ranking derived from exercise-level challenge points stored only in Squad.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {topMalika.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {topMalika.map((player, index) => (
+                <div key={player.id} className={`bg-white border rounded-2xl p-4 shadow-sm ${index === 0 ? 'border-amber-300' : 'border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Top {index + 1}</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {player.points} pts
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <img
+                      src={player.photoUrl || AVATAR_PRESETS[0]}
+                      alt={`${player.firstName} ${player.lastName}`}
+                      className="w-12 h-12 rounded-xl object-cover border border-slate-200"
+                    />
+                    <div className="min-w-0">
+                      <h3 className="font-extrabold text-slate-900 truncate">{player.firstName} {player.lastName}</h3>
+                      <p className="text-xs text-slate-500">Ranking #{player.ranking}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+                  Malika Golden League Ranking
+                </h2>
+                <p className="text-[10px] text-slate-400 font-bold">
+                  Auto-ordered by points, driven only by Squad data.
+                </p>
+              </div>
+              <div className="text-xs font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                {malikaRanking.length} ranked players
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-50/80">
+                    <th className="py-3 px-3">Pos</th>
+                    <th className="py-3 px-3">Player</th>
+                    <th className="py-3 px-3 text-center">Points</th>
+                    <th className="py-3 px-3 text-center">Change</th>
+                    <th className="py-3 px-3 text-right">Ranking</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {malikaRanking.map((player, index) => (
+                    <tr key={player.id} className={`hover:bg-slate-50/80 transition-colors ${index < 3 ? 'bg-amber-50/20' : ''}`}>
+                      <td className="py-3 px-3 font-black text-slate-700">#{player.ranking}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center space-x-2.5">
+                          <img
+                            src={player.photoUrl || AVATAR_PRESETS[0]}
+                            alt={`${player.firstName} ${player.lastName}`}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                          />
+                          <div>
+                            <div className="font-extrabold text-slate-900">{player.firstName} {player.lastName}</div>
+                            <div className="text-[10px] text-slate-400 uppercase tracking-wider">{player.position}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-center font-black text-amber-700">{player.points}</td>
+                      <td className="py-3 px-3 text-center font-bold text-slate-600">
+                        {player.evolution > 0 ? `+${player.evolution}` : player.evolution < 0 ? `${player.evolution}` : '0'}
+                      </td>
+                      <td className="py-3 px-3 text-right text-[11px] font-bold text-slate-500">#{player.ranking}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       ) : (
         <>
           {/* Header Banner - Clean Light Al Ula Style */}

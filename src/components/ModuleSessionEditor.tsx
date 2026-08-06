@@ -4,7 +4,7 @@ import { HeaderSection } from './HeaderSection';
 import { SessionAttendanceTracker } from './SessionAttendanceTracker';
 import { PlayerGroupsSection } from './PlayerGroupsSection';
 import { ExerciseBlock } from './ExerciseBlock';
-import { Exercise, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingSession } from '../types';
+import { Exercise, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { getModuleGameMoments, getModuleSessionView, TrainingModuleId } from '../modules/trainingModules';
 
 interface ModuleSessionEditorProps {
@@ -13,6 +13,7 @@ interface ModuleSessionEditorProps {
   sharedHeader: SharedSessionHeader;
   planningRoster: string[];
   currentLogo: string;
+  squadPlayers?: SquadPlayer[];
   isSaving: boolean;
   expandedExercises: Record<string, boolean>;
   excludedPlayers: string[];
@@ -26,6 +27,12 @@ interface ModuleSessionEditorProps {
   onExcludePlayer: (name: string) => void;
   onIncludePlayer: (name: string) => void;
   onUpdateLogo: (newLogo: string) => void;
+  onApplyMalikaPoints?: (payload: {
+    sessionId: string;
+    exerciseId: string;
+    challenge: string;
+    awards: Array<{ playerId: string; points: number }>;
+  }) => void;
 }
 
 export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
@@ -34,6 +41,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   sharedHeader,
   planningRoster,
   currentLogo,
+  squadPlayers = [],
   isSaving,
   expandedExercises,
   excludedPlayers,
@@ -46,7 +54,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   onToggleExpand,
   onExcludePlayer,
   onIncludePlayer,
-  onUpdateLogo
+  onUpdateLogo,
+  onApplyMalikaPoints
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
   const isSharedHeaderReadOnly = moduleId !== 'football';
@@ -113,6 +122,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         toggleExpand={onToggleExpand}
         sessionGroups={moduleView.playerGroups}
         gameMoments={getModuleGameMoments(moduleId)}
+        sessionId={session.id}
+        squadPlayers={squadPlayers}
+        onApplyMalikaPoints={onApplyMalikaPoints}
       />
 
       <ExerciseBlock
@@ -122,6 +134,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         toggleExpand={onToggleExpand}
         sessionGroups={moduleView.playerGroups}
         gameMoments={getModuleGameMoments(moduleId)}
+        sessionId={session.id}
+        squadPlayers={squadPlayers}
+        onApplyMalikaPoints={onApplyMalikaPoints}
       />
 
       <ExerciseBlock
@@ -131,6 +146,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         toggleExpand={onToggleExpand}
         sessionGroups={moduleView.playerGroups}
         gameMoments={getModuleGameMoments(moduleId)}
+        sessionId={session.id}
+        squadPlayers={squadPlayers}
+        onApplyMalikaPoints={onApplyMalikaPoints}
       />
 
       <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">

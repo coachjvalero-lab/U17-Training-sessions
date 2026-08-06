@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
-  Clock, Maximize2, ShieldAlert, Image as ImageIcon, AlertCircle, Loader2, Users, BookmarkPlus, Check
+  Clock, Maximize2, ShieldAlert, Image as ImageIcon, AlertCircle, Loader2, Users, BookmarkPlus, Check, Trophy, X
 } from 'lucide-react';
-import { Exercise, GameMoment, TrainingBlock, PlayerGroup } from '../types';
+import { Exercise, GameMoment, TrainingBlock, PlayerGroup, SquadPlayer } from '../types';
 import { processUploadedImageFile } from '../utils/heic';
 import { saveExerciseToLibraryCloud } from '../firebase';
 import { SmartImage } from './SmartImage';
@@ -15,6 +15,14 @@ interface ExerciseBlockProps {
   toggleExpand: (id: string) => void;
   sessionGroups?: PlayerGroup[];
   gameMoments?: GameMoment[];
+  sessionId?: string;
+  squadPlayers?: SquadPlayer[];
+  onApplyMalikaPoints?: (payload: {
+    sessionId: string;
+    exerciseId: string;
+    challenge: string;
+    awards: Array<{ playerId: string; points: number }>;
+  }) => void;
 }
 
 export const GAME_MOMENTS: GameMoment[] = ['-', 'Attack', 'Defense', 'Transition A-D', 'Transition D-A', 'Set Pieces', 'Match', 'Other'];
@@ -125,11 +133,17 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   expandedExercises, 
   toggleExpand,
   sessionGroups,
-  gameMoments
+  gameMoments,
+  sessionId,
+  squadPlayers = [],
+  onApplyMalikaPoints
 }) => {
   const [dragOverExId, setDragOverExId] = useState<string | null>(null);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
   const [addedToLibId, setAddedToLibId] = useState<string | null>(null);
+  const [activeMalikaExerciseId, setActiveMalikaExerciseId] = useState<string | null>(null);
+  const [malikaSearchTerm, setMalikaSearchTerm] = useState('');
+  const [malikaSelections, setMalikaSelections] = useState<Record<string, { selected: boolean; points: string }>>({});
   const availableGameMoments = (gameMoments && gameMoments.length > 0) ? gameMoments : GAME_MOMENTS;
 
   const handleAddToLibrary = (ex: Exercise, e: React.MouseEvent) => {
@@ -155,6 +169,75 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
     } catch (err) {
       console.error('Failed to save exercise to library:', err);
     }
+  };
+
+  const getPlayerLabel = (player: SquadPlayer) => `${player.firstName} ${player.lastName}`.trim();
+
+  const openMalikaPanel = (ex: Exercise) => {
+    if (!ex.malikaChallenge?.enabled || !sessionId || !onApplyMalikaPoints || squadPlayers.length === 0) return;
+
+    const defaultPoints = String(ex.malikaChallenge.defaultPoints ?? 0);
+    const initialSelections = squadPlayers.reduce<Record<string, { selected: boolean; points: string }>>((acc, player) => {
+      acc[player.id] = { selected: false, points: defaultPoints };
+      return acc;
+    }, {});
+
+    setActiveMalikaExerciseId(ex.id);
+    setMalikaSelections(initialSelections);
+    setMalikaSearchTerm('');
+  };
+
+  const closeMalikaPanel = () => {
+    setActiveMalikaExerciseId(null);
+    setMalikaSearchTerm('');
+  };
+
+  const updateMalikaPlayerSelection = (playerId: string, defaultPoints: number) => {
+    setMalikaSelections((prev) => {
+      const current = prev[playerId] || { selected: false, points: String(defaultPoints) };
+      return {
+        ...prev,
+        [playerId]: {
+          selected: !current.selected,
+          points: current.points || String(defaultPoints)
+        }
+      };
+    });
+  };
+
+  const updateMalikaPlayerPoints = (playerId: string, points: string, defaultPoints: number) => {
+    setMalikaSelections((prev) => ({
+      ...prev,
+      [playerId]: {
+        selected: prev[playerId]?.selected || false,
+        points: points === '' ? String(defaultPoints) : points
+      }
+    }));
+  };
+
+  const saveMalikaChallenge = (ex: Exercise) => {
+    if (!sessionId || !onApplyMalikaPoints || !ex.malikaChallenge?.enabled) return;
+
+    const awards = squadPlayers
+      .filter((player) => malikaSelections[player.id]?.selected)
+      .map((player) => ({
+        playerId: player.id,
+        points: Number(malikaSelections[player.id]?.points ?? ex.malikaChallenge?.defaultPoints ?? 0) || 0
+      }))
+      .filter((award) => award.points !== 0 || malikaSelections[award.playerId]?.selected);
+
+    if (awards.length === 0) {
+      alert('Select at least one player for the Malika challenge.');
+      return;
+    }
+
+    onApplyMalikaPoints({
+      sessionId,
+      exerciseId: ex.id,
+      challenge: ex.malikaChallenge.title || ex.name,
+      awards
+    });
+    closeMalikaPanel();
   };
 
   const handleTimingChange = (
@@ -489,6 +572,29 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     </div>
                   )}
 
+                  {ex.malikaChallenge?.enabled && sessionId && onApplyMalikaPoints && squadPlayers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (activeMalikaExerciseId === ex.id) {
+                          closeMalikaPanel();
+                        } else {
+                          openMalikaPanel(ex);
+                        }
+                      }}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wide border shrink-0 transition-all print:hidden ${
+                        activeMalikaExerciseId === ex.id
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                      }`}
+                      title="Assign Malika points from this exercise"
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      <span>{ex.malikaChallenge.title || 'Malika'}</span>
+                    </button>
+                  )}
+
                   {/* Moment badge */}
                   <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md border ${getMomentBadgeStyles(ex.gameMoment)} print:px-1.5 print:py-0.5 print:text-[8px] print:font-extrabold`}>
                     {ex.gameMoment}
@@ -799,6 +905,102 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         {ex.playerGroups || <span className="italic text-slate-400">No player groups assigned</span>}
                       </div>
                     </div>
+
+                    {ex.malikaChallenge?.enabled && sessionId && onApplyMalikaPoints && squadPlayers.length > 0 && (
+                      <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-3 print:hidden">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
+                              <Trophy className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-amber-950 uppercase tracking-wider truncate">
+                                {ex.malikaChallenge.title || 'Malika Challenge'}
+                              </p>
+                              <p className="text-[10px] font-semibold text-amber-900/70">
+                                Default points: {ex.malikaChallenge.defaultPoints}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (activeMalikaExerciseId === ex.id) {
+                                closeMalikaPanel();
+                              } else {
+                                openMalikaPanel(ex);
+                              }
+                            }}
+                            className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-white text-amber-900 border border-amber-200 hover:bg-amber-100 transition-colors"
+                          >
+                            {activeMalikaExerciseId === ex.id ? 'Close' : 'Assign points'}
+                          </button>
+                        </div>
+
+                        {activeMalikaExerciseId === ex.id && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={malikaSearchTerm}
+                              onChange={(e) => setMalikaSearchTerm(e.target.value)}
+                              placeholder="Search players..."
+                              className="w-full text-xs font-semibold bg-white border border-amber-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400"
+                            />
+
+                            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                              {squadPlayers
+                                .filter((player) => getPlayerLabel(player).toLowerCase().includes(malikaSearchTerm.toLowerCase()))
+                                .map((player) => {
+                                  const selection = malikaSelections[player.id] || { selected: false, points: String(ex.malikaChallenge?.defaultPoints ?? 0) };
+
+                                  return (
+                                    <div key={player.id} className="flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-3 py-2">
+                                      <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={selection.selected}
+                                          onChange={() => updateMalikaPlayerSelection(player.id, ex.malikaChallenge?.defaultPoints ?? 0)}
+                                          className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                                        />
+                                        <span className="text-xs font-bold text-slate-800 truncate">
+                                          {getPlayerLabel(player)}
+                                        </span>
+                                      </label>
+
+                                      <input
+                                        type="number"
+                                        value={selection.points}
+                                        onChange={(e) => updateMalikaPlayerPoints(player.id, e.target.value, ex.malikaChallenge?.defaultPoints ?? 0)}
+                                        className="w-20 text-xs font-black bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-right focus:outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={closeMalikaPanel}
+                                className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg bg-white border border-amber-200 text-amber-900 hover:bg-amber-100"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveMalikaChallenge(ex)}
+                                className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400"
+                              >
+                                <Trophy className="w-3.5 h-3.5" />
+                                Save points
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                 </div>
