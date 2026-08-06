@@ -440,25 +440,31 @@ export async function saveSessionFieldsByRole(
   const saveTimestamp = Date.now();
   const ref = doc(db, SESSIONS_COLLECTION, sessionId);
 
+  const sharedHeaderFields = (input: TrainingSession) => ({
+    id: sessionId,
+    teamName: input.teamName,
+    date: input.date,
+    time: input.time,
+    sessionNumber: input.sessionNumber,
+    microcycleDay: input.microcycleDay,
+    mainObjective: input.mainObjective,
+    materialsNeeded: input.materialsNeeded
+  });
+
   const roleOwnedFields: Record<'football' | 'fitness' | 'gk', (input: TrainingSession, savedAt: number) => Record<string, any>> = {
     football: (input, savedAt) => ({
+      ...sharedHeaderFields(input),
       footballUpdatedAt: savedAt,
       warmUp: input.warmUp,
       mainPart: input.mainPart,
       coolDown: input.coolDown,
       playerGroups: input.playerGroups,
       observations: input.observations || '',
-      teamName: input.teamName,
-      date: input.date,
-      time: input.time,
-      sessionNumber: input.sessionNumber,
-      microcycleDay: input.microcycleDay,
-      mainObjective: input.mainObjective,
-      materialsNeeded: input.materialsNeeded,
       squadRoster: input.squadRoster,
       attendance: input.attendance
     }),
     fitness: (input, savedAt) => ({
+      ...sharedHeaderFields(input),
       fitnessUpdatedAt: savedAt,
       fitnessWarmUp: input.fitnessWarmUp,
       fitnessMainPart: input.fitnessMainPart,
@@ -466,6 +472,7 @@ export async function saveSessionFieldsByRole(
       fitnessPlayerGroups: input.fitnessPlayerGroups
     }),
     gk: (input, savedAt) => ({
+      ...sharedHeaderFields(input),
       gkUpdatedAt: savedAt,
       gkWarmUp: input.gkWarmUp,
       gkMainPart: input.gkMainPart,
@@ -584,7 +591,7 @@ export function subscribeToSessions(
 
   const q = query(
     collection(db, SESSIONS_COLLECTION),
-    orderBy('date', 'desc')
+    orderBy('updatedAt', 'desc')
   );
   
   return onSnapshot(q, (querySnapshot) => {
