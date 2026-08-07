@@ -113,6 +113,7 @@ create policy sessions_read_authenticated
   using (auth.uid() is not null);
 
 drop policy if exists sessions_write_authenticated on public.sessions;
+drop policy if exists sessions_write_by_section on public.sessions;
 create policy sessions_write_by_section
   on public.sessions
   for all
@@ -130,22 +131,22 @@ create policy sessions_write_by_section
 
 -- Optional table policies (created only if those tables exist already in this project)
 
-do $$
+do $do$
 begin
   if to_regclass('public.squad_players') is not null then
     execute 'alter table public.squad_players enable row level security';
     execute 'drop policy if exists squad_players_read_authenticated on public.squad_players';
     execute 'create policy squad_players_read_authenticated on public.squad_players for select to authenticated using (auth.uid() is not null)';
     execute 'drop policy if exists squad_players_write_squad on public.squad_players';
-    execute $$create policy squad_players_write_squad on public.squad_players for all to authenticated using (public.has_section_access('squad')) with check (public.has_section_access('squad'))$$;
+    execute $sql$create policy squad_players_write_squad on public.squad_players for all to authenticated using (public.has_section_access('squad')) with check (public.has_section_access('squad'))$sql$;
   end if;
 
   if to_regclass('public.physio_records') is not null then
     execute 'alter table public.physio_records enable row level security';
     execute 'drop policy if exists physio_records_read_policy on public.physio_records';
-    execute $$create policy physio_records_read_policy on public.physio_records for select to authenticated using (public.is_admin_user() or public.has_section_access('physio') or public.has_section_access('football') or public.has_section_access('fitness') or public.has_section_access('gk'))$$;
+    execute $sql$create policy physio_records_read_policy on public.physio_records for select to authenticated using (public.is_admin_user() or public.has_section_access('physio') or public.has_section_access('football') or public.has_section_access('fitness') or public.has_section_access('gk'))$sql$;
     execute 'drop policy if exists physio_records_write_policy on public.physio_records';
-    execute $$create policy physio_records_write_policy on public.physio_records for all to authenticated using (public.is_admin_user() or public.has_section_access('physio')) with check (public.is_admin_user() or public.has_section_access('physio'))$$;
+    execute $sql$create policy physio_records_write_policy on public.physio_records for all to authenticated using (public.is_admin_user() or public.has_section_access('physio')) with check (public.is_admin_user() or public.has_section_access('physio'))$sql$;
   end if;
 
   if to_regclass('public.video_analysis') is not null then
@@ -153,7 +154,7 @@ begin
     execute 'drop policy if exists video_analysis_read_authenticated on public.video_analysis';
     execute 'create policy video_analysis_read_authenticated on public.video_analysis for select to authenticated using (auth.uid() is not null)';
     execute 'drop policy if exists video_analysis_write_video on public.video_analysis';
-    execute $$create policy video_analysis_write_video on public.video_analysis for all to authenticated using (public.has_section_access('video')) with check (public.has_section_access('video'))$$;
+    execute $sql$create policy video_analysis_write_video on public.video_analysis for all to authenticated using (public.has_section_access('video')) with check (public.has_section_access('video'))$sql$;
   end if;
 
   if to_regclass('public.exercise_library') is not null then
@@ -161,7 +162,7 @@ begin
     execute 'drop policy if exists exercise_library_read_authenticated on public.exercise_library';
     execute 'create policy exercise_library_read_authenticated on public.exercise_library for select to authenticated using (auth.uid() is not null)';
     execute 'drop policy if exists exercise_library_write_exercises on public.exercise_library';
-    execute $$create policy exercise_library_write_exercises on public.exercise_library for all to authenticated using (public.has_section_access('exercises')) with check (public.has_section_access('exercises'))$$;
+    execute $sql$create policy exercise_library_write_exercises on public.exercise_library for all to authenticated using (public.has_section_access('exercises')) with check (public.has_section_access('exercises'))$sql$;
   end if;
 
   if to_regclass('public.competition_fixtures') is not null then
@@ -169,6 +170,6 @@ begin
     execute 'drop policy if exists competition_fixtures_read_authenticated on public.competition_fixtures';
     execute 'create policy competition_fixtures_read_authenticated on public.competition_fixtures for select to authenticated using (auth.uid() is not null)';
     execute 'drop policy if exists competition_fixtures_write_football on public.competition_fixtures';
-    execute $$create policy competition_fixtures_write_football on public.competition_fixtures for all to authenticated using (public.has_section_access('football')) with check (public.has_section_access('football'))$$;
+    execute $sql$create policy competition_fixtures_write_football on public.competition_fixtures for all to authenticated using (public.has_section_access('football')) with check (public.has_section_access('football'))$sql$;
   end if;
-end $$;
+end $do$;
