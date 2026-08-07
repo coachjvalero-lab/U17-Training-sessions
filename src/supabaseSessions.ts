@@ -131,6 +131,61 @@ export function isSupabaseSessionsEnabled(): boolean {
   return isSupabaseEnabled();
 }
 
+function toSupabaseSessionRow(session: CloudTrainingSession): Record<string, unknown> {
+  return {
+    id: session.id,
+    team_name: session.teamName,
+    date: session.date,
+    time: session.time,
+    session_number: session.sessionNumber,
+    microcycle_day: session.microcycleDay,
+    main_objective: session.mainObjective,
+    materials_needed: session.materialsNeeded,
+    observations: session.observations || '',
+    warm_up: session.warmUp,
+    main_part: session.mainPart,
+    cool_down: session.coolDown,
+    player_groups: session.playerGroups,
+    squad_roster: session.squadRoster || [],
+    attendance: session.attendance || [],
+    fitness_warm_up: session.fitnessWarmUp || null,
+    fitness_main_part: session.fitnessMainPart || null,
+    fitness_cool_down: session.fitnessCoolDown || null,
+    fitness_player_groups: session.fitnessPlayerGroups || [],
+    gk_warm_up: session.gkWarmUp || null,
+    gk_main_part: session.gkMainPart || null,
+    gk_cool_down: session.gkCoolDown || null,
+    gk_player_groups: session.gkPlayerGroups || [],
+    updated_at: session.updatedAt || 0,
+    football_updated_at: session.footballUpdatedAt || null,
+    fitness_updated_at: session.fitnessUpdatedAt || null,
+    gk_updated_at: session.gkUpdatedAt || null
+  };
+}
+
+export async function countSessionsSupabase(): Promise<number> {
+  const client = getSupabaseOrThrow();
+  const { count, error } = await client
+    .from(SESSIONS_TABLE)
+    .select('id', { count: 'exact', head: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return count || 0;
+}
+
+export async function upsertSessionsSupabase(sessions: CloudTrainingSession[]): Promise<void> {
+  if (sessions.length === 0) return;
+  const client = getSupabaseOrThrow();
+  const payload = sessions.map(toSupabaseSessionRow);
+  const { error } = await client.from(SESSIONS_TABLE).upsert(payload, { onConflict: 'id' });
+  if (error) {
+    throw error;
+  }
+}
+
 export async function subscribeToSessionsSupabase(
   callback: (sessions: CloudTrainingSession[]) => void,
   onError?: (error: any) => void

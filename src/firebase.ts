@@ -799,6 +799,39 @@ export function subscribeToSessions(
   });
 }
 
+/**
+ * One-shot sessions snapshot used by migration/bootstrap flows.
+ */
+export async function listSessionsFromCloudOnce(): Promise<CloudTrainingSession[]> {
+  const readFrom = async (database: typeof db): Promise<CloudTrainingSession[]> => {
+    const snap = await getDocs(collection(database, SESSIONS_COLLECTION));
+    const sessions: CloudTrainingSession[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as CloudTrainingSession;
+      sessions.push({
+        ...data,
+        id: data.id || docSnap.id
+      });
+    });
+
+    return sessions.sort((a, b) => {
+      const aTs = a.updatedAt || 0;
+      const bTs = b.updatedAt || 0;
+      if (bTs !== aTs) return bTs - aTs;
+      return (b.date || '').localeCompare(a.date || '');
+    });
+  };
+
+  const primary = await readFrom(db);
+  if (primary.length > 0) return primary;
+
+  if (db !== defaultDb) {
+    return readFrom(defaultDb);
+  }
+
+  return primary;
+}
+
 // ---------------------------------------------------------------------------
 // Team logo (shared badge/logo — Firestore is the source of truth,
 // localStorage is only a temporary cache/offline fallback)

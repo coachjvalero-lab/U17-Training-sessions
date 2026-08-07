@@ -1,22 +1,45 @@
 import {
   CloudTrainingSession,
   deleteSessionFromCloud,
+  listSessionsFromCloudOnce,
   subscribeToSessions
 } from '../firebase';
 import {
+  countSessionsSupabase,
   deleteSessionFromSupabase,
   isSupabaseSessionsEnabled,
   saveSessionFieldsByRoleSupabase,
-  subscribeToSessionsSupabase
+  subscribeToSessionsSupabase,
+  upsertSessionsSupabase
 } from '../supabaseSessions';
 import { PortalSection, TrainingSession } from '../types';
 import { DEFAULT_MODULE_ID, getModuleIdFromSection, saveSessionBySection } from './trainingModules';
+
+const SHOULD_AUTO_MIGRATE_SESSIONS = import.meta.env.VITE_SUPABASE_AUTO_MIGRATE_SESSIONS === 'true';
+let hasTriedSupabaseSessionBootstrap = false;
+
+async function bootstrapSupabaseSessionsFromFirebaseIfNeeded(): Promise<void> {
+  if (!SHOULD_AUTO_MIGRATE_SESSIONS || hasTriedSupabaseSessionBootstrap) return;
+  hasTriedSupabaseSessionBootstrap = true;
+
+  const existingCount = await countSessionsSupabase();
+  if (existingCount > 0) return;
+
+  const firebaseSessions = await listSessionsFromCloudOnce();
+  if (firebaseSessions.length === 0) return;
+
+  await upsertSessionsSupabase(firebaseSessions);
+}
 
 export function subscribeTrainingSessions(
   callback: (sessions: CloudTrainingSession[]) => void,
   onError?: (error: any) => void
 ) {
   if (isSupabaseSessionsEnabled()) {
+    bootstrapSupabaseSessionsFromFirebaseIfNeeded().catch((error) => {
+      if (onError) onError(error);
+    });
+
     let unsubscribe: (() => void) | null = null;
     subscribeToSessionsSupabase(callback, onError)
       .then((unsub) => {
