@@ -68,6 +68,11 @@ function normalizeUserEmail(usernameOrEmail: string): string {
   return cleanInput;
 }
 
+function isSupabaseEmailNotConfirmedError(error: unknown): boolean {
+  const message = (error as { message?: string } | null)?.message?.toLowerCase() || '';
+  return message.includes('email not confirmed') || message.includes('email_not_confirmed');
+}
+
 function toFirebaseLikeUser(supabaseUser: { id: string; email?: string | null } | null): User | null {
   if (!supabaseUser) return null;
   return {
@@ -116,7 +121,14 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
       password: pass
     });
     if (error) {
-      throw error;
+      if (!isSupabaseEmailNotConfirmedError(error)) {
+        throw error;
+      }
+
+      // Transitional fallback: keep access operational while Supabase email
+      // confirmation is still enabled for existing users.
+      const cred = await signInWithEmailAndPassword(auth, cleanInput, pass);
+      return cred.user;
     }
 
     const mapped = toFirebaseLikeUser(data.user);
@@ -199,18 +211,35 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
   if (isSupabaseEnabled() && supabase) {
     authListeners.push(callback);
 
+    let supabaseUser: User | null = null;
+    let firebaseUser: User | null = auth.currentUser ?? null;
+
+    const emitMergedUser = () => {
+      callback(supabaseUser ?? firebaseUser ?? null);
+    };
+
     supabase.auth.getSession().then(({ data }) => {
-      callback(toFirebaseLikeUser(data.session?.user || null));
+      supabaseUser = toFirebaseLikeUser(data.session?.user || null);
+      emitMergedUser();
     }).catch(() => {
-      callback(null);
+      emitMergedUser();
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      callback(toFirebaseLikeUser(session?.user || null));
+      supabaseUser = toFirebaseLikeUser(session?.user || null);
+      emitMergedUser();
+    });
+
+    const firebaseUnsubscribe = onAuthStateChanged(auth, (user) => {
+      firebaseUser = user ?? null;
+      if (!supabaseUser) {
+        emitMergedUser();
+      }
     });
 
     return () => {
       authListeners = authListeners.filter(cb => cb !== callback);
+      firebaseUnsubscribe();
       data.subscription.unsubscribe();
     };
   }
@@ -822,11 +851,23 @@ export async function listSessionsFromCloudOnce(): Promise<CloudTrainingSession[
     });
   };
 
-  const primary = await readFrom(db);
+  let primary: CloudTrainingSession[];
+  try {
+    primary = await readFrom(db);
+  } catch (error) {
+    console.error('[F3] error reading Firebase sessions snapshot (primary db)', error);
+    throw error;
+  }
+
   if (primary.length > 0) return primary;
 
   if (db !== defaultDb) {
-    return readFrom(defaultDb);
+    try {
+      return await readFrom(defaultDb);
+    } catch (error) {
+      console.error('[F3] error reading Firebase sessions snapshot (default db)', error);
+      throw error;
+    }
   }
 
   return primary;
