@@ -1,7 +1,7 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession } from './firebase';
 import type { TrainingSession } from './types';
-import { isSupabaseEnabled, supabase } from './supabaseClient';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 type SessionRole = 'football' | 'fitness' | 'gk';
 
@@ -127,8 +127,13 @@ function getRolePatch(role: SessionRole, session: TrainingSession, timestamp: nu
   };
 }
 
+export function getSessionsDataProvider(): 'firebase' | 'supabase' {
+  const raw = (import.meta.env.VITE_SESSIONS_DATA_PROVIDER || 'firebase').toLowerCase();
+  return raw === 'supabase' ? 'supabase' : 'firebase';
+}
+
 export function isSupabaseSessionsEnabled(): boolean {
-  return isSupabaseEnabled();
+  return getSessionsDataProvider() === 'supabase' && Boolean(supabase) && isSupabaseConfigured;
 }
 
 function toSupabaseSessionRow(session: CloudTrainingSession): Record<string, unknown> {

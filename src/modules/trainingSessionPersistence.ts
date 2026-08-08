@@ -1,55 +1,16 @@
 import {
   CloudTrainingSession,
   deleteSessionFromCloud,
-  listSessionsFromCloudOnce,
   subscribeToSessions
 } from '../firebase';
 import {
-  countSessionsSupabase,
   deleteSessionFromSupabase,
   isSupabaseSessionsEnabled,
   saveSessionFieldsByRoleSupabase,
-  subscribeToSessionsSupabase,
-  upsertSessionsSupabase
+  subscribeToSessionsSupabase
 } from '../supabaseSessions';
 import { PortalSection, TrainingSession } from '../types';
 import { DEFAULT_MODULE_ID, getModuleIdFromSection, saveSessionBySection } from './trainingModules';
-
-let hasTriedSupabaseSessionBootstrap = false;
-let supabaseBootstrapPromise: Promise<void> | null = null;
-
-async function bootstrapSupabaseSessionsFromFirebaseIfNeeded(): Promise<void> {
-  if (hasTriedSupabaseSessionBootstrap) return;
-  if (supabaseBootstrapPromise) {
-    await supabaseBootstrapPromise;
-    return;
-  }
-
-  supabaseBootstrapPromise = (async () => {
-    console.info('[F3] inicio bootstrap');
-    try {
-      const existingCount = await countSessionsSupabase();
-      console.info(`[F3] sesiones encontradas en Supabase: ${existingCount}`);
-      if (existingCount > 0) return;
-
-      const firebaseSessions = await listSessionsFromCloudOnce();
-      console.info(`[F3] sesiones leidas de Firebase: ${firebaseSessions.length}`);
-      if (firebaseSessions.length === 0) return;
-
-      console.info('[F3] inicio upsert');
-      await upsertSessionsSupabase(firebaseSessions);
-      console.info('[F3] fin upsert');
-    } catch (error) {
-      console.error('[F3] error bootstrap', error);
-      throw error;
-    } finally {
-      hasTriedSupabaseSessionBootstrap = true;
-      supabaseBootstrapPromise = null;
-    }
-  })();
-
-  await supabaseBootstrapPromise;
-}
 
 export function subscribeTrainingSessions(
   callback: (sessions: CloudTrainingSession[]) => void,
