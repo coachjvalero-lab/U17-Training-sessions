@@ -27,7 +27,7 @@ import { TrainingSession, Exercise, SquadPlayer, PhysioRecord, VideoAnalysis, Ma
 import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
-import { isSupabaseEnabled, supabase } from './supabaseClient';
+import { isSupabaseAuthEnabled, isSupabasePermissionsEnabled, supabase } from './supabaseClient';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
@@ -115,7 +115,7 @@ async function fetchSupabasePermissionsList(): Promise<UserPermission[]> {
 export async function loginUser(usernameOrEmail: string, pass: string): Promise<User> {
   const cleanInput = normalizeUserEmail(usernameOrEmail);
 
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabaseAuthEnabled() && supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanInput,
       password: pass
@@ -150,7 +150,7 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
  * rules are the real access boundary, this is just so admins don't lose their session.
  */
 export async function adminCreateUserAccount(email: string, pass: string): Promise<void> {
-  if (isSupabaseEnabled()) {
+  if (isSupabaseAuthEnabled()) {
     const error = new Error('Supabase account creation from client is not enabled yet. Use Supabase dashboard/admin API during migration.');
     (error as any).code = 'auth/operation-not-supported-in-this-environment';
     throw error;
@@ -173,7 +173,7 @@ export async function adminCreateUserAccount(email: string, pass: string): Promi
 export async function resetPasswordEmail(email: string): Promise<void> {
   const cleanEmail = normalizeUserEmail(email);
 
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabaseAuthEnabled() && supabase) {
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
     if (error) {
       throw error;
@@ -188,7 +188,7 @@ export async function resetPasswordEmail(email: string): Promise<void> {
  * Log out current user
  */
 export async function logoutUser(): Promise<void> {
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabaseAuthEnabled() && supabase) {
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -208,7 +208,7 @@ export async function logoutUser(): Promise<void> {
  * Subscribe to auth state changes
  */
 export function subscribeToAuth(callback: (user: User | null) => void) {
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabaseAuthEnabled() && supabase) {
     authListeners.push(callback);
 
     let supabaseUser: User | null = null;
@@ -1373,7 +1373,7 @@ export function subscribeToUserPermissions(
   callback: (list: UserPermission[]) => void,
   onError?: (error: any) => void
 ) {
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabasePermissionsEnabled() && supabase) {
     const loadAndEmit = async () => {
       const list = await fetchSupabasePermissionsList();
       callback(list);
@@ -1448,7 +1448,7 @@ async function syncUserRolesCloud(list: UserPermission[]): Promise<void> {
  * changes from the Admin Permissions modal (a single, deliberate batch edit).
  */
 export async function saveUserPermissionsListCloud(list: UserPermission[]): Promise<void> {
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabasePermissionsEnabled() && supabase) {
     const normalized = list.map((u) => ({
       email: u.email.trim().toLowerCase(),
       role: u.role,
@@ -1505,7 +1505,7 @@ export async function saveUserPermissionsListCloud(list: UserPermission[]): Prom
  * localStorage to the shared cloud config, guarded so it only runs once.
  */
 export async function migrateLocalPermissionsIfNeeded(localList: UserPermission[]): Promise<void> {
-  if (isSupabaseEnabled() && supabase) {
+  if (isSupabasePermissionsEnabled() && supabase) {
     const { count, error } = await supabase
       .from(SUPABASE_USER_ROLES_TABLE)
       .select('email', { count: 'exact', head: true });
