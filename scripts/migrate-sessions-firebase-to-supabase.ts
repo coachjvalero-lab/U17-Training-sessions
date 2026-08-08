@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config as loadEnv } from 'dotenv';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { collection, getDocs, getFirestore, type Firestore } from 'firebase/firestore';
-import type { CloudTrainingSession } from '../src/firebase';
+import type { CloudTrainingSession } from '../src/types';
 
 loadEnv({ path: ['.env.local', '.env'] });
 

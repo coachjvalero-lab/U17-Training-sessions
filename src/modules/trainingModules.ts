@@ -1,6 +1,5 @@
-import { CloudTrainingSession, saveSessionFieldsByRole } from '../firebase';
 import { getEmptySession } from '../defaultSession';
-import { Exercise, GameMoment, PortalSection, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingBlock, TrainingSession } from '../types';
+import { CloudTrainingSession, Exercise, GameMoment, PortalSection, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingBlock, TrainingSession } from '../types';
 
 export type TrainingModuleId = 'football' | 'fitness' | 'gk';
 export type SessionBlockKey = 'warmUp' | 'mainPart' | 'coolDown';
@@ -34,7 +33,6 @@ export interface TrainingModuleContract {
   playerGroupsField: SessionGroupsField;
   overlayReads?: SessionOverlayBinding[];
   gameMoments: GameMoment[];
-  save: (session: TrainingSession) => Promise<number>;
   getCloudUpdatedAt: (session: CloudTrainingSession) => number;
 }
 
@@ -97,7 +95,6 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
       }
     ],
     gameMoments: FOOTBALL_GAME_MOMENTS,
-    save: (session) => saveSessionFieldsByRole(session.id, 'football', session),
     getCloudUpdatedAt: (session) => session.footballUpdatedAt || session.updatedAt || 0
   },
   fitness: {
@@ -110,7 +107,6 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
     },
     playerGroupsField: 'fitnessPlayerGroups',
     gameMoments: FOOTBALL_GAME_MOMENTS,
-    save: (session) => saveSessionFieldsByRole(session.id, 'fitness', session),
     getCloudUpdatedAt: (session) => session.fitnessUpdatedAt || 0
   },
   gk: {
@@ -123,7 +119,6 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
     },
     playerGroupsField: 'gkPlayerGroups',
     gameMoments: GOALKEEPER_GAME_MOMENTS,
-    save: (session) => saveSessionFieldsByRole(session.id, 'gk', session),
     getCloudUpdatedAt: (session) => session.gkUpdatedAt || session.updatedAt || 0
   }
 };
@@ -340,16 +335,6 @@ export function updateSessionGroupsByModule(
 
 export function getModuleCloudUpdatedAt(session: CloudTrainingSession, moduleId: TrainingModuleId): number {
   return TRAINING_MODULES[moduleId].getCloudUpdatedAt(session);
-}
-
-export async function saveModuleSession(moduleId: TrainingModuleId, session: TrainingSession): Promise<number> {
-  return TRAINING_MODULES[moduleId].save(session);
-}
-
-export async function saveSessionBySection(section: PortalSection, session: TrainingSession): Promise<{ moduleId: TrainingModuleId; savedAt: number }> {
-  const moduleId = getModuleIdFromSection(section) || DEFAULT_MODULE_ID;
-  const savedAt = await saveModuleSession(moduleId, session);
-  return { moduleId, savedAt };
 }
 
 export function resolveExerciseModule(exercise: Exercise): TrainingModuleId {

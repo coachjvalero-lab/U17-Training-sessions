@@ -1,6 +1,5 @@
 import { getEmptySession } from './defaultSession';
-import type { CloudTrainingSession } from './firebase';
-import type { TrainingSession } from './types';
+import type { CloudTrainingSession, TrainingSession } from './types';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 type SessionRole = 'football' | 'fitness' | 'gk';

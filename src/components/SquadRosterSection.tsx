@@ -21,7 +21,7 @@ import {
   Link
 } from 'lucide-react';
 import { SquadPlayer, TrainingSession } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { CloudTrainingSession } from '../types';
 import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';

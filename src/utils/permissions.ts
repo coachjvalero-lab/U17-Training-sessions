@@ -1,8 +1,8 @@
 import { PortalSection } from '../types';
 import {
   subscribeToUserPermissions,
-  saveUserPermissionsListCloud
-} from '../firebase';
+  saveUserPermissions
+} from '../services/permissions/permissionsService';
 
 export interface UserPermission {
   email: string;
@@ -57,15 +57,15 @@ export function saveUserPermissionsList(list: UserPermission[]): void {
 }
 
 /**
- * Pushes the full permissions list to Firestore so every device sees the update in real time.
+ * Pushes the full permissions list to Supabase so every device sees the update in real time.
  * Call this alongside saveUserPermissionsList() whenever an admin explicitly saves changes.
  */
 export function saveUserPermissionsListToCloud(list: UserPermission[]): void {
-  saveUserPermissionsListCloud(list).catch(err => console.warn('Cloud save failed for permissions:', err));
+  saveUserPermissions(list).catch(err => console.warn('Cloud save failed for permissions:', err));
 }
 
 /**
- * Migrates any locally-cached permissions list to Firestore (once) and subscribes to live
+ * Subscribes to Supabase permission updates and keeps the local cache current.
  * updates, keeping the localStorage cache in sync so getUserPermissionsList() stays fresh.
  * Returns an unsubscribe function.
  */

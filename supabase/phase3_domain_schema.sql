@@ -148,13 +148,34 @@ create index if not exists physio_records_status_idx on public.physio_records (s
 create index if not exists physio_records_player_id_idx on public.physio_records (player_id);
 create index if not exists physio_records_cloud_updated_at_idx on public.physio_records (cloud_updated_at desc);
 
--- Realtime publication
-alter publication supabase_realtime add table public.session_cards;
-alter publication supabase_realtime add table public.squad_players;
-alter publication supabase_realtime add table public.attendance_excluded_players;
-alter publication supabase_realtime add table public.team_logo_config;
-alter publication supabase_realtime add table public.exercise_library;
-alter publication supabase_realtime add table public.exercise_library_deleted_ids;
-alter publication supabase_realtime add table public.video_analysis;
-alter publication supabase_realtime add table public.competition_fixtures;
-alter publication supabase_realtime add table public.physio_records;
+-- Realtime publication (safe to rerun).
+do $$
+declare
+  target_table_name text;
+begin
+  foreach target_table_name in array array[
+    'session_cards',
+    'squad_players',
+    'attendance_excluded_players',
+    'team_logo_config',
+    'exercise_library',
+    'exercise_library_deleted_ids',
+    'video_analysis',
+    'competition_fixtures',
+    'physio_records'
+  ]
+  loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = target_table_name
+    ) then
+      execute format(
+        'alter publication supabase_realtime add table public.%I',
+        target_table_name
+      );
+    end if;
+  end loop;
+end $$;

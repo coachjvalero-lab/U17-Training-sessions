@@ -15,15 +15,16 @@ import {
   Sparkles,
   Copy
 } from 'lucide-react';
-import { Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
-import { 
-  CloudTrainingSession, 
-  subscribeToExerciseLibrary, 
-  saveExerciseToLibraryCloud, 
-  deleteExerciseFromLibraryCloud, 
-  subscribeToDeletedExerciseIds, 
-  addDeletedExerciseIdsCloud 
-} from '../firebase';
+import { CloudTrainingSession, Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
+import {
+  deleteExerciseFromLibrary,
+  saveExerciseToLibrary,
+  subscribeToExerciseLibrary
+} from '../services/exercises/exerciseLibraryService';
+import {
+  addDeletedExerciseIdsCloud,
+  subscribeToDeletedExerciseIds
+} from '../services/exercises/exerciseDeletedIdsLegacyService';
 import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';
@@ -324,7 +325,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     };
 
     setCustomExercises(prev => [created, ...prev]);
-    saveExerciseToLibraryCloud(created).catch(err => console.warn('Cloud save failed for duplicated exercise:', err));
+    saveExerciseToLibrary(created).catch(err => console.warn('Cloud save failed for duplicated exercise:', err));
     setAddedToast(`Duplicated "${ex.name}" to your library!`);
     setTimeout(() => setAddedToast(null), 3000);
   };
@@ -352,7 +353,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     };
 
     setCustomExercises(prev => [created, ...prev]);
-    saveExerciseToLibraryCloud(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
+    saveExerciseToLibrary(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
     setShowCreateModal(false);
     setIsDuplicatingModal(false);
     setNewEx({
@@ -384,7 +385,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       setCustomExercises(prev => prev.filter(item => item.id !== ex.id));
       addDeletedExerciseIdsCloud([ex.id, uniqueKey].filter(Boolean)).catch(err => console.warn('Cloud save failed for deleted exercise ID:', err));
       if (ex.id) {
-        deleteExerciseFromLibraryCloud(ex.id).catch(err => console.warn('Cloud delete failed for exercise:', err));
+        deleteExerciseFromLibrary(ex.id).catch(err => console.warn('Cloud delete failed for exercise:', err));
       }
       setAddedToast(`Deleted "${ex.name}" from library.`);
       setTimeout(() => setAddedToast(null), 3000);

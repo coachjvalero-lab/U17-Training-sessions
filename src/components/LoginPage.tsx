@@ -76,8 +76,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) 
       console.error('Authentication error:', err);
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setErrorMessage('Incorrect username or password. Please try again.');
-      } else if (err.message) {
-        setErrorMessage(err.message.replace('Firebase: ', ''));
+      } else if (err && typeof err === 'object') {
+        const code = 'code' in err ? String(err.code) : 'unknown';
+        const message = 'message' in err ? String(err.message) : 'Unknown authentication error';
+        const details = 'details' in err ? String(err.details) : '';
+        const hint = 'hint' in err ? String(err.hint) : '';
+        const status = 'status' in err ? String(err.status) : '';
+
+        const lines = [
+          `Code: ${code}`,
+          message.replace('Firebase: ', ''),
+          details ? `Details: ${details}` : '',
+          hint ? `Hint: ${hint}` : '',
+          status ? `Status: ${status}` : ''
+        ].filter(Boolean);
+
+        setErrorMessage(lines.join(' | '));
       } else {
         setErrorMessage('Failed to sign in.');
       }

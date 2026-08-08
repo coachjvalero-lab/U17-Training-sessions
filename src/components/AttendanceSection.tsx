@@ -32,8 +32,7 @@ import {
   ResponsiveContainer, 
   ReferenceLine 
 } from 'recharts';
-import { TrainingSession, AbsenceReason } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { TrainingSession, AbsenceReason, CloudTrainingSession } from '../types';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 

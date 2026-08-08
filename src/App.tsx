@@ -24,6 +24,7 @@ import {
   PlayerGroup, 
   PlayerAttendance, 
   PortalSection,
+  CloudTrainingSession,
   SquadPlayer,
   PhysioRecord,
   VideoAnalysis,
@@ -36,25 +37,30 @@ import {
   clearQuotaExceeded,
   subscribeSyncStatus,
   flushPendingWrites,
-  subscribeToSquadPlayers,
-  saveSquadPlayerToCloud,
-  deleteSquadPlayerFromCloud,
   subscribeToPhysioRecords,
   savePhysioRecordToCloud,
   deletePhysioRecordFromCloud,
-  subscribeToExcludedPlayers,
-  addExcludedPlayersCloud,
-  removeExcludedPlayersCloud,
-  subscribeToTeamLogo,
-  saveTeamLogoToCloud,
   subscribeToVideoAnalysis,
   saveVideoAnalysisToCloud,
   deleteVideoAnalysisFromCloud,
   subscribeToCompetitionFixtures,
   saveCompetitionFixtureToCloud,
-  deleteCompetitionFixtureFromCloud,
-  CloudTrainingSession 
+  deleteCompetitionFixtureFromCloud
 } from './firebase';
+import {
+  deleteSquadPlayer,
+  saveSquadPlayer,
+  subscribeToSquadPlayers
+} from './services/squad/squadService';
+import {
+  addExcludedPlayers,
+  removeExcludedPlayers,
+  subscribeToExcludedPlayers
+} from './services/attendance/attendanceService';
+import {
+  saveTeamLogo,
+  subscribeToTeamLogo
+} from './services/team/teamLogoService';
 import { initPermissionsCloudSync } from './utils/permissions';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
 import {
@@ -312,7 +318,7 @@ export default function App() {
     try {
       localStorage.setItem('u17_excluded_players', JSON.stringify(updated));
     } catch (e) {}
-    addExcludedPlayersCloud([lower]).catch(err => console.warn('Cloud save failed for excluded player:', err));
+    addExcludedPlayers([lower]).catch(err => console.warn('Cloud save failed for excluded player:', err));
   };
 
   const handleIncludePlayer = (playerName: string) => {
@@ -322,7 +328,7 @@ export default function App() {
     try {
       localStorage.setItem('u17_excluded_players', JSON.stringify(updated));
     } catch (e) {}
-    removeExcludedPlayersCloud([lower]).catch(err => console.warn('Cloud remove failed for excluded player:', err));
+    removeExcludedPlayers([lower]).catch(err => console.warn('Cloud remove failed for excluded player:', err));
   };
 
   const initialTeamLogoRef = useRef('');
@@ -352,7 +358,7 @@ export default function App() {
 
   const handleUpdateTeamLogo = (newLogo: string) => {
     setTeamLogo(newLogo);
-    saveTeamLogoToCloud(newLogo).catch(err => console.warn('Cloud save failed for team logo:', err));
+    saveTeamLogo(newLogo).catch(err => console.warn('Cloud save failed for team logo:', err));
   };
 
   const initialVideoSessionsRef = useRef<VideoAnalysis[]>([]);
@@ -940,13 +946,13 @@ export default function App() {
     updated.forEach(player => {
       const prevPlayer = previousById.get(player.id);
       if (!prevPlayer || JSON.stringify(prevPlayer) !== JSON.stringify(player)) {
-        saveSquadPlayerToCloud(player).catch(err => console.warn('Cloud save failed for squad player:', err));
+        saveSquadPlayer(player).catch(err => console.warn('Cloud save failed for squad player:', err));
       }
     });
 
     previous.forEach(player => {
       if (!updatedIds.has(player.id)) {
-        deleteSquadPlayerFromCloud(player.id).catch(err => console.warn('Cloud delete failed for squad player:', err));
+        deleteSquadPlayer(player.id).catch(err => console.warn('Cloud delete failed for squad player:', err));
       }
     });
 

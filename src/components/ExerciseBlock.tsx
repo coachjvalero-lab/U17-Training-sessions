@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Exercise, GameMoment, TrainingBlock, PlayerGroup, SquadPlayer } from '../types';
 import { processUploadedImageFile } from '../utils/heic';
-import { saveExerciseToLibraryCloud } from '../firebase';
+import { saveExerciseToLibrary } from '../services/exercises/exerciseLibraryService';
 import { SmartImage } from './SmartImage';
 
 interface ExerciseBlockProps {
@@ -160,7 +160,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
       const updatedLib = [newLibEx, ...existingLib];
       localStorage.setItem('u17_custom_exercise_library', JSON.stringify(updatedLib));
 
-      saveExerciseToLibraryCloud(newLibEx).catch(err => console.warn('Cloud save failed for library exercise:', err));
+      saveExerciseToLibrary(newLibEx).catch(err => console.warn('Cloud save failed for library exercise:', err));
 
       setAddedToLibId(ex.id);
       setTimeout(() => {

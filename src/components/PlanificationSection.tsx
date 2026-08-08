@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { TrainingSession, Exercise } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { TrainingSession, Exercise, CloudTrainingSession } from '../types';
 import { 
   BarChart3, 
   Clock, 

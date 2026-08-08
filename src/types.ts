@@ -180,6 +180,27 @@ export interface TrainingSession {
   attendance?: PlayerAttendance[];
 }
 
+export interface CloudTrainingSession extends TrainingSession {
+  updatedAt: number;
+  footballUpdatedAt?: number;
+  fitnessUpdatedAt?: number;
+  gkUpdatedAt?: number;
+}
+
+export interface SessionCardDocument {
+  id: string;
+  sessionNumber: number;
+  title: string;
+  description: string;
+  category: string;
+  duration: string;
+  intensity: string;
+  date: string;
+  createdAt: number;
+  updatedAt: number;
+  role: 'football' | 'fitness' | 'gk';
+}
+
 export interface SharedSessionHeader {
   id: string;
   sessionNumber: string;

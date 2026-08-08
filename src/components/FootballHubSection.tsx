@@ -13,8 +13,7 @@ import {
   BookOpen,
   Trash2
 } from 'lucide-react';
-import { TrainingSession, Exercise, MatchFixture } from '../types';
-import { CloudTrainingSession } from '../firebase';
+import { TrainingSession, Exercise, MatchFixture, CloudTrainingSession } from '../types';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';

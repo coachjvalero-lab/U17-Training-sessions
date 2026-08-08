@@ -23,7 +23,16 @@ import {
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { TrainingSession, Exercise, SquadPlayer, PhysioRecord, VideoAnalysis, MatchFixture } from './types';
+import {
+  CloudTrainingSession,
+  Exercise,
+  MatchFixture,
+  PhysioRecord,
+  SessionCardDocument,
+  SquadPlayer,
+  TrainingSession,
+  VideoAnalysis
+} from './types';
 import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
@@ -59,6 +68,99 @@ type SupabaseUserRoleRow = {
   allowed_sections: string[] | null;
   updated_at?: string | null;
 };
+
+type SupabaseErrorSummary = {
+  code: string;
+  message: string;
+  details: string | null;
+  hint: string | null;
+  status: number | null;
+};
+
+function summarizeSupabaseError(error: unknown): SupabaseErrorSummary {
+  if (error && typeof error === 'object') {
+    const err = error as {
+      code?: unknown;
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      status?: unknown;
+    };
+    return {
+      code: err.code ? String(err.code) : 'unknown',
+      message: err.message ? String(err.message) : 'Unknown Supabase error',
+      details: err.details ? String(err.details) : null,
+      hint: err.hint ? String(err.hint) : null,
+      status: typeof err.status === 'number' ? err.status : null
+    };
+  }
+
+  return {
+    code: 'unknown',
+    message: error instanceof Error ? error.message : String(error),
+    details: null,
+    hint: null,
+    status: null
+  };
+}
+
+export async function getSupabaseAuthDiagnostics(): Promise<{
+  sessionExists: boolean;
+  userExists: boolean;
+  userEmail: string | null;
+  userId: string | null;
+  sessionError: SupabaseErrorSummary | null;
+  userError: SupabaseErrorSummary | null;
+}> {
+  if (!supabase) {
+    return {
+      sessionExists: false,
+      userExists: false,
+      userEmail: null,
+      userId: null,
+      sessionError: {
+        code: 'supabase/not-configured',
+        message: 'Supabase client is not configured',
+        details: null,
+        hint: null,
+        status: null
+      },
+      userError: null
+    };
+  }
+
+  const [sessionResult, userResult] = await Promise.allSettled([
+    supabase.auth.getSession(),
+    supabase.auth.getUser()
+  ]);
+
+  const sessionData = sessionResult.status === 'fulfilled' ? sessionResult.value.data : null;
+  const userData = userResult.status === 'fulfilled' ? userResult.value.data : null;
+
+  const sessionError = sessionResult.status === 'rejected'
+    ? summarizeSupabaseError(sessionResult.reason)
+    : sessionResult.value.error
+      ? summarizeSupabaseError(sessionResult.value.error)
+      : null;
+
+  const userError = userResult.status === 'rejected'
+    ? summarizeSupabaseError(userResult.reason)
+    : userResult.value.error
+      ? summarizeSupabaseError(userResult.value.error)
+      : null;
+
+  const sessionUser = sessionData?.session?.user || null;
+  const currentUser = userData?.user || sessionUser;
+
+  return {
+    sessionExists: Boolean(sessionData?.session),
+    userExists: Boolean(currentUser),
+    userEmail: currentUser?.email || null,
+    userId: currentUser?.id || null,
+    sessionError,
+    userError
+  };
+}
 
 function normalizeUserEmail(usernameOrEmail: string): string {
   let cleanInput = usernameOrEmail.trim().toLowerCase();
@@ -135,6 +237,19 @@ export async function loginUser(usernameOrEmail: string, pass: string): Promise<
     if (!mapped) {
       throw new Error('Supabase login succeeded but no user session was returned.');
     }
+
+    const diagnostics = await getSupabaseAuthDiagnostics();
+    if (!diagnostics.sessionExists || !diagnostics.userExists) {
+      const authError = new Error('Supabase login succeeded but browser auth session is missing.');
+      Object.assign(authError, {
+        code: 'supabase/auth-session-missing',
+        details: diagnostics,
+        hint: 'Verify Supabase auth persistence and browser storage settings.',
+        status: diagnostics.userError?.status || diagnostics.sessionError?.status || null
+      });
+      throw authError;
+    }
+
     return mapped;
   }
 
@@ -218,10 +333,21 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
       callback(supabaseUser ?? firebaseUser ?? null);
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      supabaseUser = toFirebaseLikeUser(data.session?.user || null);
+    getSupabaseAuthDiagnostics().then((diagnostics) => {
+      supabaseUser = toFirebaseLikeUser(
+        diagnostics.userId
+          ? {
+              id: diagnostics.userId,
+              email: diagnostics.userEmail
+            }
+          : null
+      );
+      if (diagnostics.sessionError || diagnostics.userError) {
+        console.error('[subscribeToAuth] Supabase auth diagnostics', diagnostics);
+      }
       emitMergedUser();
-    }).catch(() => {
+    }).catch((error) => {
+      console.error('[subscribeToAuth] Supabase auth diagnostics failed', summarizeSupabaseError(error));
       emitMergedUser();
     });
 
@@ -257,28 +383,6 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
     authListeners = authListeners.filter(cb => cb !== callback);
     unsubscribe();
   };
-}
-
-// Extend TrainingSession type for database-specific attributes if needed
-export interface CloudTrainingSession extends TrainingSession {
-  updatedAt: number;
-  footballUpdatedAt?: number;
-  fitnessUpdatedAt?: number;
-  gkUpdatedAt?: number;
-}
-
-export interface SessionCardDocument {
-  id: string;
-  sessionNumber: number;
-  title: string;
-  description: string;
-  category: string;
-  duration: string;
-  intensity: string;
-  date: string;
-  createdAt: number;
-  updatedAt: number;
-  role: 'football' | 'fitness' | 'gk';
 }
 
 const SESSIONS_COLLECTION = 'sessions';
