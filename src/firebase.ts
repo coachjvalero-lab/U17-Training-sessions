@@ -37,6 +37,7 @@ import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import type { UserPermission } from './utils/permissions';
 import { isSupabaseAuthEnabled, isSupabasePermissionsEnabled, supabase } from './supabaseClient';
+import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
@@ -69,15 +70,7 @@ type SupabaseUserRoleRow = {
   updated_at?: string | null;
 };
 
-type SupabaseErrorSummary = {
-  code: string;
-  message: string;
-  details: string | null;
-  hint: string | null;
-  status: number | null;
-};
-
-function summarizeSupabaseError(error: unknown): SupabaseErrorSummary {
+function summarizeSupabaseError(error: unknown) {
   if (error && typeof error === 'object') {
     const err = error as {
       code?: unknown;
@@ -101,64 +94,6 @@ function summarizeSupabaseError(error: unknown): SupabaseErrorSummary {
     details: null,
     hint: null,
     status: null
-  };
-}
-
-export async function getSupabaseAuthDiagnostics(): Promise<{
-  sessionExists: boolean;
-  userExists: boolean;
-  userEmail: string | null;
-  userId: string | null;
-  sessionError: SupabaseErrorSummary | null;
-  userError: SupabaseErrorSummary | null;
-}> {
-  if (!supabase) {
-    return {
-      sessionExists: false,
-      userExists: false,
-      userEmail: null,
-      userId: null,
-      sessionError: {
-        code: 'supabase/not-configured',
-        message: 'Supabase client is not configured',
-        details: null,
-        hint: null,
-        status: null
-      },
-      userError: null
-    };
-  }
-
-  const [sessionResult, userResult] = await Promise.allSettled([
-    supabase.auth.getSession(),
-    supabase.auth.getUser()
-  ]);
-
-  const sessionData = sessionResult.status === 'fulfilled' ? sessionResult.value.data : null;
-  const userData = userResult.status === 'fulfilled' ? userResult.value.data : null;
-
-  const sessionError = sessionResult.status === 'rejected'
-    ? summarizeSupabaseError(sessionResult.reason)
-    : sessionResult.value.error
-      ? summarizeSupabaseError(sessionResult.value.error)
-      : null;
-
-  const userError = userResult.status === 'rejected'
-    ? summarizeSupabaseError(userResult.reason)
-    : userResult.value.error
-      ? summarizeSupabaseError(userResult.value.error)
-      : null;
-
-  const sessionUser = sessionData?.session?.user || null;
-  const currentUser = userData?.user || sessionUser;
-
-  return {
-    sessionExists: Boolean(sessionData?.session),
-    userExists: Boolean(currentUser),
-    userEmail: currentUser?.email || null,
-    userId: currentUser?.id || null,
-    sessionError,
-    userError
   };
 }
 

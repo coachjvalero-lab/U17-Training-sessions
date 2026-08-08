@@ -61,6 +61,7 @@ import {
   saveTeamLogo,
   subscribeToTeamLogo
 } from './services/team/teamLogoService';
+import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
 import { initPermissionsCloudSync } from './utils/permissions';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
 import {
@@ -165,6 +166,20 @@ export default function App() {
 
     return 'light';
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    (window as any).__u17SupabaseAuthDiagnostics = async () => {
+      const diagnostics = await getSupabaseAuthDiagnostics();
+      console.log('[U17 Supabase Auth Diagnostics]', diagnostics);
+      return diagnostics;
+    };
+
+    return () => {
+      delete (window as any).__u17SupabaseAuthDiagnostics;
+    };
+  }, []);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
