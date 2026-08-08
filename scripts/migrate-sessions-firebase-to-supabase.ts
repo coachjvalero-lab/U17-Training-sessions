@@ -19,6 +19,17 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function requireSupabaseUrl(): string {
+  const value = process.env.VITE_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  if (!value) {
+    throw new Error('Missing required environment variable: VITE_SUPABASE_URL or SUPABASE_URL');
+  }
+  return value;
+}
+
+const supabaseServiceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseUrl = requireSupabaseUrl();
+
 const firebaseApp = initializeApp({
   apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
   authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
@@ -32,8 +43,14 @@ const firebaseDatabaseId = process.env.VITE_FIREBASE_DATABASE_ID?.trim() || 'def
 const firebaseDb = getFirestore(firebaseApp, firebaseDatabaseId);
 const firebaseDefaultDb = getFirestore(firebaseApp, 'default');
 const supabase = createClient(
-  requireEnv('VITE_SUPABASE_URL'),
-  requireEnv('VITE_SUPABASE_ANON_KEY')
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 );
 
 async function readSessions(database: Firestore): Promise<CloudTrainingSession[]> {
