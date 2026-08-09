@@ -16,7 +16,8 @@ import {
   LayoutGrid,
   Users,
   Stethoscope,
-  Video
+  Video,
+  MessageSquare
 } from 'lucide-react';
 import { TrainingSession, PortalSection, CloudTrainingSession } from '../types';
 import { AppUser } from '../services/auth/authService';
@@ -137,6 +138,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       sublabel: 'Game Moments & Volume',
       icon: BarChart3,
       color: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+    },
+    {
+      id: 'meetings',
+      label: 'Meetings',
+      sublabel: 'Staff Meeting Registry',
+      icon: MessageSquare,
+      color: 'bg-violet-500/20 text-violet-300 border-violet-500/30'
     }
   ] as { id: PortalSection; label: string; sublabel: string; icon: any; color: string; badge?: string }[]).filter(item => allowedSections.includes(item.id));
 

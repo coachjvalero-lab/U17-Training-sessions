@@ -19,14 +19,15 @@ export const ALL_SECTIONS_LIST: { id: PortalSection; label: string; description:
   { id: 'physio', label: 'Physiotherapist Dept', description: 'Injury records, rehab & return-to-play' },
   { id: 'video', label: 'Video Analysis Hub', description: 'Match & training video analyses & clips' },
   { id: 'exercises', label: 'Exercises Library', description: 'Drill repository & tactical search' },
-  { id: 'planning', label: 'Planification & Microcycle', description: 'Monthly periodization & microcycle plans' }
+  { id: 'planning', label: 'Planification & Microcycle', description: 'Monthly periodization & microcycle plans' },
+  { id: 'meetings', label: 'Meetings', description: 'Staff meeting registry & follow-up tracker' }
 ];
 
 export const DEFAULT_USER_PERMISSIONS: UserPermission[] = [
   {
     email: 'admin@alula.com',
     role: 'admin',
-    allowedSections: ['football', 'fitness', 'gk', 'squad', 'attendance', 'physio', 'video', 'exercises', 'planning']
+    allowedSections: ['football', 'fitness', 'gk', 'squad', 'attendance', 'physio', 'video', 'exercises', 'planning', 'meetings']
   }
 ];
 

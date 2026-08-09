@@ -17,6 +17,7 @@ import { VideoAnalysisSection } from './components/VideoAnalysisSection';
 import { DEFAULT_MATCHES } from './components/CompetitionSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { ModuleSessionEditor } from './components/ModuleSessionEditor';
+import { MeetingsSection } from './components/MeetingsSection';
 import { 
   TrainingSession, 
   Exercise, 
@@ -120,7 +121,8 @@ function isPortalSection(value: string | null): value is PortalSection {
     value === 'physio' ||
     value === 'video' ||
     value === 'exercises' ||
-    value === 'planning';
+    value === 'planning' ||
+    value === 'meetings';
 }
 
 function readSavedAppContext(): AppContextSnapshot | null {
@@ -1650,6 +1652,11 @@ export default function App() {
           <PlanificationSection
             session={session}
             cloudSessions={cloudSessions}
+          />
+        ) : activeSection === 'meetings' ? (
+          <MeetingsSection
+            currentUser={currentUser}
+            onBack={() => setActiveSection('hub')}
           />
         ) : activeSection === 'exercises' ? (
           <ExercisesLibrary

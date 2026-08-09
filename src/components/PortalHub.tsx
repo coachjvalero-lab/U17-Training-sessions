@@ -17,7 +17,8 @@ import {
   RotateCcw,
   Link,
   Check,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
 import { AppUser } from '../services/auth/authService';
@@ -193,6 +194,18 @@ export const PortalHub: React.FC<PortalHubProps> = ({
       badgeText: 'Periodization',
       badgeStyle: 'bg-orange-50 text-orange-700 border-orange-200',
       statsText: 'Microcycle Schedules'
+    },
+    {
+      id: 'meetings',
+      title: 'Meetings',
+      category: 'STAFF COMMUNICATION',
+      description: 'Staff meeting registry: record attendees, decisions, key points, and follow-up action items with assignees and deadlines.',
+      icon: MessageSquare,
+      iconBg: 'bg-violet-100 border-violet-200',
+      iconColor: 'text-violet-700',
+      badgeText: 'Meeting Log',
+      badgeStyle: 'bg-violet-50 text-violet-700 border-violet-200',
+      statsText: 'Staff Meeting Registry'
     }
   ];
 

@@ -88,7 +88,8 @@ export type PortalSection =
   | 'physio' 
   | 'video' 
   | 'exercises' 
-  | 'planning';
+  | 'planning'
+  | 'meetings';
 
 export interface PlayerAttendance {
   playerName: string;
@@ -211,4 +212,60 @@ export interface SharedSessionHeader {
   attendance: PlayerAttendance[];
   squadRoster: string[];
   updatedAt?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Meetings Module
+// ---------------------------------------------------------------------------
+
+export type MeetingType =
+  | 'staff_meeting'
+  | 'coaching_meeting'
+  | 'player_meeting'
+  | 'performance_meeting'
+  | 'medical_physio_meeting'
+  | 'recruitment_meeting'
+  | 'other';
+
+export type ActionItemStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface MeetingAttendee {
+  id: string;
+  meetingId: string;
+  email: string;
+  displayName?: string;
+}
+
+export interface MeetingActionItem {
+  id: string;
+  meetingId: string;
+  description: string;
+  assignedTo?: string;  // email
+  dueDate?: string;     // ISO date
+  status: ActionItemStatus;
+  completedAt?: string; // ISO timestamp
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  date: string;         // ISO date
+  startTime?: string;   // HH:MM
+  endTime?: string;     // HH:MM
+  location?: string;
+  meetingType: MeetingType;
+  organizerEmail?: string;
+  topic: string;
+  agenda: string;
+  summary: string;
+  keyPoints: string[];
+  decisions: string[];
+  attendees: MeetingAttendee[];
+  actionItems: MeetingActionItem[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
