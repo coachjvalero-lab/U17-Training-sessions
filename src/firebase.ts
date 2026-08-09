@@ -262,10 +262,9 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
     authListeners.push(callback);
 
     let supabaseUser: User | null = null;
-    let firebaseUser: User | null = auth.currentUser ?? null;
 
-    const emitMergedUser = () => {
-      callback(supabaseUser ?? firebaseUser ?? null);
+    const emitSupabaseUser = () => {
+      callback(supabaseUser ?? null);
     };
 
     getSupabaseAuthDiagnostics().then((diagnostics) => {
@@ -280,27 +279,19 @@ export function subscribeToAuth(callback: (user: User | null) => void) {
       if (diagnostics.sessionError || diagnostics.userError) {
         console.error('[subscribeToAuth] Supabase auth diagnostics', diagnostics);
       }
-      emitMergedUser();
+      emitSupabaseUser();
     }).catch((error) => {
       console.error('[subscribeToAuth] Supabase auth diagnostics failed', summarizeSupabaseError(error));
-      emitMergedUser();
+      emitSupabaseUser();
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       supabaseUser = toFirebaseLikeUser(session?.user || null);
-      emitMergedUser();
-    });
-
-    const firebaseUnsubscribe = onAuthStateChanged(auth, (user) => {
-      firebaseUser = user ?? null;
-      if (!supabaseUser) {
-        emitMergedUser();
-      }
+      emitSupabaseUser();
     });
 
     return () => {
       authListeners = authListeners.filter(cb => cb !== callback);
-      firebaseUnsubscribe();
       data.subscription.unsubscribe();
     };
   }
