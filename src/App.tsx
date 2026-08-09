@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { User } from 'firebase/auth';
 import { getEmptySession } from './defaultSession';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from './constants/logo';
 import { normalizeSessionRoster, DEFAULT_DETAILED_SQUAD } from './constants/squad';
@@ -31,13 +30,10 @@ import {
   MatchFixture 
 } from './types';
 import { 
-  subscribeToAuth,
   logoutUser,
-  markQuotaExceeded,
-  clearQuotaExceeded,
-  subscribeSyncStatus,
-  flushPendingWrites,
-} from './firebase';
+  subscribeToAuth,
+  type AppUser
+} from './services/auth/authService';
 import {
   deleteSquadPlayer,
   saveSquadPlayer,
@@ -90,10 +86,10 @@ import {
   subscribeTrainingSessions
 } from './modules/trainingSessionPersistence';
 import {
-  getAuthProvider,
   getDataProvider,
   getPermissionsProvider,
   isSupabaseConfigured,
+  resolveAuthProvider,
   supabase
 } from './supabaseClient';
 import { getSessionsDataProvider } from './supabaseSessions';
@@ -206,7 +202,7 @@ function registerSupabaseDataDiagnosticsHelper() {
     const diagnostics = {
       providers: {
         data: getDataProvider(),
-        auth: getAuthProvider(),
+        auth: resolveAuthProvider(),
         permissions: getPermissionsProvider(),
         sessions: getSessionsDataProvider(),
         supabaseConfigured: isSupabaseConfigured
@@ -255,7 +251,7 @@ export default function App() {
     registerSupabaseDataDiagnosticsHelper();
   }, []);
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
   const [requiresSharedLinkLogin, setRequiresSharedLinkLogin] = useState<boolean>(() => shouldRequireLoginForSharedLink());
   const [activeSection, setActiveSection] = useState<PortalSection>(() => readSavedAppContext()?.activeSection || 'hub');
@@ -538,7 +534,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listen to Firebase Auth state
+  // Listen to Supabase Auth state
   useEffect(() => {
     const unsubscribe = subscribeToAuth((user) => {
       setCurrentUser(user);
@@ -823,7 +819,7 @@ export default function App() {
     }
   };
 
-  // Subscribe to ALL unified sessions from Cloud Firestore and auto-load the active session on first load & real-time updates
+  // Subscribe to all unified sessions from Supabase and auto-load the active session on first load & real-time updates
   useEffect(() => {
     setIsLoadingCloud(true);
     const unsubscribe = subscribeTrainingSessions(
@@ -911,49 +907,11 @@ export default function App() {
         if (cachedSessions.length > 0) {
           setCloudSessions(cachedSessions);
         }
-        markQuotaExceeded();
-        console.warn('Firestore subscription offline or quota limit reached.');
+        setCloudSyncStatus({ status: 'offline-queued', message: 'Session subscription is temporarily unavailable.' });
+        console.warn('Sessions subscription is temporarily unavailable.');
       }
     );
     return () => unsubscribe();
-  }, []);
-
-  // Mirror low-level cloud save activity (saving/retrying/queued/saved) into visible UI state.
-  useEffect(() => {
-    const SESSION_SYNC_SCOPE = 'sessions';
-    const unsubscribe = subscribeSyncStatus((event) => {
-      // Keep this banner focused on training session saves; other collections
-      // (permissions, fixtures, etc.) should not surface as a global save warning on load.
-      if (event.scope !== SESSION_SYNC_SCOPE) return;
-
-      if (event.status === 'saved') {
-        setCloudSyncStatus({ status: 'saved' });
-        setTimeout(() => {
-          setCloudSyncStatus(prev => (prev.status === 'saved' ? { status: 'idle' } : prev));
-        }, 2500);
-      } else {
-        setCloudSyncStatus({ status: event.status, message: event.message });
-      }
-    });
-    return unsubscribe;
-  }, []);
-
-  // Retry anything left in the pending-write queue (Bloque 2, tarea 5): on app start,
-  // whenever the browser regains connectivity, and whenever the tab becomes visible again.
-  useEffect(() => {
-    flushPendingWrites().catch(() => {});
-    const handleOnline = () => { flushPendingWrites().catch(() => {}); };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        flushPendingWrites().catch(() => {});
-      }
-    };
-    window.addEventListener('online', handleOnline);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
   }, []);
 
 
@@ -1272,13 +1230,17 @@ export default function App() {
       // when our own write echoes back through the subscription listener
       const optimisticTime = Date.now();
       markActiveSessionSyncProgress(role, optimisticTime, getSessionSyncSignature(sessionToSave));
+      setCloudSyncStatus({ status: 'saving' });
 
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         
         // Update with the actual server timestamp
         markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
-        clearQuotaExceeded();
+        setCloudSyncStatus({ status: 'saved' });
+        setTimeout(() => {
+          setCloudSyncStatus(prev => (prev.status === 'saved' ? { status: 'idle' } : prev));
+        }, 2500);
         alert('Changes saved to the cloud and synced across all your devices!');
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
@@ -1448,11 +1410,16 @@ export default function App() {
       // 2. Optimistically update references to prevent false conflict detection
       const optimisticTime = Date.now();
       markActiveSessionSyncProgress(role, optimisticTime, getSessionSyncSignature(sessionToSave));
+      setCloudSyncStatus({ status: 'saving' });
 
       // 3. Try Cloud Firestore save (only save fields for current role)
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
+        setCloudSyncStatus({ status: 'saved' });
+        setTimeout(() => {
+          setCloudSyncStatus(prev => (prev.status === 'saved' ? { status: 'idle' } : prev));
+        }, 2500);
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCopyShareLink] Cloud save failed:', cloudErr);

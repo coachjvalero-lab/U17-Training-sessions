@@ -2,10 +2,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { config as loadEnv } from 'dotenv';
-import { deleteApp, initializeApp } from 'firebase/app';
-import { collection, doc, getDoc, getDocs, getFirestore, type Firestore } from 'firebase/firestore';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 loadEnv({ path: ['.env.local', '.env'] });
+
+type FirestoreDoc = { id: string; data: Record<string, any> };
 
 type Domain =
   | 'squad'
@@ -48,6 +52,69 @@ function requireSupabaseUrl(): string {
   return value;
 }
 
+function parseJsonObject(raw: string): Record<string, unknown> {
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON must be a JSON object.');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function readFirebaseAdminConfig(): { projectId: string; clientEmail: string; privateKey: string } {
+  const inlineJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (inlineJson) {
+    const json = parseJsonObject(inlineJson);
+    const projectId = String(json.project_id || '').trim();
+    const clientEmail = String(json.client_email || '').trim();
+    const privateKey = String(json.private_key || '').replace(/\\n/g, '\n').trim();
+
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON must include project_id, client_email, and private_key.');
+    }
+
+    return { projectId, clientEmail, privateKey };
+  }
+
+  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID?.trim();
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.trim().replace(/\\n/g, '\n');
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('Missing Firebase Admin credentials. Provide FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_ADMIN_* vars.');
+  }
+
+  return { projectId, clientEmail, privateKey };
+}
+
+function readFirebaseDatabaseId(): string {
+  const explicit = process.env.VITE_FIREBASE_DATABASE_ID?.trim();
+  if (explicit) {
+    return explicit === 'default' ? '(default)' : explicit;
+  }
+
+  const configPath = resolve(process.cwd(), 'firebase-applet-config.json');
+  try {
+    const raw = readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw) as { firestoreDatabaseId?: string };
+    const fromConfig = parsed.firestoreDatabaseId?.trim();
+    if (fromConfig) {
+      return fromConfig === 'default' ? '(default)' : fromConfig;
+    }
+  } catch {
+    // Fall through to default database when the local config file is absent.
+  }
+
+  return '(default)';
+}
+
+function normalizeFirestoreDatabaseId(raw: string | undefined): string {
+  const value = raw?.trim();
+  if (!value || value === 'default') {
+    return '(default)';
+  }
+  return value;
+}
+
 function parseDomain(raw: string | undefined): Domain {
   const value = (raw || '').trim().toLowerCase() as Domain;
   if (!ALLOWED_DOMAINS.includes(value)) {
@@ -60,18 +127,22 @@ const domain = parseDomain(process.argv[2]);
 const supabaseServiceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
 const supabaseUrl = requireSupabaseUrl();
 
-const firebaseApp = initializeApp({
-  apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
-  authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-  projectId: requireEnv('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: requireEnv('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: requireEnv('VITE_FIREBASE_APP_ID')
-}, `domain-migration-${domain}`);
+const firebaseAdminConfig = readFirebaseAdminConfig();
+let firebaseAdminApp = getApps()[0];
 
-const firebaseDatabaseId = process.env.VITE_FIREBASE_DATABASE_ID?.trim() || 'default';
-const firebaseDb = getFirestore(firebaseApp, firebaseDatabaseId);
-const firebaseDefaultDb = getFirestore(firebaseApp, 'default');
+if (!firebaseAdminApp) {
+  firebaseAdminApp = initializeApp({
+    credential: cert({
+      projectId: firebaseAdminConfig.projectId,
+      clientEmail: firebaseAdminConfig.clientEmail,
+      privateKey: firebaseAdminConfig.privateKey
+    })
+  });
+}
+
+const firebaseDatabaseId = normalizeFirestoreDatabaseId(readFirebaseDatabaseId());
+const firebaseDb = getFirestore(firebaseAdminApp, firebaseDatabaseId);
+const firebaseDefaultDb = getFirestore(firebaseAdminApp, '(default)');
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: {
@@ -80,31 +151,44 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   }
 });
 
-type FirestoreDoc = { id: string; data: Record<string, any> };
-
 async function readCollection(database: Firestore, name: string): Promise<FirestoreDoc[]> {
-  const snapshot = await getDocs(collection(database, name));
+  const snapshot = await database.collection(name).get();
   return snapshot.docs.map((item) => ({ id: item.id, data: item.data() as Record<string, any> }));
 }
 
 async function readCollectionWithFallback(name: string): Promise<FirestoreDoc[]> {
   const primary = await readCollection(firebaseDb, name);
-  if (primary.length > 0 || firebaseDatabaseId === 'default') {
+  if (primary.length > 0 || firebaseDatabaseId === '(default)') {
     return primary;
   }
-  return readCollection(firebaseDefaultDb, name);
+  try {
+    return await readCollection(firebaseDefaultDb, name);
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 5) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 async function readDocWithFallback(collectionName: string, id: string): Promise<Record<string, any> | null> {
-  const primary = await getDoc(doc(firebaseDb, collectionName, id));
-  if (primary.exists()) {
-    return primary.data() as Record<string, any>;
+  const primary = await readCollection(firebaseDb, collectionName);
+  const primaryMatch = primary.find((item) => item.id === id);
+  if (primaryMatch) {
+    return primaryMatch.data;
   }
 
-  if (firebaseDatabaseId !== 'default') {
-    const fallback = await getDoc(doc(firebaseDefaultDb, collectionName, id));
-    if (fallback.exists()) {
-      return fallback.data() as Record<string, any>;
+  if (firebaseDatabaseId !== '(default)') {
+    try {
+      const fallback = await readCollection(firebaseDefaultDb, collectionName);
+      const fallbackMatch = fallback.find((item) => item.id === id);
+      if (fallbackMatch) {
+        return fallbackMatch.data;
+      }
+    } catch (error) {
+      if ((error as { code?: unknown }).code !== 5) {
+        throw error;
+      }
     }
   }
 
@@ -527,7 +611,4 @@ run()
   .catch((error) => {
     console.error(`[${domain}] Migration failed`, error);
     process.exitCode = 1;
-  })
-  .finally(async () => {
-    await deleteApp(firebaseApp);
   });

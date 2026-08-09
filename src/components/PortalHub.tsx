@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { User } from 'firebase/auth';
 import { 
   Layers, 
   Activity, 
@@ -21,6 +20,7 @@ import {
   Lock
 } from 'lucide-react';
 import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
+import { AppUser } from '../services/auth/authService';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
 import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
@@ -34,7 +34,7 @@ interface PortalHubProps {
   squadPlayers?: SquadPlayer[];
   physioRecords?: PhysioRecord[];
   videoSessions?: VideoAnalysis[];
-  currentUser?: User | null;
+  currentUser?: AppUser | null;
   onLogout?: () => void;
   currentLogo?: string;
   onUpdateLogo?: (newLogo: string) => void;

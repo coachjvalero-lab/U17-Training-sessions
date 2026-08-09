@@ -18,8 +18,8 @@ import {
   Stethoscope,
   Video
 } from 'lucide-react';
-import { User } from 'firebase/auth';
 import { TrainingSession, PortalSection, CloudTrainingSession } from '../types';
+import { AppUser } from '../services/auth/authService';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
 import { AdminPermissionsModal } from './AdminPermissionsModal';
@@ -40,7 +40,7 @@ interface SidebarProps {
   copiedLink: boolean;
   onCopyShareLink: () => void;
   totalLibraryExercisesCount?: number;
-  currentUser?: User | null;
+  currentUser?: AppUser | null;
   onLogout?: () => void;
   onUpdateLogo?: (newLogo: string) => void;
 }

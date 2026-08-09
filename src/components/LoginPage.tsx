@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User as UserIcon, Lock, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Shield, CheckCircle2, KeyRound, Mail } from 'lucide-react';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
-import { loginUser, resetPasswordEmail } from '../firebase';
+import { loginUser, resetPasswordEmail } from '../services/auth/authService';
 
 interface LoginPageProps {
   onSuccess: () => void;
@@ -48,7 +48,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) 
       setSuccessMessage('Password reset request processed! If registered, check your email inbox for instructions.');
     } catch (err: any) {
       console.error('Password reset error:', err);
-      setErrorMessage(err.message ? err.message.replace('Firebase: ', '') : 'Failed to send password reset email.');
+      setErrorMessage(err.message || 'Failed to send password reset email.');
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) 
 
         const lines = [
           `Code: ${code}`,
-          message.replace('Firebase: ', ''),
+          message,
           details ? `Details: ${details}` : '',
           hint ? `Hint: ${hint}` : '',
           status ? `Status: ${status}` : ''

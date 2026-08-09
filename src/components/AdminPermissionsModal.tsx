@@ -19,7 +19,7 @@ import {
   saveUserPermissionsList,
   saveUserPermissionsListToCloud
 } from '../utils/permissions';
-import { adminCreateUserAccount } from '../firebase';
+import { adminCreateUserAccount } from '../services/auth/authService';
 
 interface AdminPermissionsModalProps {
   isOpen: boolean;
@@ -102,7 +102,7 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 
     setIsCreatingUser(true);
     try {
-      // Create the actual login credentials first (secondary auth instance keeps this admin signed in).
+      // Create Supabase Auth credentials with an isolated client to keep the current admin session intact.
       await adminCreateUserAccount(clean, newUserPassword);
 
       const newUser: UserPermission = {
@@ -119,12 +119,12 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
       setSuccessMsg(`Account and permissions created for ${clean}! Adjust tab access below, then save.`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
-      if (err?.code === 'auth/email-already-in-use') {
-        setErrorMsg('An account with this email already exists in Firebase Auth.');
-      } else if (err?.code === 'auth/weak-password') {
+      if (err?.code === 'user_already_exists' || err?.code === 'email_address_not_authorized') {
+        setErrorMsg('An account with this email already exists in Supabase Auth.');
+      } else if (err?.code === 'weak_password') {
         setErrorMsg('Password is too weak (minimum 6 characters required).');
       } else {
-        setErrorMsg(err?.message ? err.message.replace('Firebase: ', '') : 'Failed to create the account.');
+        setErrorMsg(err?.message || 'Failed to create the account.');
       }
     } finally {
       setIsCreatingUser(false);
