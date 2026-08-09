@@ -153,6 +153,18 @@ function shouldRequireLoginForSharedLink(): boolean {
   }
 }
 
+function registerSupabaseAuthDiagnosticsHelper() {
+  if (typeof window === 'undefined') return;
+
+  (window as any).__u17SupabaseAuthDiagnostics = async () => {
+    const diagnostics = await getSupabaseAuthDiagnostics();
+    console.log('[U17 Supabase Auth Diagnostics]', diagnostics);
+    return diagnostics;
+  };
+}
+
+registerSupabaseAuthDiagnosticsHelper();
+
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     try {
@@ -168,17 +180,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    (window as any).__u17SupabaseAuthDiagnostics = async () => {
-      const diagnostics = await getSupabaseAuthDiagnostics();
-      console.log('[U17 Supabase Auth Diagnostics]', diagnostics);
-      return diagnostics;
-    };
-
-    return () => {
-      delete (window as any).__u17SupabaseAuthDiagnostics;
-    };
+    registerSupabaseAuthDiagnosticsHelper();
   }, []);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
