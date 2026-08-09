@@ -14,13 +14,17 @@ export function subscribeTrainingSessions(
 
   const start = async () => {
     try {
+      console.log('[trainingSessionPersistence] subscribeTrainingSessions starting...');
       unsubscribe = await subscribeToSessionsSupabase(callback, onError);
+      console.log('[trainingSessionPersistence] subscribeToSessionsSupabase initialized');
     } catch (error) {
+      console.error('[trainingSessionPersistence] Failed to subscribe:', error);
       if (onError) onError(error);
     }
   };
 
   start().catch((error) => {
+    console.error('[trainingSessionPersistence] start() caught error:', error);
     if (onError) onError(error);
   });
 

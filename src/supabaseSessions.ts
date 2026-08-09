@@ -197,7 +197,18 @@ export async function subscribeToSessionsSupabase(
   const provider = getSessionsDataProvider();
   const enabled = isSupabaseSessionsEnabled();
 
-  console.log('[SUPABASE SESSIONS]', {
+  // Check current auth session
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  const hasSession = !!sessionData?.session;
+  const userEmail = sessionData?.session?.user?.email || 'anonymous';
+
+  console.log('[SUPABASE SESSIONS] Auth Status', {
+    hasSession,
+    userEmail,
+    sessionError: sessionError ? String(sessionError) : null
+  });
+
+  console.log('[SUPABASE SESSIONS] Init', {
     provider: getSessionsDataProvider(),
     enabled,
     error: null,
@@ -212,7 +223,7 @@ export async function subscribeToSessionsSupabase(
 
     if (error) {
       const errorSummary = error as unknown as { code?: unknown; message?: unknown; status?: unknown };
-      console.log('[SUPABASE SESSIONS]', {
+      console.log('[SUPABASE SESSIONS] Query Error', {
         provider,
         enabled,
         error: {
@@ -226,7 +237,7 @@ export async function subscribeToSessionsSupabase(
     }
 
     const sessions = (data || []).map((row) => toCloudTrainingSession(row as SessionRow));
-    console.log('[SUPABASE SESSIONS]', {
+    console.log('[SUPABASE SESSIONS] Result', {
       provider,
       enabled,
       error: null,

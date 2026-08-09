@@ -823,9 +823,30 @@ export default function App() {
 
   // Subscribe to all unified sessions from Supabase and auto-load the active session on first load & real-time updates
   useEffect(() => {
+    // CRITICAL: Only start session subscription after auth initialization is complete.
+    // If we subscribe before the user is authenticated, RLS will block the query (0 rows, no error).
+    // Must wait for currentUser to be set by the auth subscription.
+    if (isAuthInitializing) {
+      console.log('[App] Skipping session subscription - auth still initializing');
+      return;
+    }
+
+    if (!currentUser?.email) {
+      console.log('[App] User not authenticated, showing cached sessions only');
+      // User is not authenticated; just use cached sessions
+      const cachedSessions = readCachedCloudSessions();
+      if (cachedSessions.length > 0) {
+        setCloudSessions(cachedSessions);
+      }
+      setIsLoadingCloud(false);
+      return;
+    }
+
+    console.log('[App] Auth complete, starting session subscription for:', currentUser.email);
     setIsLoadingCloud(true);
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
+        console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions');
         setCloudSessions(sessions);
         try {
           localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
@@ -903,6 +924,7 @@ export default function App() {
         hasInitialCloudLoadedRef.current = true;
       },
       () => {
+        console.log('[App] Sessions subscription error - falling back to cache');
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
         const cachedSessions = readCachedCloudSessions();
@@ -914,7 +936,7 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [isAuthInitializing, currentUser?.email]);
 
 
   // Keep refs and URL in sync with the active cloud-backed session
