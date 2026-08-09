@@ -13,7 +13,8 @@ import {
   Upload,
   Loader2,
   Sparkles,
-  Copy
+  Copy,
+  PenSquare
 } from 'lucide-react';
 import { CloudTrainingSession, Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import {
@@ -150,6 +151,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>('football');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDuplicatingModal, setIsDuplicatingModal] = useState(false);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 
   const handleNewExTimingChange = (field: 'series' | 'workTime' | 'restTime', val: string) => {
     const updatedSeries = field === 'series' ? val : (newEx.series ?? '');
@@ -178,6 +180,54 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
   // State to track dropdown for target block insertion
   const [openAddDropdownId, setOpenAddDropdownId] = useState<string | null>(null);
+
+  const openCreateExerciseModal = () => {
+    setEditingExerciseId(null);
+    setIsDuplicatingModal(false);
+    setNewExSection('football');
+    setNewEx({
+      name: '',
+      gameMoment: 'Attack',
+      subMoment: '',
+      description: '',
+      duration: '15 min',
+      dimensions: '30x20m',
+      coachRoles: '',
+      playerGroups: '',
+      isFitness: false,
+      malikaChallenge: {
+        enabled: false,
+        title: '',
+        defaultPoints: 3
+      },
+      image: ''
+    });
+    setShowCreateModal(true);
+  };
+
+  const resetExerciseForm = () => {
+    setShowCreateModal(false);
+    setIsDuplicatingModal(false);
+    setEditingExerciseId(null);
+    setNewEx({
+      name: '',
+      gameMoment: 'Attack',
+      subMoment: '',
+      description: '',
+      duration: '15 min',
+      dimensions: '30x20m',
+      coachRoles: '',
+      playerGroups: '',
+      isFitness: false,
+      malikaChallenge: {
+        enabled: false,
+        title: '',
+        defaultPoints: 3
+      },
+      image: ''
+    });
+    setNewExSection('football');
+  };
 
   // Save custom exercises to localStorage whenever updated
   useEffect(() => {
@@ -316,6 +366,41 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     
     setNewExSection(ex.sectionCategory || resolveExerciseModule(ex));
     setIsDuplicatingModal(true);
+    setEditingExerciseId(null);
+    setShowCreateModal(true);
+  };
+
+  const handleEditExercise = (ex: Exercise & { sectionCategory?: 'football' | 'fitness' | 'gk' }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    setNewEx({
+      id: ex.id,
+      name: ex.name || '',
+      gameMoment: ex.gameMoment || 'Attack',
+      subMoment: ex.subMoment || '',
+      description: ex.description || '',
+      duration: ex.duration || '15 min',
+      dimensions: ex.dimensions || '30x20m',
+      coachRoles: ex.coachRoles || '',
+      playerGroups: ex.playerGroups || '',
+      isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      malikaChallenge: ex.malikaChallenge
+        ? {
+            enabled: Boolean(ex.malikaChallenge.enabled),
+            title: ex.malikaChallenge.title || ex.name,
+            defaultPoints: Number(ex.malikaChallenge.defaultPoints ?? 3) || 3
+          }
+        : {
+            enabled: false,
+            title: ex.name,
+            defaultPoints: 3
+          },
+      image: ex.image || ''
+    });
+
+    setNewExSection(ex.sectionCategory || resolveExerciseModule(ex));
+    setIsDuplicatingModal(false);
+    setEditingExerciseId(ex.id);
     setShowCreateModal(true);
   };
 
@@ -361,8 +446,9 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       return;
     }
 
+    const exerciseId = editingExerciseId || 'custom-ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
     const created: Exercise = {
-      id: 'custom-ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      id: exerciseId,
       name: newEx.name || 'Custom Exercise',
       gameMoment: (newEx.gameMoment as GameMoment) || 'Attack',
       subMoment: newEx.subMoment || '',
@@ -382,29 +468,16 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       image: newEx.image || ''
     };
 
-    setCustomExercises(prev => [created, ...prev]);
-    saveExerciseToLibrary(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
-    setShowCreateModal(false);
-    setIsDuplicatingModal(false);
-    setNewEx({
-      name: '',
-      gameMoment: 'Attack',
-      subMoment: '',
-      description: '',
-      duration: '15 min',
-      dimensions: '30x20m',
-      coachRoles: '',
-      playerGroups: '',
-      isFitness: false,
-      malikaChallenge: {
-        enabled: false,
-        title: '',
-        defaultPoints: 3
-      },
-      image: ''
+    setCustomExercises(prev => {
+      if (!editingExerciseId) {
+        return [created, ...prev];
+      }
+      return prev.map((item) => (item.id === editingExerciseId ? created : item));
     });
+    saveExerciseToLibrary(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
 
-    setAddedToast('Exercise saved successfully to library!');
+    resetExerciseForm();
+    setAddedToast(editingExerciseId ? 'Exercise updated successfully in library!' : 'Exercise saved successfully to library!');
     setTimeout(() => setAddedToast(null), 3000);
   };
 
@@ -593,7 +666,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateExerciseModal}
             className="flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider py-3 px-5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
           >
             <PlusCircle className="w-4 h-4" />
@@ -744,6 +817,16 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     </p>
                   )}
 
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                      ex.malikaChallenge?.enabled
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}>
+                      {ex.malikaChallenge?.enabled ? 'Malika ON' : 'Malika OFF'}
+                    </span>
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                     <div className="flex items-center space-x-1">
                       <Clock className="w-3.5 h-3.5 text-emerald-600" />
@@ -779,6 +862,16 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     {/* Duplicate Buttons Group */}
                     <div className="flex items-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleEditExercise(ex, e)}
+                        className="flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-black py-2 px-3 rounded-xl border border-amber-200 hover:border-amber-300 transition-all cursor-pointer"
+                        title="Edit exercise"
+                      >
+                        <PenSquare className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => handleDuplicateExercise(ex, e)}
@@ -988,14 +1081,20 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 bg-[#002142] text-[#a79078] rounded-xl">
-                  {isDuplicatingModal ? <Copy className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
+                  {editingExerciseId ? <PenSquare className="w-5 h-5" /> : isDuplicatingModal ? <Copy className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base font-display font-black text-slate-900 uppercase">
-                    {isDuplicatingModal ? 'Duplicate Exercise for Library' : 'Create New Exercise for Library'}
+                    {editingExerciseId
+                      ? 'Edit Exercise'
+                      : isDuplicatingModal
+                      ? 'Duplicate Exercise for Library'
+                      : 'Create New Exercise for Library'}
                   </h3>
                   <p className="text-xs text-slate-400 font-semibold">
-                    {isDuplicatingModal 
+                    {editingExerciseId
+                      ? 'Update this exercise, including Malika Golden League settings.'
+                      : isDuplicatingModal 
                       ? 'Customize fields and save as a new exercise in your personal library.' 
                       : 'Save your favorite tactical and physical tasks to reuse them across sessions.'}
                   </p>
@@ -1005,8 +1104,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setShowCreateModal(false);
-                  setIsDuplicatingModal(false);
+                  resetExerciseForm();
                 }}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"
               >
@@ -1234,7 +1332,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                       Malika Golden League
                     </p>
                     <p className="text-[10px] font-semibold text-amber-800/80">
-                      Mark this exercise as a Malika challenge and define default points.
+                      Set this exercise as a Malika challenge.
                     </p>
                   </div>
                   <button
@@ -1253,7 +1351,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                         : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
                     }`}
                   >
-                    {newEx.malikaChallenge?.enabled ? 'Enabled' : 'Disabled'}
+                    {newEx.malikaChallenge?.enabled ? 'ON' : 'OFF'}
                   </button>
                 </div>
 
@@ -1336,10 +1434,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setIsDuplicatingModal(false);
-                  }}
+                  onClick={resetExerciseForm}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 rounded-xl"
                 >
                   Cancel
@@ -1349,7 +1444,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   type="submit"
                   className="px-6 py-2.5 bg-[#002142] hover:bg-[#003366] text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
                 >
-                  {isDuplicatingModal ? 'Save Duplicate to Library' : 'Save to Library'}
+                  {editingExerciseId
+                    ? 'Save Changes'
+                    : isDuplicatingModal
+                    ? 'Save Duplicate to Library'
+                    : 'Save to Library'}
                 </button>
               </div>
 
