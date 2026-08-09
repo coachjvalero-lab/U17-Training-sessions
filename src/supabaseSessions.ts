@@ -1,6 +1,5 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession, TrainingSession } from './types';
-import { getDataProvider } from './supabaseClient';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 type SessionRole = 'football' | 'fitness' | 'gk';

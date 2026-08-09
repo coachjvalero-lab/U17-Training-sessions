@@ -24,7 +24,7 @@ import {
 import {
   addDeletedExerciseIdsCloud,
   subscribeToDeletedExerciseIds
-} from '../services/exercises/exerciseDeletedIdsLegacyService';
+} from '../services/exercises/exerciseDeletedIdsService';
 import { getDefaultSession } from '../defaultSession';
 import { processUploadedImageFile } from '../utils/heic';
 import { calculateExerciseTotalDuration } from './ExerciseBlock';

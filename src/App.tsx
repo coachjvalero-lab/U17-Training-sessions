@@ -37,15 +37,6 @@ import {
   clearQuotaExceeded,
   subscribeSyncStatus,
   flushPendingWrites,
-  subscribeToPhysioRecords,
-  savePhysioRecordToCloud,
-  deletePhysioRecordFromCloud,
-  subscribeToVideoAnalysis,
-  saveVideoAnalysisToCloud,
-  deleteVideoAnalysisFromCloud,
-  subscribeToCompetitionFixtures,
-  saveCompetitionFixtureToCloud,
-  deleteCompetitionFixtureFromCloud
 } from './firebase';
 import {
   deleteSquadPlayer,
@@ -62,6 +53,21 @@ import {
   subscribeToTeamLogo
 } from './services/team/teamLogoService';
 import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
+import {
+  deletePhysioRecordFromCloud,
+  savePhysioRecordToCloud,
+  subscribeToPhysioRecords
+} from './services/physio/physioService';
+import {
+  deleteCompetitionFixtureFromCloud,
+  saveCompetitionFixtureToCloud,
+  subscribeToCompetitionFixtures
+} from './services/fixtures/fixturesService';
+import {
+  deleteVideoAnalysisFromCloud,
+  saveVideoAnalysisToCloud,
+  subscribeToVideoAnalysis
+} from './services/video/videoAnalysisService';
 import { initPermissionsCloudSync } from './utils/permissions';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
 import {
@@ -90,7 +96,7 @@ import {
   isSupabaseConfigured,
   supabase
 } from './supabaseClient';
-import { getSessionsDataProvider, isSupabaseSessionsEnabled } from './supabaseSessions';
+import { getSessionsDataProvider } from './supabaseSessions';
 import { 
   FileText,
   Loader2,
