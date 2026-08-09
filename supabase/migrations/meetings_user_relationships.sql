@@ -37,12 +37,12 @@ drop constraint if exists meeting_attendees_meeting_id_email_key;
 alter table public.meeting_attendees
 drop column if exists email;
 
+-- NOT NULL + ON DELETE CASCADE: if a user profile is deleted their attendee
+-- rows are removed, but the meeting record itself is preserved.
 alter table public.meeting_attendees
 add column user_id uuid not null 
-  references public.user_profiles(user_id) on delete set null;
+  references public.user_profiles(user_id) on delete cascade;
 
--- Remove old unique constraint (was on meeting_id, email)
--- Add new unique constraint on meeting_id, user_id
 alter table public.meeting_attendees
 add constraint meeting_attendees_meeting_id_user_id_key unique (meeting_id, user_id);
 
@@ -64,7 +64,7 @@ create index if not exists meeting_action_items_assigned_to_user_id_idx
 
 -- Step 5: Modify meetings table
 -- Replace organizer_email with organizer_user_id
--- Replace created_by, updated_by with created_by_user_id, updated_by_user_id
+-- Replace created_by, updated_by with UUID FKs (nullable to preserve history on user deletion)
 alter table public.meetings
 drop column if exists organizer_email;
 
@@ -72,21 +72,20 @@ alter table public.meetings
 add column organizer_user_id uuid 
   references public.user_profiles(user_id) on delete set null;
 
--- Replace created_by (text email) with created_by_user_id (UUID FK)
+-- nullable so meeting record survives if the creator's profile is deleted
 alter table public.meetings
 drop column if exists created_by;
 
 alter table public.meetings
-add column created_by_user_id uuid not null 
-  references public.user_profiles(user_id) on delete restrict;
+add column created_by_user_id uuid
+  references public.user_profiles(user_id) on delete set null;
 
--- Replace updated_by (text email) with updated_by_user_id (UUID FK)
 alter table public.meetings
 drop column if exists updated_by;
 
 alter table public.meetings
-add column updated_by_user_id uuid not null 
-  references public.user_profiles(user_id) on delete restrict;
+add column updated_by_user_id uuid
+  references public.user_profiles(user_id) on delete set null;
 
 -- Add indexes for created_by_user_id and updated_by_user_id
 create index if not exists meetings_created_by_user_id_idx on public.meetings (created_by_user_id);
@@ -111,8 +110,7 @@ create policy meetings_insert
   for insert
   to authenticated
   with check (
-    (public.is_admin_user() or public.has_section_access('meetings'))
-    and created_by_user_id = auth.uid()
+    public.is_admin_user() or public.has_section_access('meetings')
   );
 
 create policy meetings_update
@@ -134,10 +132,7 @@ create policy meetings_delete
   to authenticated
   using (
     public.is_admin_user()
-    or (
-      public.has_section_access('meetings')
-      and created_by_user_id = auth.uid()
-    )
+    or public.has_section_access('meetings')
   );
 
 -- ---- meeting_attendees ------------------------------------------------------

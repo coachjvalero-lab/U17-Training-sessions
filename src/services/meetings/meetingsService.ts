@@ -207,7 +207,7 @@ async function fetchActionItems(meetingIds: string[]): Promise<Map<string, Meeti
       completed_at,
       created_at,
       updated_at,
-      user_profiles!inner (
+      user_profiles (
         email,
         display_name
       )

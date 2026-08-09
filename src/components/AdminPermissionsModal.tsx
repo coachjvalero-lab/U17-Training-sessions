@@ -124,8 +124,19 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 
     setIsCreatingUser(true);
     try {
+      let accountAlreadyExists = false;
+
       // Create Supabase Auth credentials with an isolated client to keep the current admin session intact.
-      await adminCreateUserAccount(clean, newUserPassword);
+      // If the account already exists, continue so admins can still assign/update permissions.
+      try {
+        await adminCreateUserAccount(clean, newUserPassword);
+      } catch (err: any) {
+        if (err?.code === 'user_already_exists' || err?.code === 'email_address_not_authorized') {
+          accountAlreadyExists = true;
+        } else {
+          throw err;
+        }
+      }
 
       const newUser: UserPermission = {
         email: clean,
@@ -138,12 +149,14 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserConfirmPassword('');
-      setSuccessMsg(`Account and permissions created for ${clean}! Adjust tab access below, then save.`);
+      setSuccessMsg(
+        accountAlreadyExists
+          ? `Existing account detected for ${clean}. Permissions row added - adjust access and save.`
+          : `Account and permissions created for ${clean}! Adjust tab access below, then save.`
+      );
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
-      if (err?.code === 'user_already_exists' || err?.code === 'email_address_not_authorized') {
-        setErrorMsg('An account with this email already exists in Supabase Auth.');
-      } else if (err?.code === 'weak_password') {
+      if (err?.code === 'weak_password') {
         setErrorMsg('Password is too weak (minimum 6 characters required).');
       } else {
         setErrorMsg(err?.message || 'Failed to create the account.');
