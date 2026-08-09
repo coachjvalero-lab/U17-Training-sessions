@@ -1,5 +1,6 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession, TrainingSession } from './types';
+import { getDataProvider } from './supabaseClient';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 type SessionRole = 'football' | 'fitness' | 'gk';
@@ -195,6 +196,15 @@ export async function subscribeToSessionsSupabase(
   onError?: (error: any) => void
 ): Promise<() => void> {
   const client = getSupabaseOrThrow();
+  const provider = getSessionsDataProvider();
+  const enabled = isSupabaseSessionsEnabled();
+
+  console.log('[SUPABASE SESSIONS]', {
+    provider: getSessionsDataProvider(),
+    enabled,
+    error: null,
+    count: null
+  });
 
   const loadAndEmit = async () => {
     const { data, error } = await client
@@ -203,10 +213,27 @@ export async function subscribeToSessionsSupabase(
       .order('updated_at', { ascending: false });
 
     if (error) {
+      const errorSummary = error as unknown as { code?: unknown; message?: unknown; status?: unknown };
+      console.log('[SUPABASE SESSIONS]', {
+        provider,
+        enabled,
+        error: {
+          code: errorSummary.code ? String(errorSummary.code) : 'unknown',
+          message: errorSummary.message ? String(errorSummary.message) : 'Unknown Supabase error',
+          status: typeof errorSummary.status === 'number' ? errorSummary.status : null
+        },
+        count: null
+      });
       throw error;
     }
 
     const sessions = (data || []).map((row) => toCloudTrainingSession(row as SessionRow));
+    console.log('[SUPABASE SESSIONS]', {
+      provider,
+      enabled,
+      error: null,
+      count: sessions.length
+    });
     callback(sessions);
   };
 

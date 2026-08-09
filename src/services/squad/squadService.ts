@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
+import { getDataProvider } from '../../supabaseClient';
 import type { SquadPlayer } from '../../types';
 
 const SQUAD_TABLE = 'squad_players';
@@ -96,14 +97,38 @@ export function subscribeToSquadPlayers(
   onError?: (error: unknown) => void
 ): () => void {
   const client = getClient();
+  const provider = getDataProvider();
+  const enabled = true;
   let active = true;
   let channel: RealtimeChannel | null = null;
 
   const loadAndEmit = async () => {
     try {
       const players = await listSquadPlayers();
+      console.log('[SUPABASE SQUAD]', {
+        provider,
+        enabled,
+        error: null,
+        count: players.length
+      });
       if (active) callback(players);
     } catch (error) {
+      console.log('[SUPABASE SQUAD]', {
+        provider,
+        enabled,
+        error: error && typeof error === 'object'
+          ? {
+              code: 'code' in error && (error as { code?: unknown }).code ? String((error as { code?: unknown }).code) : 'unknown',
+              message: 'message' in error && (error as { message?: unknown }).message ? String((error as { message?: unknown }).message) : String(error),
+              status: 'status' in error && typeof (error as { status?: unknown }).status === 'number' ? (error as { status?: number }).status : null
+            }
+          : {
+              code: 'unknown',
+              message: String(error),
+              status: null
+            },
+        count: null
+      });
       if (active && onError) onError(error);
     }
   };

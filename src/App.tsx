@@ -83,6 +83,14 @@ import {
   saveTrainingSessionBySection,
   subscribeTrainingSessions
 } from './modules/trainingSessionPersistence';
+import {
+  getAuthProvider,
+  getDataProvider,
+  getPermissionsProvider,
+  isSupabaseConfigured,
+  supabase
+} from './supabaseClient';
+import { getSessionsDataProvider, isSupabaseSessionsEnabled } from './supabaseSessions';
 import { 
   FileText,
   Loader2,
@@ -153,6 +161,60 @@ function shouldRequireLoginForSharedLink(): boolean {
   }
 }
 
+function registerSupabaseDataDiagnosticsHelper() {
+  if (typeof window === 'undefined' || !supabase) return;
+
+  (window as any).__u17SupabaseDataDiagnostics = async () => {
+    const [sessionsResult, squadResult, rolesResult] = await Promise.allSettled([
+      supabase.from('sessions').select('id', { count: 'exact', head: true }),
+      supabase.from('squad_players').select('id', { count: 'exact', head: true }),
+      supabase.from('user_roles').select('*')
+    ]);
+
+    const toSummary = (result: PromiseSettledResult<any>) => {
+      if (result.status === 'fulfilled') {
+        return {
+          count: result.value.count ?? (Array.isArray(result.value.data) ? result.value.data.length : null),
+          error: result.value.error ?? null
+        };
+      }
+
+      const error = result.reason && typeof result.reason === 'object'
+        ? {
+            code: (result.reason as { code?: unknown }).code ? String((result.reason as { code?: unknown }).code) : 'unknown',
+            message: (result.reason as { message?: unknown }).message ? String((result.reason as { message?: unknown }).message) : String(result.reason),
+            status: null
+          }
+        : {
+            code: 'unknown',
+            message: String(result.reason),
+            status: null
+          };
+
+      return {
+        count: null,
+        error
+      };
+    };
+
+    const diagnostics = {
+      providers: {
+        data: getDataProvider(),
+        auth: getAuthProvider(),
+        permissions: getPermissionsProvider(),
+        sessions: getSessionsDataProvider(),
+        supabaseConfigured: isSupabaseConfigured
+      },
+      sessions: toSummary(sessionsResult),
+      squadPlayers: toSummary(squadResult),
+      userRoles: toSummary(rolesResult)
+    };
+
+    console.log('[SUPABASE DATA DIAGNOSTICS]', diagnostics);
+    return diagnostics;
+  };
+}
+
 function registerSupabaseAuthDiagnosticsHelper() {
   if (typeof window === 'undefined') return;
 
@@ -181,6 +243,10 @@ export default function App() {
 
   useEffect(() => {
     registerSupabaseAuthDiagnosticsHelper();
+  }, []);
+
+  useEffect(() => {
+    registerSupabaseDataDiagnosticsHelper();
   }, []);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
