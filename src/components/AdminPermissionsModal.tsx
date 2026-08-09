@@ -15,12 +15,11 @@ import { PortalSection } from '../types';
 import { 
   UserPermission, 
   ALL_SECTIONS_LIST, 
-  getUserPermissionsList, 
   saveUserPermissionsList,
   saveUserPermissionsListToCloud
 } from '../utils/permissions';
 import { adminCreateUserAccount } from '../services/auth/authService';
-import { supabase } from '../supabaseClient';
+import { listIdentityUsersWithPermissions } from '../services/permissions/permissionsService';
 
 interface AdminPermissionsModalProps {
   isOpen: boolean;
@@ -33,7 +32,8 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
   onClose,
   onPermissionsUpdated
 }) => {
-  const [users, setUsers] = useState<UserPermission[]>(() => getUserPermissionsList());
+  const [users, setUsers] = useState<UserPermission[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
@@ -45,48 +45,23 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    console.log('[AdminPermissionsModal] open with cached users', {
-      rows: users.length,
-      emails: users.map((user) => user.email)
-    });
-
-    if (!supabase) {
-      console.warn('[AdminPermissionsModal] Supabase client not configured');
-      return;
-    }
-
-    const runDiagnostics = async () => {
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      console.log('[AdminPermissionsModal] auth diagnostics', {
-        authEmail: authData?.session?.user?.email || null,
-        authError: authError ? String(authError) : null
-      });
-
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('email, role, allowed_sections')
-        .order('email', { ascending: true });
-
-      console.log('[AdminPermissionsModal] user_roles query', {
-        rows: roles?.length || 0,
-        error: rolesError ? String(rolesError) : null,
-        emails: (roles || []).map((row: { email: string }) => row.email)
-      });
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select('user_id, email, display_name')
-        .order('email', { ascending: true });
-
-      console.log('[AdminPermissionsModal] user_profiles query', {
-        rows: profiles?.length || 0,
-        error: profilesError ? String(profilesError) : null,
-        emails: (profiles || []).map((row: { email: string }) => row.email)
-      });
+    const loadUsersFromSupabase = async () => {
+      setIsLoadingUsers(true);
+      setErrorMsg('');
+      try {
+        const freshUsers = await listIdentityUsersWithPermissions();
+        setUsers(freshUsers);
+      } catch (error: any) {
+        console.error('[AdminPermissionsModal] failed to load users from Supabase', error);
+        setUsers([]);
+        setErrorMsg(error?.message || 'Failed to load users from Supabase.');
+      } finally {
+        setIsLoadingUsers(false);
+      }
     };
 
-    void runDiagnostics();
-  }, [isOpen, users]);
+    void loadUsersFromSupabase();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -214,17 +189,22 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
     setUsers(updated);
   };
 
-  const handleSaveAll = () => {
-    saveUserPermissionsList(users);
-    saveUserPermissionsListToCloud(users);
-    setSuccessMsg('User tab permissions saved successfully!');
-    if (onPermissionsUpdated) {
-      onPermissionsUpdated();
+  const handleSaveAll = async () => {
+    setErrorMsg('');
+    try {
+      saveUserPermissionsList(users);
+      await saveUserPermissionsListToCloud(users);
+      setSuccessMsg('User tab permissions saved successfully!');
+      if (onPermissionsUpdated) {
+        onPermissionsUpdated();
+      }
+      setTimeout(() => {
+        setSuccessMsg('');
+        onClose();
+      }, 1000);
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Failed to save permissions to Supabase.');
     }
-    setTimeout(() => {
-      setSuccessMsg('');
-      onClose();
-    }, 1000);
   };
 
   return (
@@ -332,6 +312,18 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
 
         {/* User Permissions Table / Matrix List */}
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+          {isLoadingUsers && (
+            <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl text-sky-900 text-xs font-bold shrink-0">
+              Loading users from Supabase...
+            </div>
+          )}
+
+          {!isLoadingUsers && users.length === 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs font-bold shrink-0">
+              No active users found in user_profiles.
+            </div>
+          )}
+
           {users.map((user) => {
             const isAdminUser = user.email.toLowerCase().startsWith('admin') || user.role === 'admin';
             const allChecked = ALL_SECTIONS_LIST.every(s => user.allowedSections.includes(s.id));

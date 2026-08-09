@@ -83,6 +83,18 @@ function toRow(exercise: Exercise, updatedAt: number): ExerciseRow {
   };
 }
 
+export async function getExerciseFromLibraryById(exerciseId: string): Promise<CloudExercise | null> {
+  const { data, error } = await getClient()
+    .from(EXERCISE_LIBRARY_TABLE)
+    .select('*')
+    .eq('id', exerciseId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  return fromRow(data as ExerciseRow);
+}
+
 async function listExercises(): Promise<CloudExercise[]> {
   const { data, error } = await getClient()
     .from(EXERCISE_LIBRARY_TABLE)
@@ -151,9 +163,24 @@ export async function saveExerciseToLibrary(exercise: Exercise): Promise<number>
     .upsert(toRow(exercise, updatedAt), { onConflict: 'id' });
 
   if (error) throw error;
+
+  const persisted = await getExerciseFromLibraryById(exercise.id);
+  if (!persisted) {
+    throw new Error(`Exercise ${exercise.id} was not found after save.`);
+  }
+
+  const expectedEnabled = Boolean(exercise.malikaChallenge?.enabled);
+  const persistedEnabled = Boolean(persisted.malikaChallenge?.enabled);
+  if (expectedEnabled !== persistedEnabled) {
+    throw new Error(
+      `Malika persistence mismatch for ${exercise.id}: expected enabled=${expectedEnabled}, persisted enabled=${persistedEnabled}`
+    );
+  }
+
   console.log('[ExerciseLibraryService] save exercise OK', {
     id: exercise.id,
-    updatedAt
+    updatedAt,
+    persistedMalikaChallenge: persisted.malikaChallenge || null
   });
   return updatedAt;
 }

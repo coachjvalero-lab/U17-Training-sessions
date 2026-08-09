@@ -24,7 +24,8 @@
     "migrate:team-logo": "tsx scripts/migrate-firestore-domain.ts team-logo",
     "migrate:session-cards": "tsx scripts/migrate-firestore-domain.ts session-cards",
     "migrate:permissions": "tsx scripts/migrate-firestore-domain.ts permissions",
-    "migrate:all-domains": "npm run migrate:permissions && npm run migrate:squad && npm run migrate:attendance && npm run migrate:team-logo && npm run migrate:exercises && npm run migrate:exercise-deleted-ids && npm run migrate:session-cards && npm run migrate:fixtures && npm run migrate:video && npm run migrate:physio"
+    "migrate:all-domains": "npm run migrate:permissions && npm run migrate:squad && npm run migrate:attendance && npm run migrate:team-logo && npm run migrate:exercises && npm run migrate:exercise-deleted-ids && npm run migrate:session-cards && npm run migrate:fixtures && npm run migrate:video && npm run migrate:physio",
+    "backfill:user-profiles": "tsx scripts/backfill-user-profiles-from-auth.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

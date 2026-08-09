@@ -19,6 +19,7 @@ import {
 import { CloudTrainingSession, Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import {
   deleteExerciseFromLibrary,
+  getExerciseFromLibraryById,
   saveExerciseToLibrary,
   subscribeToExerciseLibrary
 } from '../services/exercises/exerciseLibraryService';
@@ -152,6 +153,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDuplicatingModal, setIsDuplicatingModal] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string>('');
 
   const handleNewExTimingChange = (field: 'series' | 'workTime' | 'restTime', val: string) => {
     const updatedSeries = field === 'series' ? val : (newEx.series ?? '');
@@ -182,6 +184,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   const [openAddDropdownId, setOpenAddDropdownId] = useState<string | null>(null);
 
   const openCreateExerciseModal = () => {
+    setSaveErrorMsg('');
     setEditingExerciseId(null);
     setIsDuplicatingModal(false);
     setNewExSection('football');
@@ -206,6 +209,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   };
 
   const resetExerciseForm = () => {
+    setSaveErrorMsg('');
     setShowCreateModal(false);
     setIsDuplicatingModal(false);
     setEditingExerciseId(null);
@@ -439,8 +443,9 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   };
 
   // Create & Save custom exercise to local library
-  const handleSaveCustomExercise = (e: React.FormEvent) => {
+  const handleSaveCustomExercise = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveErrorMsg('');
     if (!newEx.name?.trim()) {
       alert('Please enter a name for the exercise.');
       return;
@@ -475,17 +480,28 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       malikaChallenge: created.malikaChallenge || null
     });
 
-    setCustomExercises(prev => {
-      if (!editingExerciseId) {
-        return [created, ...prev];
-      }
-      return prev.map((item) => (item.id === editingExerciseId ? created : item));
-    });
-    saveExerciseToLibrary(created).catch(err => console.warn('Cloud save failed for new exercise:', err));
+    try {
+      await saveExerciseToLibrary(created);
+      const persisted = await getExerciseFromLibraryById(created.id);
+      const confirmed: Exercise = persisted
+        ? (({ updatedAt, ...exercise }) => exercise)(persisted)
+        : created;
 
-    resetExerciseForm();
-    setAddedToast(editingExerciseId ? 'Exercise updated successfully in library!' : 'Exercise saved successfully to library!');
-    setTimeout(() => setAddedToast(null), 3000);
+      setCustomExercises(prev => {
+        if (!editingExerciseId) {
+          return [confirmed, ...prev.filter((item) => item.id !== confirmed.id)];
+        }
+        return prev.map((item) => (item.id === editingExerciseId ? confirmed : item));
+      });
+
+      resetExerciseForm();
+      setAddedToast(editingExerciseId ? 'Exercise updated successfully in library!' : 'Exercise saved successfully to library!');
+      setTimeout(() => setAddedToast(null), 3000);
+    } catch (err: any) {
+      const message = err?.message || 'Failed to save exercise to Supabase.';
+      console.error('[ExercisesLibrary] save failed', err);
+      setSaveErrorMsg(message);
+    }
   };
 
   // Delete exercise from library (custom or sample)
@@ -1131,6 +1147,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
             </div>
 
             <form onSubmit={handleSaveCustomExercise} className="space-y-4">
+              {saveErrorMsg && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-bold">
+                  {saveErrorMsg}
+                </div>
+              )}
               
               {/* Category Selector */}
               <div>

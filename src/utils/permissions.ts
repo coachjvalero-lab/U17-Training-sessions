@@ -61,8 +61,8 @@ export function saveUserPermissionsList(list: UserPermission[]): void {
  * Pushes the full permissions list to Supabase so every device sees the update in real time.
  * Call this alongside saveUserPermissionsList() whenever an admin explicitly saves changes.
  */
-export function saveUserPermissionsListToCloud(list: UserPermission[]): void {
-  saveUserPermissions(list).catch(err => console.warn('Cloud save failed for permissions:', err));
+export function saveUserPermissionsListToCloud(list: UserPermission[]): Promise<void> {
+  return saveUserPermissions(list);
 }
 
 /**
