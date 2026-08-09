@@ -287,8 +287,21 @@ export default function App() {
       if (cloudPlayers.length === 0 && !hasSquadMigrationSettledRef.current) {
         return;
       }
+
       const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
-      setSquadPlayers(list);
+      setSquadPlayers((prev) => {
+        const same = prev.length === list.length && prev.every((player, index) => {
+          const next = list[index];
+          return next && player.id === next.id && JSON.stringify(player) === JSON.stringify(next);
+        });
+
+        if (same) {
+          return prev;
+        }
+
+        return list;
+      });
+
       try {
         localStorage.setItem('u17_squad_players', JSON.stringify(list));
       } catch (e) {
@@ -1015,9 +1028,10 @@ export default function App() {
 
   const handleUpdateSquadPlayers = (updated: SquadPlayer[]) => {
     const previous = squadPlayers;
-    setSquadPlayers(updated);
+    const next = updated.map((player) => ({ ...player }));
+    setSquadPlayers(next);
     try {
-      localStorage.setItem('u17_squad_players', JSON.stringify(updated));
+      localStorage.setItem('u17_squad_players', JSON.stringify(next));
     } catch (e) {}
 
     // Sync only what changed to Firestore (per-player docs), so simultaneous edits by different
@@ -1025,7 +1039,7 @@ export default function App() {
     const previousById = new Map(previous.map(p => [p.id, p]));
     const updatedIds = new Set(updated.map(p => p.id));
 
-    updated.forEach(player => {
+    next.forEach(player => {
       const prevPlayer = previousById.get(player.id);
       if (!prevPlayer || JSON.stringify(prevPlayer) !== JSON.stringify(player)) {
         saveSquadPlayer(player).catch(err => console.warn('Cloud save failed for squad player:', err));
@@ -1038,7 +1052,7 @@ export default function App() {
       }
     });
 
-    const formattedRoster = updated.map(p => 
+    const formattedRoster = next.map(p => 
       p.position === 'GK' ? `${p.firstName} (GK)` : `${p.firstName} ${p.lastName}`
     );
     handleUpdateRoster(formattedRoster);

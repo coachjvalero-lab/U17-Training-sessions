@@ -25,6 +25,7 @@ import { CloudTrainingSession } from '../types';
 import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { groupSquadPlayersByPosition } from '../utils/squadGrouping';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -295,6 +296,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
     return matchesSearch && matchesPos && matchesStatus;
   });
+
+  const groupedPlayers = groupSquadPlayersByPosition(filteredPlayers);
 
   const getStatusBadge = (status: SquadPlayer['status']) => {
     switch (status) {
@@ -817,17 +820,29 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
       {/* CARDS GRID VIEW (Iterpro / FIFA Style Player Cards) */}
       {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        <div className="space-y-6">
           {filteredPlayers.length === 0 ? (
-            <div className="col-span-full bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
               No squad players match the filter parameters.
             </div>
           ) : (
-            filteredPlayers.map((player) => (
-              <div 
-                key={player.id}
-                className="bg-white border border-slate-200/90 hover:border-emerald-500/60 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
-              >
+            [
+              { key: 'gk', title: 'GK', players: groupedPlayers.gk },
+              { key: 'defenders', title: 'Defenders', players: groupedPlayers.defenders },
+              { key: 'midfielders', title: 'Midfielders', players: groupedPlayers.midfielders },
+              { key: 'strikers', title: 'Strikers', players: groupedPlayers.strikers }
+            ].filter((group) => group.players.length > 0).map((group) => (
+              <div key={group.key} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-700">{group.title}</h3>
+                  <span className="text-[11px] font-semibold text-slate-400">{group.players.length}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                  {group.players.map((player) => (
+                    <div 
+                      key={player.id}
+                      className="bg-white border border-slate-200/90 hover:border-emerald-500/60 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
+                    >
                 {/* Top Accent Stripe */}
                 <div className="absolute top-0 inset-x-0 h-1 bg-[#002142] group-hover:bg-emerald-600 transition-colors" />
 
@@ -932,6 +947,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                </div>
+                      </div>
+                    ))}
                 </div>
               </div>
             ))
