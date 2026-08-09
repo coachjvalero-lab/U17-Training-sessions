@@ -346,6 +346,37 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
     );
   };
 
+  const toggleMalikaChallenge = (exercise: Exercise) => {
+    if (exercise.malikaChallenge?.enabled) {
+      updateExercise(exercise.id, { malikaChallenge: undefined });
+      if (activeMalikaExerciseId === exercise.id) {
+        closeMalikaPanel();
+      }
+      return;
+    }
+
+    updateExercise(exercise.id, {
+      malikaChallenge: {
+        enabled: true,
+        title: exercise.name || 'Malika Challenge',
+        defaultPoints: 5
+      }
+    });
+  };
+
+  const updateMalikaConfig = (exercise: Exercise, fields: { title?: string; defaultPoints?: number }) => {
+    const current = exercise.malikaChallenge;
+    if (!current?.enabled) return;
+
+    updateExercise(exercise.id, {
+      malikaChallenge: {
+        enabled: true,
+        title: fields.title !== undefined ? fields.title : current.title,
+        defaultPoints: fields.defaultPoints !== undefined ? fields.defaultPoints : current.defaultPoints
+      }
+    });
+  };
+
   // Move exercise up/down
   const moveExercise = (index: number, direction: 'up' | 'down', e: React.MouseEvent) => {
     e.stopPropagation();
@@ -874,6 +905,66 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-1 print:bg-slate-50 print:border print:border-slate-200 print:rounded print:text-[10px] print:font-bold truncate"
                         />
                       </div>
+                    </div>
+
+                    <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-3 print:hidden">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
+                            <Trophy className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-amber-950 uppercase tracking-wider truncate">
+                              Malika Golden League
+                            </p>
+                            <p className="text-[10px] font-semibold text-amber-900/70">
+                              Mark this session exercise and assign points to players.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleMalikaChallenge(ex)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-colors ${
+                            ex.malikaChallenge?.enabled
+                              ? 'bg-amber-500 text-slate-950 border-amber-400'
+                              : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                          }`}
+                        >
+                          {ex.malikaChallenge?.enabled ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+
+                      {ex.malikaChallenge?.enabled && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-amber-900 block mb-1">
+                              Challenge Title
+                            </label>
+                            <input
+                              type="text"
+                              value={ex.malikaChallenge.title || ''}
+                              onChange={(e) => updateMalikaConfig(ex, { title: e.target.value })}
+                              placeholder="e.g. 1v1 Attack Challenge"
+                              className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-amber-900 block mb-1">
+                              Default Points
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={ex.malikaChallenge.defaultPoints}
+                              onChange={(e) => updateMalikaConfig(ex, { defaultPoints: Math.max(0, Number(e.target.value) || 0) })}
+                              className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Detailed Description */}
