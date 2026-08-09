@@ -59,6 +59,19 @@ function fromRow(row: UserRoleRow): UserPermission {
   };
 }
 
+function toPermissionFromRoleRow(email: string, roleRow?: UserRoleRow): UserPermission {
+  const role = roleRow?.role || 'custom';
+  const allowedSections = Array.isArray(roleRow?.allowed_sections) && roleRow.allowed_sections.length > 0
+    ? roleRow.allowed_sections as PortalSection[]
+    : defaultSectionsByRole(role);
+
+  return {
+    email,
+    role,
+    allowedSections
+  };
+}
+
 export async function listIdentityUsersWithPermissions(): Promise<UserPermission[]> {
   const client = getClient();
 
@@ -81,24 +94,36 @@ export async function listIdentityUsersWithPermissions(): Promise<UserPermission
     rolesByEmail.set(normalizeEmail(roleRow.email), roleRow);
   }
 
-  const users = ((profilesResult.data || []) as UserProfileRow[])
+  const profileRows = (profilesResult.data || []) as UserProfileRow[];
+  const usersFromProfiles = profileRows
     .filter((profile) => Boolean(profile.email))
     .map((profile) => {
       const email = normalizeEmail(profile.email);
       const roleRow = rolesByEmail.get(email);
-      const role = roleRow?.role || 'custom';
-      const allowedSections = Array.isArray(roleRow?.allowed_sections) && roleRow!.allowed_sections!.length > 0
-        ? roleRow!.allowed_sections! as PortalSection[]
-        : defaultSectionsByRole(role);
-
-      return {
-        email,
-        role,
-        allowedSections
-      } as UserPermission;
+      return toPermissionFromRoleRow(email, roleRow);
     });
 
-  return users;
+  // Backward-compatible fallback: if identity profiles are not backfilled yet,
+  // keep permissions management functional using legacy user_roles rows.
+  if (usersFromProfiles.length === 0 && rolesByEmail.size > 0) {
+    return Array.from(rolesByEmail.entries())
+      .map(([email, roleRow]) => toPermissionFromRoleRow(email, roleRow))
+      .sort((a, b) => a.email.localeCompare(b.email));
+  }
+
+  // Include role rows that do not have a profile yet to avoid accidental invisibility.
+  const usersByEmail = new Map<string, UserPermission>();
+  for (const user of usersFromProfiles) {
+    usersByEmail.set(user.email, user);
+  }
+  for (const [email, roleRow] of rolesByEmail.entries()) {
+    if (!usersByEmail.has(email)) {
+      usersByEmail.set(email, toPermissionFromRoleRow(email, roleRow));
+    }
+  }
+
+  return Array.from(usersByEmail.values())
+    .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 async function listUserPermissions(): Promise<UserPermission[]> {
