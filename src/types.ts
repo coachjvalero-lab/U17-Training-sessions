@@ -24,6 +24,7 @@ export interface AttendanceStats {
 }
 
 export interface MalikaHistoryEntry {
+  assignmentId?: string;
   sessionId: string;
   exerciseId: string;
   date: number;
@@ -232,18 +233,21 @@ export type ActionItemStatus = 'pending' | 'in_progress' | 'completed' | 'cancel
 export interface MeetingAttendee {
   id: string;
   meetingId: string;
-  email: string;
-  displayName?: string;
+  userId: string;              // UUID FK to user_profiles
+  displayName?: string;        // snapshot of user name at time of meeting
+  userEmail?: string;          // for display (derived from JOIN)
 }
 
 export interface MeetingActionItem {
   id: string;
   meetingId: string;
   description: string;
-  assignedTo?: string;  // email
-  dueDate?: string;     // ISO date
+  assignedToUserId?: string;   // UUID FK to user_profiles (nullable)
+  assignedToDisplayName?: string;  // for display (derived from JOIN)
+  assignedToEmail?: string;        // for display (derived from JOIN)
+  dueDate?: string;               // ISO date
   status: ActionItemStatus;
-  completedAt?: string; // ISO timestamp
+  completedAt?: string;           // ISO timestamp
   createdAt: string;
   updatedAt: string;
 }
@@ -251,12 +255,14 @@ export interface MeetingActionItem {
 export interface Meeting {
   id: string;
   title: string;
-  date: string;         // ISO date
-  startTime?: string;   // HH:MM
-  endTime?: string;     // HH:MM
+  date: string;              // ISO date
+  startTime?: string;        // HH:MM
+  endTime?: string;          // HH:MM
   location?: string;
   meetingType: MeetingType;
-  organizerEmail?: string;
+  organizerUserId?: string;  // UUID FK to user_profiles
+  organizerDisplayName?: string;  // for display
+  organizerEmail?: string;        // for display
   topic: string;
   agenda: string;
   summary: string;
@@ -266,6 +272,10 @@ export interface Meeting {
   actionItems: MeetingActionItem[];
   createdAt: string;
   updatedAt: string;
-  createdBy?: string;
-  updatedBy?: string;
+  createdByUserId?: string;  // UUID FK to user_profiles
+  createdByDisplayName?: string;
+  createdByEmail?: string;
+  updatedByUserId?: string;  // UUID FK to user_profiles
+  updatedByDisplayName?: string;
+  updatedByEmail?: string;
 }

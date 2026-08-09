@@ -145,6 +145,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   const [malikaSearchTerm, setMalikaSearchTerm] = useState('');
   const [malikaSelections, setMalikaSelections] = useState<Record<string, { selected: boolean; points: string }>>({});
   const availableGameMoments = (gameMoments && gameMoments.length > 0) ? gameMoments : GAME_MOMENTS;
+  const canPersistMalikaAwards = Boolean(sessionId && onApplyMalikaPoints);
 
   const handleAddToLibrary = (ex: Exercise, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -174,7 +175,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   const getPlayerLabel = (player: SquadPlayer) => `${player.firstName} ${player.lastName}`.trim();
 
   const openMalikaPanel = (ex: Exercise) => {
-    if (!ex.malikaChallenge?.enabled || !sessionId || !onApplyMalikaPoints || squadPlayers.length === 0) return;
+    if (!ex.malikaChallenge?.enabled) return;
 
     const defaultPoints = String(ex.malikaChallenge.defaultPoints ?? 0);
     const initialSelections = squadPlayers.reduce<Record<string, { selected: boolean; points: string }>>((acc, player) => {
@@ -572,7 +573,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     </div>
                   )}
 
-                  {ex.malikaChallenge?.enabled && sessionId && onApplyMalikaPoints && squadPlayers.length > 0 && (
+                  {ex.malikaChallenge?.enabled && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -588,10 +589,10 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                           ? 'bg-amber-500 text-slate-950 border-amber-400'
                           : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
                       }`}
-                      title="Assign Malika points from this exercise"
+                      title="Open Malika Golden League panel"
                     >
                       <Trophy className="w-3.5 h-3.5" />
-                      <span>{ex.malikaChallenge.title || 'Malika'}</span>
+                      <span>Malika</span>
                     </button>
                   )}
 
@@ -906,7 +907,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                       </div>
                     </div>
 
-                    {ex.malikaChallenge?.enabled && sessionId && onApplyMalikaPoints && squadPlayers.length > 0 && (
+                    {ex.malikaChallenge?.enabled && (
                       <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-3 print:hidden">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2 min-w-0">
@@ -915,7 +916,10 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                             </div>
                             <div className="min-w-0">
                               <p className="text-xs font-black text-amber-950 uppercase tracking-wider truncate">
-                                {ex.malikaChallenge.title || 'Malika Challenge'}
+                                Malika Golden League
+                              </p>
+                              <p className="text-[10px] font-semibold text-amber-900/70">
+                                Challenge: {ex.malikaChallenge.title || ex.name}
                               </p>
                               <p className="text-[10px] font-semibold text-amber-900/70">
                                 Default points: {ex.malikaChallenge.defaultPoints}
@@ -940,6 +944,12 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
                         {activeMalikaExerciseId === ex.id && (
                           <div className="space-y-3">
+                            {!canPersistMalikaAwards && (
+                              <div className="rounded-xl border border-amber-300 bg-amber-100/70 px-3 py-2 text-[10px] font-bold text-amber-900">
+                                This view can preview Malika assignments, but points can only be saved from an active session editor.
+                              </div>
+                            )}
+
                             <input
                               type="text"
                               value={malikaSearchTerm}
@@ -949,6 +959,12 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                             />
 
                             <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                              {squadPlayers.length === 0 && (
+                                <div className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-[10px] font-bold text-amber-900">
+                                  No squad players available to assign points.
+                                </div>
+                              )}
+
                               {squadPlayers
                                 .filter((player) => getPlayerLabel(player).toLowerCase().includes(malikaSearchTerm.toLowerCase()))
                                 .map((player) => {
@@ -991,10 +1007,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                               <button
                                 type="button"
                                 onClick={() => saveMalikaChallenge(ex)}
+                                disabled={!canPersistMalikaAwards || squadPlayers.length === 0}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400"
                               >
                                 <Trophy className="w-3.5 h-3.5" />
-                                Save points
+                                Assign points
                               </button>
                             </div>
                           </div>

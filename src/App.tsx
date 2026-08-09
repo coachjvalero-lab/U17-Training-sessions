@@ -40,6 +40,7 @@ import {
   saveSquadPlayer,
   subscribeToSquadPlayers
 } from './services/squad/squadService';
+import { applyMalikaAwardsToSquad } from './services/squad/malikaService';
 import {
   addExcludedPlayers,
   removeExcludedPlayers,
@@ -1074,35 +1075,13 @@ export default function App() {
   }) => {
     if (!sessionId || !exerciseId || awards.length === 0) return;
 
-    const awardedAt = Date.now();
-    const currentById = new Map(squadPlayers.map((player) => [player.id, player]));
-    const updatedPlayers = [...squadPlayers];
-
-    awards.forEach(({ playerId, points }) => {
-      const current = currentById.get(playerId);
-      if (!current) return;
-
-      const nextHistory = [
-        {
-          sessionId,
-          exerciseId,
-          date: awardedAt,
-          challenge,
-          points
-        },
-        ...(current.malikaHistory || [])
-      ];
-
-      const nextPlayer: SquadPlayer = {
-        ...current,
-        malikaPoints: (current.malikaPoints || 0) + points,
-        malikaHistory: nextHistory
-      };
-
-      currentById.set(playerId, nextPlayer);
+    const nextPlayers = applyMalikaAwardsToSquad(squadPlayers, {
+      sessionId,
+      exerciseId,
+      challenge,
+      awards,
+      awardedAt: Date.now()
     });
-
-    const nextPlayers = updatedPlayers.map((player) => currentById.get(player.id) || player);
     handleUpdateSquadPlayers(nextPlayers);
   };
 

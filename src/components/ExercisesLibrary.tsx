@@ -140,6 +140,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     coachRoles: '',
     playerGroups: '',
     isFitness: false,
+    malikaChallenge: {
+      enabled: false,
+      title: '',
+      defaultPoints: 3
+    },
     image: ''
   });
   const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>('football');
@@ -295,6 +300,17 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: ex.coachRoles || '',
       playerGroups: ex.playerGroups || '',
       isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      malikaChallenge: ex.malikaChallenge
+        ? {
+            enabled: Boolean(ex.malikaChallenge.enabled),
+            title: ex.malikaChallenge.title || ex.name,
+            defaultPoints: Number(ex.malikaChallenge.defaultPoints ?? 3) || 3
+          }
+        : {
+            enabled: false,
+            title: ex.name,
+            defaultPoints: 3
+          },
       image: ex.image || ''
     });
     
@@ -321,6 +337,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: ex.coachRoles || '',
       playerGroups: ex.playerGroups || '',
       isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      malikaChallenge: ex.malikaChallenge?.enabled
+        ? {
+            enabled: true,
+            title: ex.malikaChallenge.title || ex.name,
+            defaultPoints: Number(ex.malikaChallenge.defaultPoints ?? 3) || 3
+          }
+        : undefined,
       image: ex.image || ''
     };
 
@@ -349,6 +372,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: newEx.coachRoles || '',
       playerGroups: newEx.playerGroups || '',
       isFitness: newExSection === 'fitness',
+      malikaChallenge: newEx.malikaChallenge?.enabled
+        ? {
+            enabled: true,
+            title: (newEx.malikaChallenge.title || newEx.name || '').trim() || 'Malika Challenge',
+            defaultPoints: Number(newEx.malikaChallenge.defaultPoints ?? 3) || 3
+          }
+        : undefined,
       image: newEx.image || ''
     };
 
@@ -366,6 +396,11 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: '',
       playerGroups: '',
       isFitness: false,
+      malikaChallenge: {
+        enabled: false,
+        title: '',
+        defaultPoints: 3
+      },
       image: ''
     });
 
@@ -1189,6 +1224,82 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#0f5981]"
                   />
                 </div>
+              </div>
+
+              {/* Malika Golden League */}
+              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-amber-900">
+                      Malika Golden League
+                    </p>
+                    <p className="text-[10px] font-semibold text-amber-800/80">
+                      Mark this exercise as a Malika challenge and define default points.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewEx((prev) => ({
+                      ...prev,
+                      malikaChallenge: {
+                        enabled: !prev.malikaChallenge?.enabled,
+                        title: prev.malikaChallenge?.title || prev.name || 'Malika Challenge',
+                        defaultPoints: Number(prev.malikaChallenge?.defaultPoints ?? 3) || 3
+                      }
+                    }))}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-colors ${
+                      newEx.malikaChallenge?.enabled
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                    }`}
+                  >
+                    {newEx.malikaChallenge?.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+
+                {newEx.malikaChallenge?.enabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-amber-900 block mb-1">
+                        Challenge Title
+                      </label>
+                      <input
+                        type="text"
+                        value={newEx.malikaChallenge?.title || ''}
+                        onChange={(e) => setNewEx((prev) => ({
+                          ...prev,
+                          malikaChallenge: {
+                            enabled: true,
+                            title: e.target.value,
+                            defaultPoints: Number(prev.malikaChallenge?.defaultPoints ?? 3) || 3
+                          }
+                        }))}
+                        placeholder="e.g. 1v1 Attack Challenge"
+                        className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-amber-900 block mb-1">
+                        Default Points
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={newEx.malikaChallenge?.defaultPoints ?? 3}
+                        onChange={(e) => setNewEx((prev) => ({
+                          ...prev,
+                          malikaChallenge: {
+                            enabled: true,
+                            title: prev.malikaChallenge?.title || prev.name || 'Malika Challenge',
+                            defaultPoints: Math.max(0, Number(e.target.value) || 0)
+                          }
+                        }))}
+                        className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Image Upload */}

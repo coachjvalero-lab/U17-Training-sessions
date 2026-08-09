@@ -20,7 +20,7 @@ interface MeetingRow {
   end_time: string | null;
   location: string | null;
   meeting_type: MeetingType;
-  organizer_email: string | null;
+  organizer_user_id: string | null;
   topic: string;
   agenda: string;
   summary: string;
@@ -28,27 +28,42 @@ interface MeetingRow {
   decisions: string[];
   created_at: string;
   updated_at: string;
-  created_by: string | null;
-  updated_by: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
 }
 
-interface AttendeeRow {
+interface AttendeeRowWithUser {
   id: string;
   meeting_id: string;
-  email: string;
+  user_id: string;
   display_name: string | null;
+  user_profiles: {
+    email: string;
+    display_name: string | null;
+  } | null;
 }
 
-interface ActionItemRow {
+interface ActionItemRowWithUser {
   id: string;
   meeting_id: string;
   description: string;
-  assigned_to: string | null;
+  assigned_to_user_id: string | null;
   due_date: string | null;
   status: ActionItemStatus;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  user_profiles: {
+    email: string;
+    display_name: string | null;
+  } | null;
+}
+
+export interface UserProfile {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  isActive: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +72,9 @@ interface ActionItemRow {
 
 function meetingFromRow(
   row: MeetingRow,
+  organizerUser: UserProfile | null,
+  createdByUser: UserProfile | null,
+  updatedByUser: UserProfile | null,
   attendees: MeetingAttendee[],
   actionItems: MeetingActionItem[]
 ): Meeting {
@@ -68,7 +86,9 @@ function meetingFromRow(
     endTime: row.end_time ?? undefined,
     location: row.location ?? undefined,
     meetingType: row.meeting_type,
-    organizerEmail: row.organizer_email ?? undefined,
+    organizerUserId: row.organizer_user_id ?? undefined,
+    organizerDisplayName: organizerUser?.displayName ?? undefined,
+    organizerEmail: organizerUser?.email ?? undefined,
     topic: row.topic,
     agenda: row.agenda,
     summary: row.summary,
@@ -78,26 +98,33 @@ function meetingFromRow(
     actionItems,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    createdBy: row.created_by ?? undefined,
-    updatedBy: row.updated_by ?? undefined,
+    createdByUserId: row.created_by_user_id ?? undefined,
+    createdByDisplayName: createdByUser?.displayName ?? undefined,
+    createdByEmail: createdByUser?.email ?? undefined,
+    updatedByUserId: row.updated_by_user_id ?? undefined,
+    updatedByDisplayName: updatedByUser?.displayName ?? undefined,
+    updatedByEmail: updatedByUser?.email ?? undefined,
   };
 }
 
-function attendeeFromRow(row: AttendeeRow): MeetingAttendee {
+function attendeeFromRow(row: AttendeeRowWithUser): MeetingAttendee {
   return {
     id: row.id,
     meetingId: row.meeting_id,
-    email: row.email,
+    userId: row.user_id,
     displayName: row.display_name ?? undefined,
+    userEmail: row.user_profiles?.email ?? undefined,
   };
 }
 
-function actionItemFromRow(row: ActionItemRow): MeetingActionItem {
+function actionItemFromRow(row: ActionItemRowWithUser): MeetingActionItem {
   return {
     id: row.id,
     meetingId: row.meeting_id,
     description: row.description,
-    assignedTo: row.assigned_to ?? undefined,
+    assignedToUserId: row.assigned_to_user_id ?? undefined,
+    assignedToDisplayName: row.user_profiles?.display_name ?? undefined,
+    assignedToEmail: row.user_profiles?.email ?? undefined,
     dueDate: row.due_date ?? undefined,
     status: row.status,
     completedAt: row.completed_at ?? undefined,
@@ -119,16 +146,45 @@ function getClient() {
 // Fetch helpers
 // ---------------------------------------------------------------------------
 
+async function fetchUserProfiles(userIds: string[]): Promise<Map<string, UserProfile>> {
+  if (userIds.length === 0) return new Map();
+  const client = getClient();
+  const { data, error } = await client
+    .from('user_profiles')
+    .select('user_id, email, display_name, is_active')
+    .in('user_id', userIds);
+  if (error) throw error;
+  const map = new Map<string, UserProfile>();
+  (data ?? []).forEach((row: any) => {
+    map.set(row.user_id, {
+      userId: row.user_id,
+      email: row.email,
+      displayName: row.display_name,
+      isActive: row.is_active,
+    });
+  });
+  return map;
+}
+
 async function fetchAttendees(meetingIds: string[]): Promise<Map<string, MeetingAttendee[]>> {
   if (meetingIds.length === 0) return new Map();
   const client = getClient();
   const { data, error } = await client
     .from('meeting_attendees')
-    .select('*')
+    .select(`
+      id,
+      meeting_id,
+      user_id,
+      display_name,
+      user_profiles!inner (
+        email,
+        display_name
+      )
+    `)
     .in('meeting_id', meetingIds);
   if (error) throw error;
   const map = new Map<string, MeetingAttendee[]>();
-  (data as AttendeeRow[]).forEach((row) => {
+  (data as any[]).forEach((row: any) => {
     const list = map.get(row.meeting_id) ?? [];
     list.push(attendeeFromRow(row));
     map.set(row.meeting_id, list);
@@ -141,12 +197,26 @@ async function fetchActionItems(meetingIds: string[]): Promise<Map<string, Meeti
   const client = getClient();
   const { data, error } = await client
     .from('meeting_action_items')
-    .select('*')
+    .select(`
+      id,
+      meeting_id,
+      description,
+      assigned_to_user_id,
+      due_date,
+      status,
+      completed_at,
+      created_at,
+      updated_at,
+      user_profiles!inner (
+        email,
+        display_name
+      )
+    `)
     .in('meeting_id', meetingIds)
     .order('created_at', { ascending: true });
   if (error) throw error;
   const map = new Map<string, MeetingActionItem[]>();
-  (data as ActionItemRow[]).forEach((row) => {
+  (data as any[]).forEach((row: any) => {
     const list = map.get(row.meeting_id) ?? [];
     list.push(actionItemFromRow(row));
     map.set(row.meeting_id, list);
@@ -164,6 +234,16 @@ async function listMeetings(): Promise<Meeting[]> {
   const rows = (data ?? []) as MeetingRow[];
   if (rows.length === 0) return [];
 
+  // Fetch all user profiles referenced in this batch
+  const userIds = new Set<string>();
+  rows.forEach((row) => {
+    if (row.organizer_user_id) userIds.add(row.organizer_user_id);
+    if (row.created_by_user_id) userIds.add(row.created_by_user_id);
+    if (row.updated_by_user_id) userIds.add(row.updated_by_user_id);
+  });
+
+  const userMap = await fetchUserProfiles(Array.from(userIds));
+
   const ids = rows.map((r) => r.id);
   const [attendeesMap, actionItemsMap] = await Promise.all([
     fetchAttendees(ids),
@@ -173,6 +253,9 @@ async function listMeetings(): Promise<Meeting[]> {
   return rows.map((row) =>
     meetingFromRow(
       row,
+      row.organizer_user_id ? userMap.get(row.organizer_user_id) ?? null : null,
+      row.created_by_user_id ? userMap.get(row.created_by_user_id) ?? null : null,
+      row.updated_by_user_id ? userMap.get(row.updated_by_user_id) ?? null : null,
       attendeesMap.get(row.id) ?? [],
       actionItemsMap.get(row.id) ?? []
     )
@@ -182,6 +265,26 @@ async function listMeetings(): Promise<Meeting[]> {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * List all available users (active profiles).
+ * Used to populate participant/assignee selectors.
+ */
+export async function listAvailableUsers(): Promise<UserProfile[]> {
+  const client = getClient();
+  const { data, error } = await client
+    .from('user_profiles')
+    .select('user_id, email, display_name, is_active')
+    .eq('is_active', true)
+    .order('display_name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    userId: row.user_id,
+    email: row.email,
+    displayName: row.display_name,
+    isActive: row.is_active,
+  }));
+}
 
 /**
  * Subscribe to the meetings list with Realtime updates.
@@ -247,12 +350,23 @@ export async function getMeeting(id: string): Promise<Meeting | null> {
     throw error;
   }
   const row = data as MeetingRow;
+
+  const userIds = new Set<string>();
+  if (row.organizer_user_id) userIds.add(row.organizer_user_id);
+  if (row.created_by_user_id) userIds.add(row.created_by_user_id);
+  if (row.updated_by_user_id) userIds.add(row.updated_by_user_id);
+
+  const userMap = await fetchUserProfiles(Array.from(userIds));
+
   const [attendeesMap, actionItemsMap] = await Promise.all([
     fetchAttendees([id]),
     fetchActionItems([id]),
   ]);
   return meetingFromRow(
     row,
+    row.organizer_user_id ? userMap.get(row.organizer_user_id) ?? null : null,
+    row.created_by_user_id ? userMap.get(row.created_by_user_id) ?? null : null,
+    row.updated_by_user_id ? userMap.get(row.updated_by_user_id) ?? null : null,
     attendeesMap.get(id) ?? [],
     actionItemsMap.get(id) ?? []
   );
@@ -265,15 +379,15 @@ export interface CreateMeetingInput {
   endTime?: string;
   location?: string;
   meetingType: MeetingType;
-  organizerEmail?: string;
+  organizerUserId?: string;  // UUID FK to user_profiles
   topic?: string;
   agenda?: string;
   summary?: string;
   keyPoints?: string[];
   decisions?: string[];
-  attendeeEmails?: { email: string; displayName?: string }[];
+  attendeeUserIds?: { userId: string; displayName?: string }[];  // UUIDs
   actionItems?: Omit<MeetingActionItem, 'id' | 'meetingId' | 'createdAt' | 'updatedAt'>[];
-  createdBy: string;
+  createdByUserId: string;  // UUID FK to user_profiles
 }
 
 /**
@@ -291,14 +405,14 @@ export async function createMeeting(input: CreateMeetingInput): Promise<Meeting>
       end_time: input.endTime ?? null,
       location: input.location ?? null,
       meeting_type: input.meetingType,
-      organizer_email: input.organizerEmail ?? null,
+      organizer_user_id: input.organizerUserId ?? null,
       topic: input.topic ?? '',
       agenda: input.agenda ?? '',
       summary: input.summary ?? '',
       key_points: input.keyPoints ?? [],
       decisions: input.decisions ?? [],
-      created_by: input.createdBy,
-      updated_by: input.createdBy,
+      created_by_user_id: input.createdByUserId,
+      updated_by_user_id: input.createdByUserId,
     })
     .select()
     .single();
@@ -307,20 +421,43 @@ export async function createMeeting(input: CreateMeetingInput): Promise<Meeting>
   const row = meetingData as MeetingRow;
   const meetingId = row.id;
 
+  // Fetch user profile info for display
+  const userIds = new Set<string>([input.createdByUserId]);
+  if (input.organizerUserId) userIds.add(input.organizerUserId);
+  if (input.attendeeUserIds) {
+    input.attendeeUserIds.forEach((a) => userIds.add(a.userId));
+  }
+  if (input.actionItems) {
+    input.actionItems.forEach((ai) => {
+      if (ai.assignedToUserId) userIds.add(ai.assignedToUserId);
+    });
+  }
+
+  const userMap = await fetchUserProfiles(Array.from(userIds));
+
   const attendees: MeetingAttendee[] = [];
-  if (input.attendeeEmails && input.attendeeEmails.length > 0) {
+  if (input.attendeeUserIds && input.attendeeUserIds.length > 0) {
     const { data: attData, error: attError } = await client
       .from('meeting_attendees')
       .insert(
-        input.attendeeEmails.map((a) => ({
+        input.attendeeUserIds.map((a) => ({
           meeting_id: meetingId,
-          email: a.email,
-          display_name: a.displayName ?? null,
+          user_id: a.userId,
+          display_name: a.displayName ?? userMap.get(a.userId)?.displayName ?? null,
         }))
       )
-      .select();
+      .select(`
+        id,
+        meeting_id,
+        user_id,
+        display_name,
+        user_profiles!inner (
+          email,
+          display_name
+        )
+      `);
     if (attError) throw attError;
-    (attData as AttendeeRow[]).forEach((r) => attendees.push(attendeeFromRow(r)));
+    (attData as any[]).forEach((r: any) => attendees.push(attendeeFromRow(r)));
   }
 
   const actionItems: MeetingActionItem[] = [];
@@ -331,22 +468,43 @@ export async function createMeeting(input: CreateMeetingInput): Promise<Meeting>
         input.actionItems.map((ai) => ({
           meeting_id: meetingId,
           description: ai.description,
-          assigned_to: ai.assignedTo ?? null,
+          assigned_to_user_id: ai.assignedToUserId ?? null,
           due_date: ai.dueDate ?? null,
           status: ai.status,
           completed_at: ai.completedAt ?? null,
         }))
       )
-      .select();
+      .select(`
+        id,
+        meeting_id,
+        description,
+        assigned_to_user_id,
+        due_date,
+        status,
+        completed_at,
+        created_at,
+        updated_at,
+        user_profiles!inner (
+          email,
+          display_name
+        )
+      `);
     if (aiError) throw aiError;
-    (aiData as ActionItemRow[]).forEach((r) => actionItems.push(actionItemFromRow(r)));
+    (aiData as any[]).forEach((r: any) => actionItems.push(actionItemFromRow(r)));
   }
 
-  return meetingFromRow(row, attendees, actionItems);
+  return meetingFromRow(
+    row,
+    input.organizerUserId ? userMap.get(input.organizerUserId) ?? null : null,
+    userMap.get(input.createdByUserId) ?? null,
+    userMap.get(input.createdByUserId) ?? null,
+    attendees,
+    actionItems
+  );
 }
 
-export interface UpdateMeetingInput extends Partial<Omit<CreateMeetingInput, 'createdBy'>> {
-  updatedBy: string;
+export interface UpdateMeetingInput extends Partial<Omit<CreateMeetingInput, 'createdByUserId'>> {
+  updatedByUserId: string;  // UUID FK to user_profiles
 }
 
 /**
@@ -355,14 +513,14 @@ export interface UpdateMeetingInput extends Partial<Omit<CreateMeetingInput, 'cr
 export async function updateMeeting(id: string, input: UpdateMeetingInput): Promise<Meeting> {
   const client = getClient();
 
-  const patch: Record<string, unknown> = { updated_by: input.updatedBy };
+  const patch: Record<string, unknown> = { updated_by_user_id: input.updatedByUserId };
   if (input.title !== undefined) patch.title = input.title;
   if (input.date !== undefined) patch.date = input.date;
   if (input.startTime !== undefined) patch.start_time = input.startTime ?? null;
   if (input.endTime !== undefined) patch.end_time = input.endTime ?? null;
   if (input.location !== undefined) patch.location = input.location ?? null;
   if (input.meetingType !== undefined) patch.meeting_type = input.meetingType;
-  if (input.organizerEmail !== undefined) patch.organizer_email = input.organizerEmail ?? null;
+  if (input.organizerUserId !== undefined) patch.organizer_user_id = input.organizerUserId ?? null;
   if (input.topic !== undefined) patch.topic = input.topic;
   if (input.agenda !== undefined) patch.agenda = input.agenda;
   if (input.summary !== undefined) patch.summary = input.summary;
@@ -379,23 +537,41 @@ export async function updateMeeting(id: string, input: UpdateMeetingInput): Prom
   if (meetingError) throw meetingError;
   const row = meetingData as MeetingRow;
 
+  // Fetch all relevant user IDs
+  const userIds = new Set<string>([input.updatedByUserId]);
+  if (row.organizer_user_id) userIds.add(row.organizer_user_id);
+  if (row.created_by_user_id) userIds.add(row.created_by_user_id);
+
   // Replace attendees if provided
   let attendees: MeetingAttendee[] = [];
-  if (input.attendeeEmails !== undefined) {
+  if (input.attendeeUserIds !== undefined) {
+    if (input.attendeeUserIds.length > 0) {
+      input.attendeeUserIds.forEach((a) => userIds.add(a.userId));
+    }
     await client.from('meeting_attendees').delete().eq('meeting_id', id);
-    if (input.attendeeEmails.length > 0) {
+    if (input.attendeeUserIds.length > 0) {
+      const userMap = await fetchUserProfiles(Array.from(userIds));
       const { data: attData, error: attError } = await client
         .from('meeting_attendees')
         .insert(
-          input.attendeeEmails.map((a) => ({
+          input.attendeeUserIds.map((a) => ({
             meeting_id: id,
-            email: a.email,
-            display_name: a.displayName ?? null,
+            user_id: a.userId,
+            display_name: a.displayName ?? userMap.get(a.userId)?.displayName ?? null,
           }))
         )
-        .select();
+        .select(`
+          id,
+          meeting_id,
+          user_id,
+          display_name,
+          user_profiles!inner (
+            email,
+            display_name
+          )
+        `);
       if (attError) throw attError;
-      (attData as AttendeeRow[]).forEach((r) => attendees.push(attendeeFromRow(r)));
+      (attData as any[]).forEach((r: any) => attendees.push(attendeeFromRow(r)));
     }
   } else {
     const map = await fetchAttendees([id]);
@@ -405,6 +581,11 @@ export async function updateMeeting(id: string, input: UpdateMeetingInput): Prom
   // Replace action items if provided
   let actionItems: MeetingActionItem[] = [];
   if (input.actionItems !== undefined) {
+    if (input.actionItems.length > 0) {
+      input.actionItems.forEach((ai) => {
+        if (ai.assignedToUserId) userIds.add(ai.assignedToUserId);
+      });
+    }
     await client.from('meeting_action_items').delete().eq('meeting_id', id);
     if (input.actionItems.length > 0) {
       const { data: aiData, error: aiError } = await client
@@ -413,22 +594,45 @@ export async function updateMeeting(id: string, input: UpdateMeetingInput): Prom
           input.actionItems.map((ai) => ({
             meeting_id: id,
             description: ai.description,
-            assigned_to: ai.assignedTo ?? null,
+            assigned_to_user_id: ai.assignedToUserId ?? null,
             due_date: ai.dueDate ?? null,
             status: ai.status,
             completed_at: ai.completedAt ?? null,
           }))
         )
-        .select();
+        .select(`
+          id,
+          meeting_id,
+          description,
+          assigned_to_user_id,
+          due_date,
+          status,
+          completed_at,
+          created_at,
+          updated_at,
+          user_profiles!inner (
+            email,
+            display_name
+          )
+        `);
       if (aiError) throw aiError;
-      (aiData as ActionItemRow[]).forEach((r) => actionItems.push(actionItemFromRow(r)));
+      (aiData as any[]).forEach((r: any) => actionItems.push(actionItemFromRow(r)));
     }
   } else {
     const map = await fetchActionItems([id]);
     actionItems = map.get(id) ?? [];
   }
 
-  return meetingFromRow(row, attendees, actionItems);
+  const userMap = await fetchUserProfiles(Array.from(userIds));
+
+  return meetingFromRow(
+    row,
+    row.organizer_user_id ? userMap.get(row.organizer_user_id) ?? null : null,
+    row.created_by_user_id ? userMap.get(row.created_by_user_id) ?? null : null,
+    userMap.get(input.updatedByUserId) ?? null,
+    attendees,
+    actionItems
+  );
 }
 
 /**

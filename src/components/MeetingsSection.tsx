@@ -32,6 +32,8 @@ import {
   updateMeeting,
   deleteMeeting,
   updateActionItemStatus,
+  listAvailableUsers,
+  type UserProfile,
 } from '../services/meetings/meetingsService';
 import type { AppUser } from '../services/auth/authService';
 import { isUserAdmin } from '../utils/permissions';
@@ -88,7 +90,7 @@ interface MeetingsSectionProps {
 interface ActionItemDraft {
   id: string; // local-only draft id
   description: string;
-  assignedTo: string;
+  assignedToUserId: string;  // UUID, not email
   dueDate: string;
   status: ActionItemStatus;
 }
@@ -100,17 +102,17 @@ interface MeetingFormState {
   endTime: string;
   location: string;
   meetingType: MeetingType;
-  organizerEmail: string;
+  organizerUserId: string;  // UUID, not email
   topic: string;
   agenda: string;
   summary: string;
   keyPoints: string;     // newline-separated
   decisions: string;     // newline-separated
-  attendeeEmails: string; // newline-separated emails
+  attendeeUserIds: string[];  // Array of UUIDs, not emails
   actionItems: ActionItemDraft[];
 }
 
-function emptyForm(): MeetingFormState {
+function emptyForm(currentUserId: string): MeetingFormState {
   return {
     title: '',
     date: new Date().toISOString().split('T')[0],
@@ -118,13 +120,13 @@ function emptyForm(): MeetingFormState {
     endTime: '',
     location: '',
     meetingType: 'staff_meeting',
-    organizerEmail: '',
+    organizerUserId: currentUserId,  // Assume organizer is current user
     topic: '',
     agenda: '',
     summary: '',
     keyPoints: '',
     decisions: '',
-    attendeeEmails: '',
+    attendeeUserIds: [],  // Start with no attendees
     actionItems: [],
   };
 }
@@ -137,17 +139,17 @@ function meetingToForm(m: Meeting): MeetingFormState {
     endTime: m.endTime ?? '',
     location: m.location ?? '',
     meetingType: m.meetingType,
-    organizerEmail: m.organizerEmail ?? '',
+    organizerUserId: m.organizerUserId ?? '',
     topic: m.topic,
     agenda: m.agenda,
     summary: m.summary,
     keyPoints: m.keyPoints.join('\n'),
     decisions: m.decisions.join('\n'),
-    attendeeEmails: m.attendees.map((a) => a.email).join('\n'),
+    attendeeUserIds: m.attendees.map((a) => a.userId),
     actionItems: m.actionItems.map((ai) => ({
       id: ai.id,
       description: ai.description,
-      assignedTo: ai.assignedTo ?? '',
+      assignedToUserId: ai.assignedToUserId ?? '',
       dueDate: ai.dueDate ?? '',
       status: ai.status,
     })),
@@ -198,23 +200,29 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 interface MeetingFormModalProps {
   initial?: Meeting | null;
-  currentUserEmail: string;
+  currentUserId: string;
+  availableUsers: UserProfile[];
   onSave: (form: MeetingFormState) => Promise<void>;
   onClose: () => void;
 }
 
-const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUserEmail, onSave, onClose }) => {
-  const [form, setForm] = useState<MeetingFormState>(() => initial ? meetingToForm(initial) : (() => {
-    const f = emptyForm();
-    f.organizerEmail = currentUserEmail;
-    return f;
-  })());
+const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUserId, availableUsers, onSave, onClose }) => {
+  const [form, setForm] = useState<MeetingFormState>(() => initial ? meetingToForm(initial) : emptyForm(currentUserId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const draftIdCounter = useRef(0);
 
   const set = <K extends keyof MeetingFormState>(key: K, value: MeetingFormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const toggleAttendee = (userId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      attendeeUserIds: prev.attendeeUserIds.includes(userId)
+        ? prev.attendeeUserIds.filter((id) => id !== userId)
+        : [...prev.attendeeUserIds, userId],
+    }));
+  };
 
   const addActionItem = () => {
     draftIdCounter.current += 1;
@@ -225,7 +233,7 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
         {
           id: `draft-${draftIdCounter.current}`,
           description: '',
-          assignedTo: '',
+          assignedToUserId: '',
           dueDate: '',
           status: 'pending' as ActionItemStatus,
         },
@@ -347,13 +355,19 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Organizer (email)</label>
-                <input
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
-                  value={form.organizerEmail}
-                  onChange={(e) => set('organizerEmail', e.target.value)}
-                  placeholder="organizer@alula.com"
-                />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Organizer</label>
+                <select
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                  value={form.organizerUserId}
+                  onChange={(e) => set('organizerUserId', e.target.value)}
+                >
+                  <option value="">Select organizer...</option>
+                  {availableUsers.map((u) => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.displayName || u.email}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Topic</label>
@@ -370,16 +384,34 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
           {/* Participants */}
           <div>
             <SectionLabel>Participants</SectionLabel>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Attendee emails <span className="font-normal text-slate-400">(one per line)</span>
-            </label>
-            <textarea
-              rows={3}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 font-mono"
-              value={form.attendeeEmails}
-              onChange={(e) => set('attendeeEmails', e.target.value)}
-              placeholder={'coach@alula.com\nphysio@alula.com'}
-            />
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500">Select attendees:</p>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2">
+                {availableUsers.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No users available</p>
+                ) : (
+                  availableUsers.map((user) => (
+                    <label key={user.userId} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.attendeeUserIds.includes(user.userId)}
+                        onChange={() => toggleAttendee(user.userId)}
+                        className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-300"
+                      />
+                      <span className="text-sm text-slate-700">
+                        {user.displayName || user.email}
+                        {user.displayName && <span className="text-xs text-slate-500 ml-1">({user.email})</span>}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {form.attendeeUserIds.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {form.attendeeUserIds.length} attendee{form.attendeeUserIds.length !== 1 ? 's' : ''} selected
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Content */}
@@ -467,12 +499,18 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <input
+                      <select
                         className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
-                        placeholder="Assigned to (email)"
-                        value={ai.assignedTo}
-                        onChange={(e) => updateActionItem(ai.id, { assignedTo: e.target.value })}
-                      />
+                        value={ai.assignedToUserId}
+                        onChange={(e) => updateActionItem(ai.id, { assignedToUserId: e.target.value })}
+                      >
+                        <option value="">Unassigned</option>
+                        {availableUsers.map((u) => (
+                          <option key={u.userId} value={u.userId}>
+                            {u.displayName || u.email}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         type="date"
                         className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
@@ -613,7 +651,7 @@ const MeetingDetail: React.FC<MeetingDetailProps> = ({
             <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{meeting.location}</span>
           )}
           {meeting.organizerEmail && (
-            <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-slate-400" />Org: {meeting.organizerEmail}</span>
+            <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-slate-400" />Org: {meeting.organizerDisplayName || meeting.organizerEmail}</span>
           )}
         </div>
       </div>
@@ -692,7 +730,7 @@ const MeetingDetail: React.FC<MeetingDetailProps> = ({
                         {ai.description}
                       </p>
                       <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-slate-500">
-                        {ai.assignedTo && <span>→ {ai.assignedTo}</span>}
+                        {ai.assignedToEmail && <span>→ {ai.assignedToDisplayName || ai.assignedToEmail}</span>}
                         {ai.dueDate && <span>Due: {new Date(ai.dueDate + 'T12:00:00').toLocaleDateString('en-GB')}</span>}
                         <ActionStatusBadge status={ai.status} />
                       </div>
@@ -714,11 +752,11 @@ const MeetingDetail: React.FC<MeetingDetailProps> = ({
                 {meeting.attendees.map((a) => (
                   <li key={a.id} className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold border border-violet-200 shrink-0">
-                      {(a.displayName || a.email).substring(0, 2).toUpperCase()}
+                      {(a.displayName || a.userEmail).substring(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       {a.displayName && <p className="text-xs font-semibold text-slate-700 truncate">{a.displayName}</p>}
-                      <p className="text-[11px] text-slate-500 truncate">{a.email}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{a.userEmail}</p>
                     </div>
                   </li>
                 ))}
@@ -727,10 +765,10 @@ const MeetingDetail: React.FC<MeetingDetailProps> = ({
           </DetailCard>
 
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-500 space-y-1.5">
-            <p><span className="font-semibold text-slate-600">Created by:</span> {meeting.createdBy ?? '—'}</p>
+            <p><span className="font-semibold text-slate-600">Created by:</span> {meeting.createdByEmail ?? meeting.createdByDisplayName ?? '—'}</p>
             <p><span className="font-semibold text-slate-600">Created:</span> {new Date(meeting.createdAt).toLocaleString('en-GB')}</p>
             <p><span className="font-semibold text-slate-600">Last updated:</span> {new Date(meeting.updatedAt).toLocaleString('en-GB')}</p>
-            {meeting.updatedBy && <p><span className="font-semibold text-slate-600">Updated by:</span> {meeting.updatedBy}</p>}
+            {meeting.updatedByEmail && <p><span className="font-semibold text-slate-600">Updated by:</span> {meeting.updatedByEmail}</p>}
           </div>
         </div>
       </div>
@@ -813,11 +851,29 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
   const [showForm, setShowForm] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const userEmail = currentUser.email ?? '';
+  const userId = currentUser.uid ?? '';  // Get UUID from Supabase Auth
   const userIsAdminFlag = isUserAdmin(userEmail);
+
+  // Load available users
+  useEffect(() => {
+    (async () => {
+      try {
+        const users = await listAvailableUsers();
+        setAvailableUsers(users);
+        setLoadingUsers(false);
+      } catch (err) {
+        console.error('Failed to load users:', err);
+        setLoadingUsers(false);
+      }
+    })();
+  }, []);
 
   // Subscribe to meetings
   useEffect(() => {
@@ -847,10 +903,17 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
 
   // ---- save handler ----
   const handleSave = useCallback(async (form: MeetingFormState) => {
-    const attendeeEmails = parseLines(form.attendeeEmails).map((email) => ({ email }));
+    const attendeeUserIds = form.attendeeUserIds.map((userId) => {
+      const user = availableUsers.find((u) => u.userId === userId);
+      return {
+        userId,
+        displayName: user?.displayName ?? undefined,
+      };
+    });
+
     const actionItemPayload = form.actionItems.map((ai) => ({
       description: ai.description,
-      assignedTo: ai.assignedTo || undefined,
+      assignedToUserId: ai.assignedToUserId || undefined,
       dueDate: ai.dueDate || undefined,
       status: ai.status,
     }));
@@ -863,15 +926,15 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
         endTime: form.endTime || undefined,
         location: form.location || undefined,
         meetingType: form.meetingType,
-        organizerEmail: form.organizerEmail || undefined,
+        organizerUserId: form.organizerUserId || undefined,
         topic: form.topic,
         agenda: form.agenda,
         summary: form.summary,
         keyPoints: parseLines(form.keyPoints),
         decisions: parseLines(form.decisions),
-        attendeeEmails,
+        attendeeUserIds,
         actionItems: actionItemPayload,
-        updatedBy: userEmail,
+        updatedByUserId: userId,
       });
     } else {
       await createMeeting({
@@ -881,20 +944,20 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
         endTime: form.endTime || undefined,
         location: form.location || undefined,
         meetingType: form.meetingType,
-        organizerEmail: form.organizerEmail || undefined,
+        organizerUserId: form.organizerUserId || undefined,
         topic: form.topic,
         agenda: form.agenda,
         summary: form.summary,
         keyPoints: parseLines(form.keyPoints),
         decisions: parseLines(form.decisions),
-        attendeeEmails,
+        attendeeUserIds,
         actionItems: actionItemPayload,
-        createdBy: userEmail,
+        createdByUserId: userId,
       });
     }
     setShowForm(false);
     setEditingMeeting(null);
-  }, [editingMeeting, userEmail]);
+  }, [editingMeeting, userId, availableUsers]);
 
   // ---- delete handler ----
   const handleDelete = async () => {
@@ -924,7 +987,7 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
     return true; // section access is enforced by RLS
   };
   const canDeleteMeeting = (m: Meeting) =>
-    userIsAdminFlag || m.createdBy === userEmail;
+    userIsAdminFlag || m.createdByUserId === userId;
 
   // ---- Detail view ----
   if (selectedMeeting && !showForm) {
@@ -958,7 +1021,8 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
         {showForm && editingMeeting && (
           <MeetingFormModal
             initial={editingMeeting}
-            currentUserEmail={userEmail}
+            currentUserId={userId}
+            availableUsers={availableUsers}
             onSave={handleSave}
             onClose={() => { setShowForm(false); setEditingMeeting(null); }}
           />
@@ -1085,7 +1149,8 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
       {showForm && (
         <MeetingFormModal
           initial={editingMeeting}
-          currentUserEmail={userEmail}
+          currentUserId={userId}
+          availableUsers={availableUsers}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditingMeeting(null); }}
         />
