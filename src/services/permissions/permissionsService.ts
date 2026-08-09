@@ -26,13 +26,26 @@ function fromRow(row: UserRoleRow): UserPermission {
 }
 
 async function listUserPermissions(): Promise<UserPermission[]> {
-  const { data, error } = await getClient()
+  const client = getClient();
+  const { data: authData, error: authError } = await client.auth.getSession();
+  const authEmail = authData?.session?.user?.email || null;
+  if (authError) {
+    console.warn('[PermissionsService] auth session read failed', authError);
+  }
+
+  const { data, error } = await client
     .from(USER_ROLES_TABLE)
     .select('email, role, allowed_sections')
     .order('email', { ascending: true });
 
   if (error) throw error;
-  return ((data || []) as UserRoleRow[]).map(fromRow);
+  const mapped = ((data || []) as UserRoleRow[]).map(fromRow);
+  console.log('[PermissionsService] list user roles', {
+    authEmail,
+    rows: mapped.length,
+    emails: mapped.map((item) => item.email)
+  });
+  return mapped;
 }
 
 export function subscribeToUserPermissions(
@@ -46,8 +59,12 @@ export function subscribeToUserPermissions(
   const loadAndEmit = async () => {
     try {
       const list = await listUserPermissions();
+      console.log('[PermissionsService] emit permissions list', {
+        rows: list.length
+      });
       if (active) callback(list);
     } catch (error) {
+      console.error('[PermissionsService] loadAndEmit error', error);
       if (active && onError) onError(error);
     }
   };

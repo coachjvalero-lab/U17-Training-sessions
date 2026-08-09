@@ -72,11 +72,19 @@ export function saveUserPermissionsListToCloud(list: UserPermission[]): void {
  */
 export function initPermissionsCloudSync(onUpdate?: () => void): () => void {
   const unsubscribe = subscribeToUserPermissions((list) => {
-    if (list.length === 0) return;
+    console.log('[PermissionsSync] incoming list', {
+      rows: list.length,
+      emails: list.map((item) => item.email)
+    });
+    if (list.length === 0) {
+      console.warn('[PermissionsSync] empty list received; local cache not overwritten');
+      return;
+    }
     saveUserPermissionsList(list);
     if (onUpdate) onUpdate();
   }, () => {
     // Offline or subscription error: keep working with whatever is cached locally
+    console.warn('[PermissionsSync] subscription error; using local cache');
   });
 
   return unsubscribe;

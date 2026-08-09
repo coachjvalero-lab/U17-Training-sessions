@@ -468,6 +468,13 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       image: newEx.image || ''
     };
 
+    console.log('[ExercisesLibrary] save form submit', {
+      mode: editingExerciseId ? 'edit' : isDuplicatingModal ? 'duplicate' : 'create',
+      id: created.id,
+      name: created.name,
+      malikaChallenge: created.malikaChallenge || null
+    });
+
     setCustomExercises(prev => {
       if (!editingExerciseId) {
         return [created, ...prev];
@@ -512,6 +519,17 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
         ...ex,
         id: 'ex-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)
       };
+
+      console.log('[ExercisesLibrary] insert to session', {
+        sourceExerciseId: ex.id,
+        sourceExerciseName: ex.name,
+        sourceMalikaChallenge: ex.malikaChallenge || null,
+        clonedExerciseId: clonedEx.id,
+        clonedMalikaChallenge: clonedEx.malikaChallenge || null,
+        blockKey,
+        targetSessionId,
+        targetCategory
+      });
 
       const sectionCat = targetCategory;
 

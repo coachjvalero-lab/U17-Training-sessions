@@ -89,7 +89,18 @@ async function listExercises(): Promise<CloudExercise[]> {
     .select('*');
 
   if (error) throw error;
-  return ((data || []) as ExerciseRow[]).map(fromRow);
+  const mapped = ((data || []) as ExerciseRow[]).map(fromRow);
+  const malikaEnabled = mapped.filter((exercise) => Boolean(exercise.malikaChallenge?.enabled)).length;
+  console.log('[ExerciseLibraryService] load list', {
+    total: mapped.length,
+    malikaEnabled,
+    sample: mapped.slice(0, 3).map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      malikaChallenge: exercise.malikaChallenge || null
+    }))
+  });
+  return mapped;
 }
 
 export function subscribeToExerciseLibrary(
@@ -130,11 +141,20 @@ export function subscribeToExerciseLibrary(
 
 export async function saveExerciseToLibrary(exercise: Exercise): Promise<number> {
   const updatedAt = Date.now();
+  console.log('[ExerciseLibraryService] save exercise', {
+    id: exercise.id,
+    name: exercise.name,
+    malikaChallenge: exercise.malikaChallenge || null
+  });
   const { error } = await getClient()
     .from(EXERCISE_LIBRARY_TABLE)
     .upsert(toRow(exercise, updatedAt), { onConflict: 'id' });
 
   if (error) throw error;
+  console.log('[ExerciseLibraryService] save exercise OK', {
+    id: exercise.id,
+    updatedAt
+  });
   return updatedAt;
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   X, 
   Shield, 
@@ -20,6 +20,7 @@ import {
   saveUserPermissionsListToCloud
 } from '../utils/permissions';
 import { adminCreateUserAccount } from '../services/auth/authService';
+import { supabase } from '../supabaseClient';
 
 interface AdminPermissionsModalProps {
   isOpen: boolean;
@@ -40,6 +41,52 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    console.log('[AdminPermissionsModal] open with cached users', {
+      rows: users.length,
+      emails: users.map((user) => user.email)
+    });
+
+    if (!supabase) {
+      console.warn('[AdminPermissionsModal] Supabase client not configured');
+      return;
+    }
+
+    const runDiagnostics = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      console.log('[AdminPermissionsModal] auth diagnostics', {
+        authEmail: authData?.session?.user?.email || null,
+        authError: authError ? String(authError) : null
+      });
+
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('email, role, allowed_sections')
+        .order('email', { ascending: true });
+
+      console.log('[AdminPermissionsModal] user_roles query', {
+        rows: roles?.length || 0,
+        error: rolesError ? String(rolesError) : null,
+        emails: (roles || []).map((row: { email: string }) => row.email)
+      });
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('user_id, email, display_name')
+        .order('email', { ascending: true });
+
+      console.log('[AdminPermissionsModal] user_profiles query', {
+        rows: profiles?.length || 0,
+        error: profilesError ? String(profilesError) : null,
+        emails: (profiles || []).map((row: { email: string }) => row.email)
+      });
+    };
+
+    void runDiagnostics();
+  }, [isOpen, users]);
 
   if (!isOpen) return null;
 

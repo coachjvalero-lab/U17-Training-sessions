@@ -984,6 +984,16 @@ export default function App() {
       ? section
       : DEFAULT_MODULE_ID;
 
+    console.log('[App] add exercise from library', {
+      activeSection,
+      targetSection,
+      resolvedModuleId: moduleId,
+      blockKey,
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      malikaChallenge: exercise.malikaChallenge || null
+    });
+
     setSession(prev => addExerciseToSessionByModule(prev, moduleId, blockKey, exercise));
 
     if (exercise.id) {

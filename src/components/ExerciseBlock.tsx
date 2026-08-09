@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown, 
   Clock, Maximize2, ShieldAlert, Image as ImageIcon, AlertCircle, Loader2, Users, BookmarkPlus, Check, Trophy, X
@@ -146,6 +146,25 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   const [malikaSelections, setMalikaSelections] = useState<Record<string, { selected: boolean; points: string }>>({});
   const availableGameMoments = (gameMoments && gameMoments.length > 0) ? gameMoments : GAME_MOMENTS;
   const canPersistMalikaAwards = Boolean(sessionId && onApplyMalikaPoints);
+
+  useEffect(() => {
+    const snapshot = (block.exercises || []).map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      hasMalikaChallenge: Boolean(exercise.malikaChallenge),
+      malikaEnabled: Boolean(exercise.malikaChallenge?.enabled),
+      renderMalikaButton: Boolean(exercise.malikaChallenge?.enabled)
+    }));
+
+    console.log('[ExerciseBlock] render diagnostics', {
+      blockId: block.id,
+      blockTitle: block.title,
+      sessionId: sessionId || null,
+      canPersistMalikaAwards,
+      squadPlayersCount: squadPlayers.length,
+      exercises: snapshot
+    });
+  }, [block.exercises, block.id, block.title, canPersistMalikaAwards, sessionId, squadPlayers.length]);
 
   const handleAddToLibrary = (ex: Exercise, e: React.MouseEvent) => {
     e.stopPropagation();
