@@ -7,6 +7,7 @@ import { Exercise, GameMoment, TrainingBlock, PlayerGroup, SquadPlayer } from '.
 import { processUploadedImageFile } from '../utils/heic';
 import { saveExerciseToLibrary } from '../services/exercises/exerciseLibraryService';
 import { SmartImage } from './SmartImage';
+import { parseDurationValue, formatDurationLabel } from '../utils/duration';
 
 interface ExerciseBlockProps {
   block: TrainingBlock;
@@ -110,8 +111,8 @@ export function calculateExerciseTotalDuration(
   const restStr = String(restTimeInput ?? '').trim();
 
   const series = parseFloat(seriesStr) || 0;
-  const workTime = parseFloat(workStr) || 0;
-  const restTime = parseFloat(restStr) || 0;
+  const workTime = parseDurationValue(workStr);
+  const restTime = parseDurationValue(restStr);
 
   if (series <= 0 || workTime <= 0) {
     return { totalMinutes: 0, durationStr: '' };
@@ -123,7 +124,7 @@ export function calculateExerciseTotalDuration(
 
   return {
     totalMinutes,
-    durationStr: `${totalMinutes} min`
+    durationStr: formatDurationLabel(totalMinutes)
   };
 }
 

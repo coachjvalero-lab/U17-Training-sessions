@@ -20,6 +20,7 @@ import {
   Minus
 } from 'lucide-react';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { parseDurationValue } from '../utils/duration';
 
 interface PlanificationSectionProps {
   session: TrainingSession;
@@ -36,7 +37,7 @@ export function parseDurationMinutes(durationStr?: string): number {
   const multMatch = str.match(/(\d+)\s*x\s*(\d+)/);
   if (multMatch) {
     const sets = parseInt(multMatch[1], 10);
-    const minsPerSet = parseInt(multMatch[2], 10);
+    const minsPerSet = parseFloat(multMatch[2]);
     if (!isNaN(sets) && !isNaN(minsPerSet)) {
       return sets * minsPerSet;
     }
@@ -45,19 +46,15 @@ export function parseDurationMinutes(durationStr?: string): number {
   // Pattern 2: "10 + 5" -> 15
   const addMatch = str.match(/(\d+)\s*\+\s*(\d+)/);
   if (addMatch) {
-    const a = parseInt(addMatch[1], 10);
-    const b = parseInt(addMatch[2], 10);
+    const a = parseFloat(addMatch[1]);
+    const b = parseFloat(addMatch[2]);
     if (!isNaN(a) && !isNaN(b)) {
       return a + b;
     }
   }
 
-  // Pattern 3: Standard single number "15 min", "20'", "12"
-  const numMatch = str.match(/(\d+)/);
-  if (numMatch) {
-    const val = parseInt(numMatch[1], 10);
-    if (!isNaN(val) && val > 0) return val;
-  }
+  const parsedValue = parseDurationValue(str);
+  if (parsedValue > 0) return parsedValue;
 
   return 10;
 }

@@ -96,6 +96,12 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const [nameHistory, setNameHistory] = useState<string[]>(() => readPlayerNameHistory());
 
   useEffect(() => {
+    if (showAddModal) {
+      setNameHistory(readPlayerNameHistory());
+    }
+  }, [showAddModal]);
+
+  useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { isExpanded, filter });
   }, [isExpanded, filter]);
 
@@ -533,30 +539,31 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
               Add New Squad Player
             </h3>
             <form onSubmit={handleAddPlayer} className="space-y-3">
-              {nameHistory.length > 0 && (
-                <div>
-                  <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">
-                    Previous Players
-                  </label>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const selected = e.target.value;
-                      if (selected) {
-                        setNewPlayerName(selected);
-                      }
-                    }}
-                    className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="">Select a previously added player...</option>
-                    {nameHistory.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">
+                  Previous Players
+                </label>
+                <select
+                  value=""
+                  disabled={nameHistory.length === 0}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    if (selected) {
+                      setNewPlayerName(selected);
+                    }
+                  }}
+                  className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-500 disabled:opacity-60"
+                >
+                  <option value="">
+                    {nameHistory.length > 0 ? 'Select a previously added player...' : 'No history yet'}
+                  </option>
+                  {nameHistory.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div>
                 <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">

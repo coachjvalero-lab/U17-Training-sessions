@@ -88,6 +88,8 @@ function getRolePatch(role: SessionRole, session: TrainingSession, timestamp: nu
     microcycle_day: session.microcycleDay,
     main_objective: session.mainObjective,
     materials_needed: session.materialsNeeded,
+    squad_roster: session.squadRoster || [],
+    attendance: session.attendance || [],
     updated_at: timestamp
   };
 
