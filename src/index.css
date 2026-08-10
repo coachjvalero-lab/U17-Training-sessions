@@ -130,9 +130,27 @@ html.dark textarea::placeholder {
   }
 
   /* Prevent page breaks inside exercise cards, headers, and player groups */
-  .print-no-break, header, section, .border-slate-200, .rounded-2xl {
+  .print-no-break,
+  .print-avoid-break,
+  .print-section,
+  .print-card,
+  header,
+  section,
+  footer,
+  article,
+  main,
+  .border-slate-200,
+  .rounded-2xl {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  .print-avoid-break-after {
+    page-break-after: avoid !important;
+  }
+
+  .print-avoid-break-before {
+    page-break-before: avoid !important;
   }
 
   /* Compact form of tactical pitch diagrams */
