@@ -541,7 +541,47 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   );
 
   return (
-    <section className={`bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-2 print:rounded-lg print-no-break space-y-4 ${block.exercises.length === 0 ? 'print:hidden' : ''}`}>
+    <>
+      <div className="hidden print:block print-no-break">
+        <div className="border-b border-slate-300 pb-1 mb-2">
+          <h2 className="text-[10pt] font-black uppercase tracking-wide text-[#002142]">{block.title}</h2>
+        </div>
+        <div className="space-y-2">
+          {block.exercises.map((ex, idx) => {
+            const totalDuration = calculateExerciseTotalDuration(ex.series, ex.workTime, ex.restTime);
+            return (
+              <div key={ex.id} className="border-b border-slate-200 pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-black text-[9pt] text-slate-900">
+                    {idx + 1}. {ex.name || 'Exercise'}
+                  </div>
+                  {totalDuration.totalMinutes > 0 && (
+                    <div className="text-[8pt] text-slate-700 whitespace-nowrap">{totalDuration.durationStr}</div>
+                  )}
+                </div>
+                <div className="mt-0.5 text-[8pt] text-slate-700">
+                  Sets {ex.series || '—'} • Time {ex.workTime || '—'} min • Rest {ex.restTime || '—'} min
+                </div>
+                {(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') || (ex.dimensions && ex.dimensions.trim()) ? (
+                  <div className="mt-0.5 text-[8pt] text-slate-700">
+                    {ex.gameMoment && ex.gameMoment !== '-' ? `Moment: ${ex.gameMoment}` : ''}
+                    {ex.subMoment && ex.subMoment !== '-' ? `${ex.gameMoment && ex.gameMoment !== '-' ? ' • ' : ''}Sub-moment: ${ex.subMoment}` : ''}
+                    {ex.dimensions ? `${(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') ? ' • ' : ''}Pitch: ${ex.dimensions}` : ''}
+                  </div>
+                ) : null}
+                {ex.description ? (
+                  <div className="mt-0.5 text-[8pt] text-slate-700 whitespace-pre-wrap leading-tight">{ex.description}</div>
+                ) : null}
+                {ex.playerGroups ? (
+                  <div className="mt-0.5 text-[8pt] text-slate-700">Groups: {ex.playerGroups}</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <section className={`bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 print:hidden print:shadow-none print:border-slate-300 print:p-2 print:rounded-lg print-no-break space-y-4 ${block.exercises.length === 0 ? 'print:hidden' : ''}`}>
       {/* Block Header */}
       <div className="flex justify-between items-center border-b border-slate-100 pb-3.5 print:border-slate-200 print:pb-1.5">
         <h2 className="text-sm font-display font-black text-slate-900 tracking-wider uppercase flex items-center space-x-2 print:text-[#002142] print:text-sm print:font-extrabold">
@@ -1138,5 +1178,6 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
         })}
       </div>
     </section>
+    </>
   );
 };

@@ -59,12 +59,12 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
   const logoSrc = isOldOrInvalid ? OFFICIAL_ALULA_LOGO_DATA_URL : activeLogo;
 
   return (
-    <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-slate-300 print:p-2.5 print:rounded-lg print:border-t-4 print:border-t-[#002142] print:border-b-2 print:border-b-[#a79078]">
+    <header className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-md shadow-slate-100/80 print:shadow-none print:border-none print:p-2 print:rounded-none print:border-0">
       {/* Upper Grid: Badge & Metadata */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center print:grid-cols-12 print:gap-2">
         
         {/* Column 1: Team Badge upload (Span 3) */}
-        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:col-span-2 print:border-r print:border-slate-200 print:pb-0 print:pr-2">
+        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:hidden">
           <div 
             onClick={() => {
               if (!readOnly) {
@@ -116,7 +116,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
         </div>
 
         {/* Column 2: Main Info Fields (Span 9) */}
-        <div className="md:col-span-9 space-y-4 print:col-span-10 print:space-y-1">
+        <div className="md:col-span-9 space-y-4 print:col-span-12 print:space-y-1">
           {/* Team Name Title & Quick Save Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex-1">
@@ -130,7 +130,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 onChange={(e) => onChange({ teamName: e.target.value })}
                 readOnly={readOnly}
                 placeholder="e.g., A.D. San Pedro U17"
-                className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-sm print:font-black print:pb-0 print:text-[#002142]"
+                className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-[13pt] print:font-black print:pb-0 print:text-[#002142]"
               />
             </div>
 
@@ -158,7 +158,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 print:grid-cols-4 print:gap-1.5 print:bg-slate-50/80 print:p-1.5 print:rounded-lg print:border print:border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 print:grid-cols-4 print:gap-1 print:bg-white print:p-0 print:rounded-none print:border-0">
             {/* Fecha */}
             <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl hover:border-slate-300 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1">
               <Calendar className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3 print:h-3 shrink-0" />
@@ -237,7 +237,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
       </div>
 
       {/* Side-by-Side Grid: Main Objective & Materials Section */}
-      <div className="mt-6 pt-6 border-t border-slate-100 print:mt-1 print:pt-1 print:border-slate-200">
+      <div className="mt-6 pt-6 border-t border-slate-100 print:mt-1 print:pt-1 print:border-slate-200 print:pb-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-1.5">
           
           {/* Primary Session Objective */}
