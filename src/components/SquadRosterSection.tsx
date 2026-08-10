@@ -42,19 +42,8 @@ interface SquadRosterSectionProps {
 
 type SquadSubTab = 'roster' | 'attendance' | 'malika';
 
-// Preset Female Athlete Avatar Options
-const AVATAR_PRESETS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=250',
-  'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&q=80&w=250'
-];
+const GRAY_AVATAR_PLACEHOLDER =
+  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='48' fill='%23e2e8f0'/%3E%3Ccircle cx='120' cy='92' r='42' fill='%23cbd5e1'/%3E%3Cpath d='M48 202c12-34 38-52 72-52s60 18 72 52' fill='%23cbd5e1'/%3E%3C/svg%3E";
 
 export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   players,
@@ -107,7 +96,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   const handleSaveQuickPhoto = (newUrl: string) => {
     if (!quickPhotoPlayer) return;
-    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: newUrl } : p);
+    const normalizedUrl = newUrl.trim();
+    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: normalizedUrl || undefined } : p);
     onUpdatePlayers(updated);
     setQuickPhotoSuccess('Photo updated successfully!');
     setTimeout(() => {
@@ -139,7 +129,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const handleSaveBatchPhotos = () => {
     const updated = players.map(p => ({
       ...p,
-      photoUrl: batchPhotoInputs[p.id] || p.photoUrl
+      photoUrl: batchPhotoInputs[p.id]?.trim() || p.photoUrl || undefined
     }));
     onUpdatePlayers(updated);
     setIsBatchPhotosModalOpen(false);
@@ -165,7 +155,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     position: 'CM',
     status: 'Active',
     notes: '',
-    photoUrl: AVATAR_PRESETS[0],
+    photoUrl: '',
     age: '16',
     nationality: 'Saudi Arabia 🇸🇦',
     preferredFoot: 'Right',
@@ -192,7 +182,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: 'CM',
       status: 'Active',
       notes: '',
-      photoUrl: AVATAR_PRESETS[Math.floor(Math.random() * AVATAR_PRESETS.length)],
+      photoUrl: '',
       age: '16',
       nationality: 'Saudi Arabia 🇸🇦',
       preferredFoot: 'Right',
@@ -211,7 +201,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: player.position,
       status: player.status,
       notes: player.notes || '',
-      photoUrl: player.photoUrl || AVATAR_PRESETS[0],
+      photoUrl: player.photoUrl || '',
       age: String(player.age || 16),
       nationality: player.nationality || 'Saudi Arabia 🇸🇦',
       preferredFoot: player.preferredFoot || 'Right',
@@ -224,6 +214,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const handleSavePlayer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName.trim() || !formData.lastName.trim()) return;
+    const normalizedPhotoUrl = formData.photoUrl.trim();
 
     if (editingPlayer) {
       const updated = players.map(p => 
@@ -236,7 +227,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               position: formData.position,
               status: formData.status,
               notes: formData.notes.trim(),
-              photoUrl: formData.photoUrl.trim() || undefined,
+              photoUrl: normalizedPhotoUrl || undefined,
               age: formData.age ? Number(formData.age) : undefined,
               nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
               preferredFoot: formData.preferredFoot,
@@ -255,7 +246,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         position: formData.position,
         status: formData.status,
         notes: formData.notes.trim(),
-        photoUrl: formData.photoUrl.trim() || undefined,
+        photoUrl: normalizedPhotoUrl || undefined,
         age: formData.age ? Number(formData.age) : 16,
         nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
         preferredFoot: formData.preferredFoot,
@@ -630,7 +621,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   </div>
                   <div className="flex items-center space-x-3">
                     <img
-                      src={player.photoUrl || AVATAR_PRESETS[0]}
+                      src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
                       alt={`${player.firstName} ${player.lastName}`}
                       className="w-12 h-12 rounded-xl object-cover border border-slate-200"
                     />
@@ -677,7 +668,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       <td className="py-3 px-3">
                         <div className="flex items-center space-x-2.5">
                           <img
-                            src={player.photoUrl || AVATAR_PRESETS[0]}
+                            src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
                             alt={`${player.firstName} ${player.lastName}`}
                             className="w-8 h-8 rounded-full object-cover border border-slate-200"
                           />
@@ -859,12 +850,11 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   <div className="flex flex-col items-center text-center space-y-2.5 my-2">
                     <div className="relative group/photo">
                       <img
-                        src={player.photoUrl || AVATAR_PRESETS[0]}
+                        src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
                         alt={`${player.firstName} ${player.lastName}`}
                         className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 group-hover:border-emerald-500 transition-colors shadow-sm bg-slate-100"
                         onError={(e) => {
-                          // Fallback avatar
-                          (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
+                          (e.target as HTMLImageElement).src = GRAY_AVATAR_PLACEHOLDER;
                         }}
                       />
                       <button
@@ -989,7 +979,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                         <div className="flex items-center space-x-3">
                           <div className="relative group/tblphoto cursor-pointer" onClick={() => handleOpenQuickPhoto(player)} title="Click to change player photo">
                             <img
-                              src={player.photoUrl || AVATAR_PRESETS[0]}
+                              src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
                               alt={player.firstName}
                               className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0 group-hover/tblphoto:border-emerald-500 transition-colors"
                             />
@@ -1088,7 +1078,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </label>
                 <div className="flex items-center space-x-3 mb-2">
                   <img
-                    src={formData.photoUrl || AVATAR_PRESETS[0]}
+                    src={formData.photoUrl.trim() || GRAY_AVATAR_PLACEHOLDER}
                     alt="Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-200 shrink-0 bg-slate-100"
                   />
@@ -1103,24 +1093,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Preset Avatars Row */}
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Quick Preset Avatars:</span>
-                  <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
-                    {AVATAR_PRESETS.map((url, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, photoUrl: url })}
-                        className={`w-9 h-9 rounded-xl border-2 overflow-hidden shrink-0 transition-transform ${
-                          formData.photoUrl === url ? 'border-emerald-600 scale-105 shadow-sm' : 'border-slate-200 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={url} alt={`Preset ${idx}`} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1350,11 +1322,11 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             {/* Current Preview */}
             <div className="flex flex-col items-center justify-center py-2 space-y-2">
               <img
-                src={quickPhotoUrl || AVATAR_PRESETS[0]}
+                src={quickPhotoUrl.trim() || GRAY_AVATAR_PLACEHOLDER}
                 alt="Preview"
                 className="w-24 h-24 rounded-2xl object-cover border-4 border-slate-100 shadow-md bg-slate-100"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
+                  (e.target as HTMLImageElement).src = GRAY_AVATAR_PLACEHOLDER;
                 }}
               />
               <span className="text-[11px] font-mono text-slate-400 font-bold uppercase">
@@ -1405,28 +1377,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               </div>
             </div>
 
-            {/* Presets Option */}
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Option 3: Quick Preset Avatars
-              </label>
-              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
-                {AVATAR_PRESETS.map((url, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setQuickPhotoUrl(url);
-                      handleSaveQuickPhoto(url);
-                    }}
-                    className="w-10 h-10 rounded-xl border-2 border-slate-200 overflow-hidden shrink-0 hover:border-emerald-500 transition-transform hover:scale-105 cursor-pointer"
-                  >
-                    <img src={url} alt={`Preset ${idx}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="flex justify-end pt-2 border-t border-slate-100">
               <button
                 type="button"
@@ -1472,11 +1422,11 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               {players.map((p) => (
                 <div key={p.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
                   <img
-                    src={batchPhotoInputs[p.id] || p.photoUrl || AVATAR_PRESETS[0]}
+                    src={batchPhotoInputs[p.id]?.trim() || p.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
                     alt={p.firstName}
                     className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-200"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = AVATAR_PRESETS[0];
+                      (e.target as HTMLImageElement).src = GRAY_AVATAR_PLACEHOLDER;
                     }}
                   />
 
