@@ -36,6 +36,36 @@ import { TrainingSession, AbsenceReason, CloudTrainingSession } from '../types';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
+const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
+
+function readPlayerNameHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(PLAYER_NAME_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePlayerNameToHistory(name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+
+  const lower = trimmed.toLowerCase();
+  const history = readPlayerNameHistory();
+  const deduped = history.filter((entry) => entry.trim().toLowerCase() !== lower);
+  const next = [trimmed, ...deduped].slice(0, 60);
+
+  try {
+    localStorage.setItem(PLAYER_NAME_HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore localStorage write failures in private/offline modes.
+  }
+}
+
 interface AttendanceSectionProps {
   session: TrainingSession;
   cloudSessions: CloudTrainingSession[];
@@ -70,6 +100,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const [chartView, setChartView] = useState<'classification' | 'race_progression'>(restoredContext.chartView);
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [nameHistory, setNameHistory] = useState<string[]>(() => readPlayerNameHistory());
 
   useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { searchTerm, reasonFilter, chartSort, chartView });
@@ -202,6 +233,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     onChangeSession({
       attendance: [...currentAtt, { playerName: name, status: 'Attending' }]
     });
+
+    savePlayerNameToHistory(name);
+    setNameHistory(readPlayerNameHistory());
 
     setNewPlayerName('');
     setShowRosterModal(false);
@@ -1060,6 +1094,31 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
               Add New Player to Squad
             </h3>
             <form onSubmit={handleAddPlayer} className="space-y-3">
+              {nameHistory.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">
+                    Previous Players
+                  </label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const selected = e.target.value;
+                      if (selected) {
+                        setNewPlayerName(selected);
+                      }
+                    }}
+                    className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Select a previously added player...</option>
+                    {nameHistory.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="text-[10px] font-extrabold uppercase text-slate-500 block mb-1">
                   Full Name
@@ -1068,10 +1127,16 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                   type="text"
                   value={newPlayerName}
                   onChange={(e) => setNewPlayerName(e.target.value)}
+                  list="manual-player-history"
                   placeholder="e.g., Sarah, Reem, Layla..."
                   className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-emerald-500"
                   autoFocus
                 />
+                <datalist id="manual-player-history">
+                  {nameHistory.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </div>
               <div className="flex items-center justify-end space-x-2 pt-2">
                 <button
