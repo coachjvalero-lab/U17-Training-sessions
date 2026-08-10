@@ -81,6 +81,7 @@ import {
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
+import { resolveSquadPlayersForDisplay } from './utils/squadGrouping';
 import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
   deleteTrainingSession,
@@ -290,8 +291,9 @@ export default function App() {
 
       const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
       setSquadPlayers((prev) => {
-        const same = prev.length === list.length && prev.every((player, index) => {
-          const next = list[index];
+        const resolved = resolveSquadPlayersForDisplay(list, prev);
+        const same = prev.length === resolved.length && prev.every((player, index) => {
+          const next = resolved[index];
           return next && player.id === next.id && JSON.stringify(player) === JSON.stringify(next);
         });
 
@@ -299,14 +301,14 @@ export default function App() {
           return prev;
         }
 
-        return list;
-      });
+        try {
+          localStorage.setItem('u17_squad_players', JSON.stringify(resolved));
+        } catch (e) {
+          console.warn('Squad roster local cache warning:', e);
+        }
 
-      try {
-        localStorage.setItem('u17_squad_players', JSON.stringify(list));
-      } catch (e) {
-        console.warn('Squad roster local cache warning:', e);
-      }
+        return resolved;
+      });
     }, () => {
       // Offline or subscription error: keep working with whatever is cached locally
     });
