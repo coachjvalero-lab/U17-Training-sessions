@@ -95,25 +95,29 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         readOnly={isSharedHeaderReadOnly}
       />
 
-      <SessionAttendanceTracker
-        attendance={filteredAttendance}
-        squadRoster={planningRoster}
-        onChangeAttendance={updateAttendance}
-        onChangeRoster={updateRoster}
-        excludedPlayers={excludedPlayers}
-        onExcludePlayer={onExcludePlayer}
-        onIncludePlayer={onIncludePlayer}
-        readOnly={isSharedHeaderReadOnly}
-      />
+      <div className="print:hidden">
+        <SessionAttendanceTracker
+          attendance={filteredAttendance}
+          squadRoster={planningRoster}
+          onChangeAttendance={updateAttendance}
+          onChangeRoster={updateRoster}
+          excludedPlayers={excludedPlayers}
+          onExcludePlayer={onExcludePlayer}
+          onIncludePlayer={onIncludePlayer}
+          readOnly={isSharedHeaderReadOnly}
+        />
+      </div>
 
-      <PlayerGroupsSection
-        groups={moduleView.playerGroups}
-        squadRoster={modulePlanningSession.squadRoster}
-        attendance={filteredAttendance}
-        onChangeGroups={onUpdateGroups}
-        onChangeRoster={updateRoster}
-        rosterReadOnly={isSharedHeaderReadOnly}
-      />
+      <div className="print:hidden">
+        <PlayerGroupsSection
+          groups={moduleView.playerGroups}
+          squadRoster={modulePlanningSession.squadRoster}
+          attendance={filteredAttendance}
+          onChangeGroups={onUpdateGroups}
+          onChangeRoster={updateRoster}
+          rosterReadOnly={isSharedHeaderReadOnly}
+        />
+      </div>
 
       <ExerciseBlock
         block={moduleView.warmUp}
@@ -139,17 +143,19 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         onApplyMalikaPoints={onApplyMalikaPoints}
       />
 
-      <ExerciseBlock
-        block={moduleView.coolDown}
-        onChange={(exs) => onUpdateExercises('coolDown', exs)}
-        expandedExercises={expandedExercises}
-        toggleExpand={onToggleExpand}
-        sessionGroups={moduleView.playerGroups}
-        gameMoments={getModuleGameMoments(moduleId)}
-        sessionId={session.id}
-        squadPlayers={squadPlayers}
-        onApplyMalikaPoints={onApplyMalikaPoints}
-      />
+      <div className="print:hidden">
+        <ExerciseBlock
+          block={moduleView.coolDown}
+          onChange={(exs) => onUpdateExercises('coolDown', exs)}
+          expandedExercises={expandedExercises}
+          toggleExpand={onToggleExpand}
+          sessionGroups={moduleView.playerGroups}
+          gameMoments={getModuleGameMoments(moduleId)}
+          sessionId={session.id}
+          squadPlayers={squadPlayers}
+          onApplyMalikaPoints={onApplyMalikaPoints}
+        />
+      </div>
 
       <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">

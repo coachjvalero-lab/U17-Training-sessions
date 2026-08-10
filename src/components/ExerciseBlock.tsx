@@ -718,11 +718,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
               {/* Collapsible Content */}
               {isExpanded && (
-                <div className="p-4 md:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 print:grid-cols-12 print:gap-3 print:p-3 bg-white">
+                <div className="p-4 md:p-5 grid grid-cols-1 md:grid-cols-12 gap-5 print:grid-cols-1 print:gap-2 print:p-2 bg-white">
                   
-                  {/* Left col: Image / tactical drawer (Span 4) - Hidden if hideGraphics is true */}
+                  {/* Left col: Image / tactical drawer (Hidden in print) */}
                   {!ex.hideGraphics && (
-                    <div className="md:col-span-4 space-y-2.5 print:col-span-5 print:space-y-1.5">
+                    <div className="md:col-span-4 space-y-2.5 print:hidden">
                       <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block print:hidden">
                         Tactical Diagram / Pitch
                       </label>
@@ -806,7 +806,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   )}
 
                   {/* Right col: Form controls (Span 8 if graphics shown, Span 12 if hideGraphics is true) */}
-                  <div className={`space-y-3.5 print:space-y-2 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-7'}`}>
+                  <div className={`space-y-3.5 print:space-y-1.5 ${ex.hideGraphics ? 'md:col-span-12 print:col-span-12' : 'md:col-span-8 print:col-span-12'}`}>
                     
                     {/* Series, Tiempo y Descanso (Timing & Structure) Card */}
                     <div className="bg-slate-50/90 border border-slate-200/80 p-3 rounded-2xl space-y-2 print:bg-slate-50 print:border print:border-slate-200 print:p-2 print:rounded-lg">
@@ -969,7 +969,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     </div>
 
                     {/* Detailed Description */}
-                    <div>
+                    <div className="print:hidden">
                       <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1.5 print:text-[#002142] print:text-[8px] print:font-extrabold">
                         Detailed Instructions & Rules of Provocation
                       </label>
@@ -989,7 +989,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     {ex.hideGraphics && renderCoachRoles(ex)}
 
                     {/* Player Groups (Moved inside each exercise block) */}
-                    <div>
+                    <div className="print:hidden">
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block print:text-[#002142] print:text-[8px] print:font-extrabold">
                           Player Groups & Assignments

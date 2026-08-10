@@ -1847,24 +1847,28 @@ export default function App() {
             />
 
             {/* Section: Session Attendance Quick Tracker */}
-            <SessionAttendanceTracker
-              attendance={session.attendance}
-              squadRoster={session.squadRoster}
-              onChangeAttendance={handleUpdateAttendance}
-              onChangeRoster={handleUpdateRoster}
-              excludedPlayers={excludedPlayers}
-              onExcludePlayer={handleExcludePlayer}
-              onIncludePlayer={handleIncludePlayer}
-            />
+            <div className="print:hidden">
+              <SessionAttendanceTracker
+                attendance={session.attendance}
+                squadRoster={session.squadRoster}
+                onChangeAttendance={handleUpdateAttendance}
+                onChangeRoster={handleUpdateRoster}
+                excludedPlayers={excludedPlayers}
+                onExcludePlayer={handleExcludePlayer}
+                onIncludePlayer={handleIncludePlayer}
+              />
+            </div>
 
             {/* Section: Player Groups Manager */}
-            <PlayerGroupsSection
-              groups={session.playerGroups}
-              squadRoster={session.squadRoster}
-              attendance={session.attendance}
-              onChangeGroups={handleUpdateGroups}
-              onChangeRoster={handleUpdateRoster}
-            />
+            <div className="print:hidden">
+              <PlayerGroupsSection
+                groups={session.playerGroups}
+                squadRoster={session.squadRoster}
+                attendance={session.attendance}
+                onChangeGroups={handleUpdateGroups}
+                onChangeRoster={handleUpdateRoster}
+              />
+            </div>
 
             {/* Section: Warm-Up Block */}
             <ExerciseBlock 
@@ -1887,14 +1891,16 @@ export default function App() {
             />
 
             {/* Section: Cool Down Block */}
-            <ExerciseBlock 
-              block={session.coolDown}
-              onChange={(exs) => handleUpdateExercises('coolDown', exs)}
-              expandedExercises={expandedExercises}
-              toggleExpand={toggleExpand}
-              sessionGroups={session.playerGroups}
-              gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
-            />
+            <div className="print:hidden">
+              <ExerciseBlock 
+                block={session.coolDown}
+                onChange={(exs) => handleUpdateExercises('coolDown', exs)}
+                expandedExercises={expandedExercises}
+                toggleExpand={toggleExpand}
+                sessionGroups={session.playerGroups}
+                gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
+              />
+            </div>
 
             {/* Section: Observations & Notes (Screen Only - Hidden in Print PDF) */}
             <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-md shadow-slate-100/80 space-y-3 print:hidden">
