@@ -233,6 +233,21 @@ function registerSupabaseAuthDiagnosticsHelper() {
 
 registerSupabaseAuthDiagnosticsHelper();
 
+function formatSessionRosterFromSquad(players: SquadPlayer[]): string[] {
+  return players.map((player) =>
+    player.position === 'GK'
+      ? `${player.firstName} (GK)`
+      : `${player.firstName} ${player.lastName}`.trim()
+  );
+}
+
+function buildDefaultAttendanceFromRoster(roster: string[]): PlayerAttendance[] {
+  return roster.map((playerName) => ({
+    playerName,
+    status: 'Attending' as const
+  }));
+}
+
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     try {
@@ -567,12 +582,15 @@ export default function App() {
   // which session the user sees.
   const [session, setSession] = useState<TrainingSession>(() => {
     const starter = getEmptySession();
+    const initialRoster = formatSessionRosterFromSquad(DEFAULT_DETAILED_SQUAD);
     return normalizeSessionRoster({
       ...starter,
       id: 'memory-session-' + Date.now(),
       sessionNumber: '001',
       date: new Date().toISOString().split('T')[0],
       teamName: 'U17 Women Al Ula',
+      squadRoster: initialRoster,
+      attendance: buildDefaultAttendanceFromRoster(initialRoster)
     });
   });
 
@@ -1210,6 +1228,7 @@ export default function App() {
   const handleClearSession = () => {
     if (confirm(`Are you sure you want to clear the entire session? This will delete all exercises and text for all section tabs.`)) {
       const empty = getEmptySession();
+      const rosterFromSquad = formatSessionRosterFromSquad(squadPlayersWithStats);
       const optimisticTime = Date.now();
       initializeSessionSyncState(empty, {
         global: optimisticTime,
@@ -1218,7 +1237,9 @@ export default function App() {
         gk: optimisticTime
       });
       setSession({
-        ...empty
+        ...empty,
+        squadRoster: rosterFromSquad,
+        attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
       });
       setExpandedExercises({});
     }
@@ -1296,6 +1317,7 @@ export default function App() {
     const empty = getEmptySession();
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
+    const rosterFromSquad = formatSessionRosterFromSquad(squadPlayersWithStats);
 
     const newSession: TrainingSession = normalizeSessionRoster({
       ...empty,
@@ -1303,6 +1325,8 @@ export default function App() {
       sessionNumber: newNumber,
       date: today,
       teamName: 'U17 Women Al Ula',
+      squadRoster: rosterFromSquad,
+      attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
     });
 
     try {
@@ -1390,6 +1414,7 @@ export default function App() {
             const empty = getEmptySession();
             const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
             const today = new Date().toISOString().split('T')[0];
+            const rosterFromSquad = formatSessionRosterFromSquad(squadPlayersWithStats);
 
             const newSession: TrainingSession = {
               ...empty,
@@ -1397,6 +1422,8 @@ export default function App() {
               sessionNumber: '001',
               date: today,
               teamName: 'U17 Women Al Ula',
+              squadRoster: rosterFromSquad,
+              attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
             };
 
             const optimisticTime = Date.now();
