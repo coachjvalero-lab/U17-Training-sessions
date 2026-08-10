@@ -202,11 +202,13 @@ interface MeetingFormModalProps {
   initial?: Meeting | null;
   currentUserId: string;
   availableUsers: UserProfile[];
+  loadingUsers: boolean;
+  usersLoadError: string | null;
   onSave: (form: MeetingFormState) => Promise<void>;
   onClose: () => void;
 }
 
-const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUserId, availableUsers, onSave, onClose }) => {
+const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUserId, availableUsers, loadingUsers, usersLoadError, onSave, onClose }) => {
   const [form, setForm] = useState<MeetingFormState>(() => initial ? meetingToForm(initial) : emptyForm(currentUserId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -356,18 +358,26 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Organizer</label>
-                <select
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
-                  value={form.organizerUserId}
-                  onChange={(e) => set('organizerUserId', e.target.value)}
-                >
-                  <option value="">Select organizer...</option>
-                  {availableUsers.map((u) => (
-                    <option key={u.userId} value={u.userId}>
-                      {u.displayName || u.email}
-                    </option>
-                  ))}
-                </select>
+                {loadingUsers ? (
+                  <div className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-400 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading users…
+                  </div>
+                ) : usersLoadError ? (
+                  <div className="w-full border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-500">{usersLoadError}</div>
+                ) : (
+                  <select
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white"
+                    value={form.organizerUserId}
+                    onChange={(e) => set('organizerUserId', e.target.value)}
+                  >
+                    <option value="">Select organizer…</option>
+                    {availableUsers.map((u) => (
+                      <option key={u.userId} value={u.userId}>
+                        {u.displayName || u.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Topic</label>
@@ -385,31 +395,44 @@ const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ initial, currentUse
           <div>
             <SectionLabel>Participants</SectionLabel>
             <div className="space-y-2">
-              <p className="text-xs text-slate-500">Select attendees:</p>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2">
-                {availableUsers.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No users available</p>
-                ) : (
-                  availableUsers.map((user) => (
-                    <label key={user.userId} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.attendeeUserIds.includes(user.userId)}
-                        onChange={() => toggleAttendee(user.userId)}
-                        className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-300"
-                      />
-                      <span className="text-sm text-slate-700">
-                        {user.displayName || user.email}
-                        {user.displayName && <span className="text-xs text-slate-500 ml-1">({user.email})</span>}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-              {form.attendeeUserIds.length > 0 && (
-                <p className="text-xs text-slate-500">
-                  {form.attendeeUserIds.length} attendee{form.attendeeUserIds.length !== 1 ? 's' : ''} selected
-                </p>
+              {loadingUsers ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-2 text-xs text-slate-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading users…
+                </div>
+              ) : usersLoadError ? (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-600">
+                  <p className="font-semibold">Could not load users</p>
+                  <p className="mt-0.5 text-rose-500">{usersLoadError}</p>
+                </div>
+              ) : availableUsers.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+                  No active users found in user_profiles. Run the DB migrations and ensure user_profiles is populated.
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">Select attendees:</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2">
+                    {availableUsers.map((user) => (
+                      <label key={user.userId} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.attendeeUserIds.includes(user.userId)}
+                          onChange={() => toggleAttendee(user.userId)}
+                          className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-300"
+                        />
+                        <span className="text-sm text-slate-700">
+                          {user.displayName || user.email}
+                          {user.displayName && <span className="text-xs text-slate-500 ml-1">({user.email})</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.attendeeUserIds.length > 0 && (
+                    <p className="text-xs text-slate-500">
+                      {form.attendeeUserIds.length} attendee{form.attendeeUserIds.length !== 1 ? 's' : ''} selected
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -853,6 +876,7 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
 
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [usersLoadError, setUsersLoadError] = useState<string | null>(null);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -868,8 +892,9 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
         const users = await listAvailableUsers();
         setAvailableUsers(users);
         setLoadingUsers(false);
-      } catch (err) {
-        console.error('Failed to load users:', err);
+      } catch (err: unknown) {
+        console.error('[Meetings] Failed to load users:', err);
+        setUsersLoadError(err instanceof Error ? err.message : 'Error loading users');
         setLoadingUsers(false);
       }
     })();
@@ -1023,6 +1048,8 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
             initial={editingMeeting}
             currentUserId={userId}
             availableUsers={availableUsers}
+            loadingUsers={loadingUsers}
+            usersLoadError={usersLoadError}
             onSave={handleSave}
             onClose={() => { setShowForm(false); setEditingMeeting(null); }}
           />
@@ -1151,6 +1178,8 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
           initial={editingMeeting}
           currentUserId={userId}
           availableUsers={availableUsers}
+          loadingUsers={loadingUsers}
+          usersLoadError={usersLoadError}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditingMeeting(null); }}
         />
