@@ -40,11 +40,19 @@ drop column if exists email;
 -- NOT NULL + ON DELETE CASCADE: if a user profile is deleted their attendee
 -- rows are removed, but the meeting record itself is preserved.
 alter table public.meeting_attendees
-add column user_id uuid not null 
+add column if not exists user_id uuid
   references public.user_profiles(user_id) on delete cascade;
 
-alter table public.meeting_attendees
-add constraint meeting_attendees_meeting_id_user_id_key unique (meeting_id, user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'meeting_attendees_meeting_id_user_id_key'
+  ) then
+    alter table public.meeting_attendees
+    add constraint meeting_attendees_meeting_id_user_id_key unique (meeting_id, user_id);
+  end if;
+end $$;
 
 -- Add index on user_id for queries
 create index if not exists meeting_attendees_user_id_idx on public.meeting_attendees (user_id);
@@ -55,7 +63,7 @@ alter table public.meeting_action_items
 drop column if exists assigned_to;
 
 alter table public.meeting_action_items
-add column assigned_to_user_id uuid 
+add column if not exists assigned_to_user_id uuid 
   references public.user_profiles(user_id) on delete set null;
 
 -- Add index on assigned_to_user_id
@@ -69,7 +77,7 @@ alter table public.meetings
 drop column if exists organizer_email;
 
 alter table public.meetings
-add column organizer_user_id uuid 
+add column if not exists organizer_user_id uuid 
   references public.user_profiles(user_id) on delete set null;
 
 -- nullable so meeting record survives if the creator's profile is deleted
@@ -77,14 +85,14 @@ alter table public.meetings
 drop column if exists created_by;
 
 alter table public.meetings
-add column created_by_user_id uuid
+add column if not exists created_by_user_id uuid
   references public.user_profiles(user_id) on delete set null;
 
 alter table public.meetings
 drop column if exists updated_by;
 
 alter table public.meetings
-add column updated_by_user_id uuid
+add column if not exists updated_by_user_id uuid
   references public.user_profiles(user_id) on delete set null;
 
 -- Add indexes for created_by_user_id and updated_by_user_id
