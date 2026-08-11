@@ -36,6 +36,10 @@ type SessionRow = {
 
 const SESSIONS_TABLE = 'sessions';
 
+function createSessionsRealtimeChannelName(): string {
+  return `u17-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function toErrorCode(error: unknown): string {
   if (!error || typeof error !== 'object') return 'unknown';
   const withCode = error as { code?: unknown };
@@ -342,7 +346,7 @@ export async function subscribeToSessionsSupabase(
   }
 
   const channel = client
-    .channel('u17-sessions-realtime')
+    .channel(createSessionsRealtimeChannelName())
     .on('postgres_changes', { event: '*', schema: 'public', table: SESSIONS_TABLE }, async () => {
       try {
         await loadAndEmit();

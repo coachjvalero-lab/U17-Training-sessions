@@ -14,7 +14,6 @@ interface FitnessHubSectionProps {
   onExcludePlayer: (name: string) => void;
   onIncludePlayer: (name: string) => void;
   onUpdateLogo: (newLogo: string) => void;
-  onSyncLegacyFitness: (session: TrainingSession, meta: { sessionUid: string; sessionNumber: string }) => Promise<void>;
 }
 
 function defaultFitnessBlock(id: string, title: string) {
@@ -102,8 +101,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   excludedPlayers,
   onExcludePlayer,
   onIncludePlayer,
-  onUpdateLogo,
-  onSyncLegacyFitness
+  onUpdateLogo
 }) => {
   const contextStorageKey = 'u17_fitness_hub_context';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -225,7 +223,6 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
     try {
       setIsSaving(true);
       await saveFitnessSession(fresh);
-      await onSyncLegacyFitness(toTrainingSession(fresh), { sessionUid: fresh.sessionUid, sessionNumber: fresh.sessionNumber });
       setSelectedFitnessId(fresh.id);
     } finally {
       setIsSaving(false);
@@ -240,7 +237,6 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
       const recordId = selectedFitness?.id || `fit-${editorSession.id}`;
       const payload = toFitnessSession(recordId, editorSession, selectedFitness || undefined);
       await saveFitnessSession(payload);
-      await onSyncLegacyFitness(editorSession, { sessionUid: payload.sessionUid, sessionNumber: payload.sessionNumber });
       setSelectedFitnessId(payload.id);
     } finally {
       setIsSaving(false);

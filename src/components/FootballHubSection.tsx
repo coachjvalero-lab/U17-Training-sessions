@@ -90,6 +90,7 @@ interface FootballHubSectionProps {
   onDeleteCloudSession?: (id: string, sessNum: string, e: React.MouseEvent) => void;
   onNewSession?: () => void;
   role?: 'football' | 'fitness' | 'gk';
+  moduleDataWarning?: string | null;
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -103,7 +104,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onLoadCloudSession,
   onDeleteCloudSession,
   onNewSession,
-  role = 'football'
+  role = 'football',
+  moduleDataWarning = null
 }) => {
   const modulePresentation = MODULE_PRESENTATION[role];
   const contextStorageKey = `u17_football_hub_context_${role}`;
@@ -173,6 +175,11 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       
       {/* 1. ROLE MODULE NAVIGATION HUB (PORTALHUB CARDS STYLE) */}
       <div className="bg-[#002142] p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 text-white space-y-5 print:hidden">
+        {moduleDataWarning && role === 'football' && (
+          <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-100">
+            {moduleDataWarning}
+          </div>
+        )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
             <div className="flex items-center space-x-2.5">

@@ -81,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const dataUrl = await processUploadedImageFile(file);
       onUpdateLogo?.(dataUrl);
     } catch (err) {
-      alert('Error procesando imagen del logo.');
+      alert('Error processing the logo image.');
     }
   };
 

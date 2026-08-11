@@ -77,12 +77,14 @@ import {
   getModuleGameMoments,
   getModuleIdFromSection,
   getModuleRoleLabel,
+  mergeFootballSessionWithFitnessSource,
   getSharedSessionHeader,
   getModuleSessionView,
   hydrateTrainingSession,
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
+import { subscribeToFitnessSessions } from './services/fitness/fitnessSessionsService';
 import { resolveSquadPlayersForDisplay } from './utils/squadGrouping';
 import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
@@ -610,6 +612,18 @@ export default function App() {
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
+  const [fitnessBySessionUid, setFitnessBySessionUid] = useState<Record<string, {
+    fitnessWarmUp?: TrainingSession['fitnessWarmUp'];
+    fitnessMainPart?: TrainingSession['fitnessMainPart'];
+    fitnessCoolDown?: TrainingSession['fitnessCoolDown'];
+    fitnessPlayerGroups?: TrainingSession['fitnessPlayerGroups'];
+  }>>({});
+  const fitnessBySessionUidRef = useRef(fitnessBySessionUid);
+  const [footballFitnessLoadError, setFootballFitnessLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fitnessBySessionUidRef.current = fitnessBySessionUid;
+  }, [fitnessBySessionUid]);
 
   const [libraryCount, setLibraryCount] = useState<number>(() => {
     try {
@@ -660,6 +674,49 @@ export default function App() {
     window.addEventListener('storage', updateCount);
     return () => window.removeEventListener('storage', updateCount);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (!FITNESS_V2_ENABLED) return;
+
+    const unsubscribe = subscribeToFitnessSessions(
+      (items) => {
+        const byUid: Record<string, {
+          fitnessWarmUp?: TrainingSession['fitnessWarmUp'];
+          fitnessMainPart?: TrainingSession['fitnessMainPart'];
+          fitnessCoolDown?: TrainingSession['fitnessCoolDown'];
+          fitnessPlayerGroups?: TrainingSession['fitnessPlayerGroups'];
+        }> = {};
+
+        items.forEach((item) => {
+          if (!item.sessionUid) return;
+          byUid[item.sessionUid] = {
+            fitnessWarmUp: item.fitnessWarmUp,
+            fitnessMainPart: item.fitnessMainPart,
+            fitnessCoolDown: item.fitnessCoolDown,
+            fitnessPlayerGroups: item.fitnessPlayerGroups
+          };
+        });
+
+        setFootballFitnessLoadError(null);
+        setFitnessBySessionUid(byUid);
+      },
+      (error) => {
+        console.warn('Failed loading linked fitness sessions for football view:', error);
+        const err = error as { kind?: unknown; message?: unknown };
+        const kind = typeof err?.kind === 'string' ? err.kind : '';
+        const hasLoadedFitnessData = Object.keys(fitnessBySessionUidRef.current).length > 0;
+
+        if (kind === 'realtime' && hasLoadedFitnessData) {
+          setFootballFitnessLoadError('Fitness live updates are temporarily unavailable. Showing last loaded Fitness data.');
+          return;
+        }
+
+        setFootballFitnessLoadError('Fitness data is temporarily unavailable. Football session remains editable.');
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
@@ -1042,52 +1099,11 @@ export default function App() {
     setSession(prev => updateSessionGroupsByModule(prev, moduleId, playerGroups));
   };
 
-  const handleSyncLegacyFitnessFromIndependent = async (
-    fitnessSession: TrainingSession,
-    meta: { sessionUid: string; sessionNumber: string }
-  ) => {
-    const legacyId = meta.sessionUid || fitnessSession.id;
-    const existingLegacy = cloudSessions.find((s) => s.id === legacyId)
-      || cloudSessions.find((s) => s.sessionNumber === meta.sessionNumber);
-
-    const baseLegacy = existingLegacy
-      ? hydrateTrainingSession(existingLegacy)
-      : hydrateTrainingSession({
-          ...getEmptySession(),
-          id: legacyId,
-          teamName: fitnessSession.teamName,
-          date: fitnessSession.date,
-          time: fitnessSession.time,
-          sessionNumber: fitnessSession.sessionNumber,
-          microcycleDay: fitnessSession.microcycleDay,
-          mainObjective: fitnessSession.mainObjective,
-          materialsNeeded: fitnessSession.materialsNeeded,
-          observations: fitnessSession.observations,
-          squadRoster: fitnessSession.squadRoster || [],
-          attendance: fitnessSession.attendance || []
-        });
-
-    const mergedLegacy: TrainingSession = {
-      ...baseLegacy,
-      id: legacyId,
-      teamName: fitnessSession.teamName,
-      date: fitnessSession.date,
-      time: fitnessSession.time,
-      sessionNumber: fitnessSession.sessionNumber,
-      microcycleDay: fitnessSession.microcycleDay,
-      mainObjective: fitnessSession.mainObjective,
-      materialsNeeded: fitnessSession.materialsNeeded,
-      observations: fitnessSession.observations,
-      squadRoster: fitnessSession.squadRoster || baseLegacy.squadRoster,
-      attendance: fitnessSession.attendance || baseLegacy.attendance,
-      fitnessWarmUp: fitnessSession.fitnessWarmUp,
-      fitnessMainPart: fitnessSession.fitnessMainPart,
-      fitnessCoolDown: fitnessSession.fitnessCoolDown,
-      fitnessPlayerGroups: fitnessSession.fitnessPlayerGroups || []
-    };
-
-    await saveTrainingSessionBySection('fitness', mergedLegacy);
-  };
+  const footballSessionView = useMemo(() => {
+    if (!FITNESS_V2_ENABLED) return session;
+    const linkedFitness = fitnessBySessionUid[session.id] || null;
+    return mergeFootballSessionWithFitnessSource(session, linkedFitness);
+  }, [fitnessBySessionUid, session]);
 
   const handleUpdateRoster = (squadRoster: string[]) => {
     setSession(prev => ({
@@ -1312,8 +1328,8 @@ export default function App() {
       if (cloudRoleTime > localRoleTime) {
         const roleLabel = getModuleRoleLabel(role);
         const overwrite = confirm(
-          `Los campos de ${roleLabel} fueron actualizados por otra persona mientras editabas.\n\n` +
-          'Aceptar = sobrescribir con TUS cambios.\nCancelar = mantener tus cambios sin subir y revisar la otra versión primero.'
+          `The ${roleLabel} fields were updated by someone else while you were editing.\n\n` +
+          'OK = overwrite with YOUR changes.\nCancel = keep your changes unsynced and review the other version first.'
         );
         if (!overwrite) {
           setRemoteSessionConflict(cloudCopy);
@@ -1350,13 +1366,13 @@ export default function App() {
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleSaveActiveToCloud] Cloud save failed:', cloudErr);
-        setCloudSyncStatus({ status: 'error', message: `Guardar sesión falló (${errorCode})` });
-        alert(`Guardado localmente, pendiente de subir a la nube. Código: ${errorCode}`);
+        setCloudSyncStatus({ status: 'error', message: `Session save failed (${errorCode})` });
+        alert(`Saved locally, pending upload to the cloud. Code: ${errorCode}`);
       }
     } catch (error) {
       const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
       console.error('[handleSaveActiveToCloud] Error saving session:', error);
-      setCloudSyncStatus({ status: 'error', message: `Guardar sesión falló (${errorCode})` });
+      setCloudSyncStatus({ status: 'error', message: `Session save failed (${errorCode})` });
       alert('Saved in your browser!');
     } finally {
       setIsCloudSaving(false);
@@ -1412,12 +1428,12 @@ export default function App() {
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCreateNewCloudSession] Cloud save failed:', cloudErr);
-        setCloudSyncStatus({ status: 'error', message: `Crear sesión falló (${errorCode})` });
+        setCloudSyncStatus({ status: 'error', message: `Create session failed (${errorCode})` });
       }
     } catch (error) {
       const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
       console.error('[handleCreateNewCloudSession] Error creating new session:', error);
-      setCloudSyncStatus({ status: 'error', message: `Crear sesión falló (${errorCode})` });
+      setCloudSyncStatus({ status: 'error', message: `Create session failed (${errorCode})` });
     } finally {
       setIsCloudSaving(false);
     }
@@ -1447,7 +1463,10 @@ export default function App() {
       // Expand exercises of loaded session
       const expanded: Record<string, boolean> = {};
       const moduleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
-      const moduleSessionView = getModuleSessionView(unifiedSession, moduleId);
+      const sessionForView = moduleId === 'football'
+        ? mergeFootballSessionWithFitnessSource(unifiedSession, fitnessBySessionUid[unifiedSession.id] || null)
+        : unifiedSession;
+      const moduleSessionView = getModuleSessionView(sessionForView, moduleId);
 
       moduleSessionView.warmUp.exercises.forEach(ex => { expanded[ex.id] = true; });
       moduleSessionView.mainPart.exercises.forEach(ex => { expanded[ex.id] = true; });
@@ -1544,7 +1563,7 @@ export default function App() {
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleCopyShareLink] Cloud save failed:', cloudErr);
-        setCloudSyncStatus({ status: 'error', message: `Compartir sesión falló (${errorCode})` });
+        setCloudSyncStatus({ status: 'error', message: `Share session failed (${errorCode})` });
       }
 
       // 4. Build sharing URL with target session ID
@@ -1588,11 +1607,11 @@ export default function App() {
         type="button"
         onClick={() => setThemeMode((prev) => (prev === 'dark' ? 'light' : 'dark'))}
         className="inline-flex items-center gap-2 rounded-xl bg-[#002142] hover:bg-[#0f5981] text-white border border-white/20 px-3 py-2 text-xs font-extrabold tracking-wide shadow-lg transition-colors"
-        aria-label="Cambiar modo oscuro"
-        title={themeMode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        aria-label="Switch theme"
+        title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
         {themeMode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        <span>{themeMode === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+        <span>{themeMode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
       </button>
     </div>
   );
@@ -1624,7 +1643,7 @@ export default function App() {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[95] print:hidden w-[92%] max-w-xl">
           <div className="bg-amber-500 text-slate-950 rounded-xl shadow-xl px-4 py-3 flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-xs font-bold">
             <span className="flex-1 text-center sm:text-left">
-              Esta sesión #{remoteSessionConflict.sessionNumber} fue actualizada por otra persona, revisa los cambios.
+              Session #{remoteSessionConflict.sessionNumber} was updated by someone else. Please review the latest changes.
             </span>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -1632,14 +1651,14 @@ export default function App() {
                 onClick={handleReloadRemoteSession}
                 className="px-3 py-1.5 bg-slate-950 text-white rounded-lg hover:bg-slate-800 transition-colors"
               >
-                Recargar su versión
+                Reload remote version
               </button>
               <button
                 type="button"
                 onClick={handleKeepLocalChanges}
                 className="px-3 py-1.5 bg-white/50 rounded-lg hover:bg-white/70 transition-colors"
               >
-                Mantener los míos
+                Keep my version
               </button>
             </div>
           </div>
@@ -1650,11 +1669,11 @@ export default function App() {
     if (cloudSyncStatus.status === 'idle') return null;
 
     const bannerConfig: Record<string, { text: string; className: string }> = {
-      saving: { text: 'Guardando en la nube…', className: 'bg-slate-800 text-white' },
-      retrying: { text: 'No se pudo guardar en la nube, reintentando…', className: 'bg-amber-500 text-slate-950' },
-      'offline-queued': { text: 'Guardado localmente, pendiente de subir a la nube.', className: 'bg-rose-600 text-white' },
-      saved: { text: 'Guardado en la nube ✓', className: 'bg-emerald-500 text-slate-950' },
-      error: { text: cloudSyncStatus.message || 'Error al guardar en la nube', className: 'bg-rose-700 text-white' },
+      saving: { text: 'Saving to the cloud…', className: 'bg-slate-800 text-white' },
+      retrying: { text: 'Cloud save failed, retrying…', className: 'bg-amber-500 text-slate-950' },
+      'offline-queued': { text: 'Saved locally, pending upload to the cloud.', className: 'bg-rose-600 text-white' },
+      saved: { text: 'Saved to the cloud ✓', className: 'bg-emerald-500 text-slate-950' },
+      error: { text: cloudSyncStatus.message || 'Error saving to the cloud', className: 'bg-rose-700 text-white' },
     };
     const cfg = bannerConfig[cloudSyncStatus.status];
     if (!cfg) return null;
@@ -1786,7 +1805,7 @@ export default function App() {
           />
         ) : activeSection === 'football' ? (
           <FootballHubSection
-            session={session}
+            session={footballSessionView}
             cloudSessions={cloudSessions}
             onChangeSession={handleUpdateSession}
             onAddExerciseToSession={handleAddExerciseFromLibrary}
@@ -1797,10 +1816,11 @@ export default function App() {
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="football"
+            moduleDataWarning={footballFitnessLoadError}
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="football"
-                session={session}
+                session={footballSessionView}
                 sharedHeader={sharedHeader}
                 planningRoster={fullSquadRoster}
                 currentLogo={teamLogo}
@@ -1831,7 +1851,6 @@ export default function App() {
               onExcludePlayer={handleExcludePlayer}
               onIncludePlayer={handleIncludePlayer}
               onUpdateLogo={handleUpdateTeamLogo}
-              onSyncLegacyFitness={handleSyncLegacyFitnessFromIndependent}
             />
           ) : (
             <FootballHubSection

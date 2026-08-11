@@ -1,9 +1,9 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { Exercise, ExerciseModule } from '../../types';
+import { EXERCISE_MODULE_COLUMN_ENABLED } from '../../utils/featureFlags';
 
 const EXERCISE_LIBRARY_TABLE = 'exercise_library';
-const EXERCISE_MODULE_COLUMN_ENABLED = import.meta.env.VITE_EXERCISE_MODULE_COLUMN_ENABLED === 'true';
 
 type ExerciseRow = {
   id: string;
@@ -62,24 +62,6 @@ function resolveLegacyModule(row: ExerciseRow): ExerciseModule {
   return 'football';
 }
 
-function toStoredModule(exercise: Exercise): ExerciseModule {
-  if (exercise.module === 'football' || exercise.module === 'fitness' || exercise.module === 'gk') {
-    return exercise.module;
-  }
-  if (exercise.isFitness) return 'fitness';
-  const normalizedMoment = (exercise.gameMoment || '').toLowerCase();
-  if (
-    normalizedMoment === 'shot stop' ||
-    normalizedMoment === 'depth control' ||
-    normalizedMoment === '1 vs 1' ||
-    normalizedMoment === 'feet distribution' ||
-    normalizedMoment === 'cross defending'
-  ) {
-    return 'gk';
-  }
-  return 'football';
-}
-
 function fromRow(row: ExerciseRow): CloudExercise {
   const module = resolveLegacyModule(row);
   return {
@@ -121,7 +103,11 @@ function toRow(exercise: Exercise, updatedAt: number): ExerciseRow {
     player_groups: exercise.playerGroups ?? null,
     hide_graphics: exercise.hideGraphics ?? null,
     is_fitness: exercise.isFitness ?? null,
-    module: EXERCISE_MODULE_COLUMN_ENABLED ? toStoredModule(exercise) : null,
+    module: EXERCISE_MODULE_COLUMN_ENABLED
+      ? (exercise.module === 'football' || exercise.module === 'fitness' || exercise.module === 'gk'
+        ? exercise.module
+        : null)
+      : null,
     malika_challenge: exercise.malikaChallenge ?? null,
     updated_at: updatedAt
   };
@@ -160,40 +146,35 @@ async function listExercises(): Promise<CloudExercise[]> {
 }
 
 async function listExercisesByModule(module: ExerciseModule): Promise<CloudExercise[]> {
-  if (EXERCISE_MODULE_COLUMN_ENABLED) {
-    const { data, error } = await getClient()
-      .from(EXERCISE_LIBRARY_TABLE)
-      .select('*')
-      .eq('module', module);
-
-    if (!error) {
-      return ((data || []) as ExerciseRow[]).map(fromRow);
-    }
-  }
-
-  // Transitional fallback before `module` column rollout:
-  // still service-side scoped (not UI-only filtering) using legacy ownership signals.
+  // Service-side scoped ownership resolution:
+  // - explicit `module` wins when set
+  // - legacy signals are used only for rows where module is null
   const all = await listExercises();
-  return all.filter((exercise) => resolveLegacyModule({
-    id: exercise.id,
-    name: exercise.name,
-    game_moment: exercise.gameMoment,
-    sub_moment: exercise.subMoment,
-    description: exercise.description,
-    duration: exercise.duration,
-    series: exercise.series === undefined || exercise.series === null ? null : String(exercise.series),
-    work_time: exercise.workTime === undefined || exercise.workTime === null ? null : String(exercise.workTime),
-    rest_time: exercise.restTime === undefined || exercise.restTime === null ? null : String(exercise.restTime),
-    dimensions: exercise.dimensions,
-    coach_roles: exercise.coachRoles,
-    image: exercise.image ?? null,
-    player_groups: exercise.playerGroups ?? null,
-    hide_graphics: exercise.hideGraphics ?? null,
-    is_fitness: exercise.isFitness ?? null,
-    module: exercise.module ?? null,
-    malika_challenge: exercise.malikaChallenge ?? null,
-    updated_at: 0
-  }) === module);
+  return all.filter((exercise) => {
+    if (exercise.module === 'football' || exercise.module === 'fitness' || exercise.module === 'gk') {
+      return exercise.module === module;
+    }
+    return resolveLegacyModule({
+      id: exercise.id,
+      name: exercise.name,
+      game_moment: exercise.gameMoment,
+      sub_moment: exercise.subMoment,
+      description: exercise.description,
+      duration: exercise.duration,
+      series: exercise.series === undefined || exercise.series === null ? null : String(exercise.series),
+      work_time: exercise.workTime === undefined || exercise.workTime === null ? null : String(exercise.workTime),
+      rest_time: exercise.restTime === undefined || exercise.restTime === null ? null : String(exercise.restTime),
+      dimensions: exercise.dimensions,
+      coach_roles: exercise.coachRoles,
+      image: exercise.image ?? null,
+      player_groups: exercise.playerGroups ?? null,
+      hide_graphics: exercise.hideGraphics ?? null,
+      is_fitness: exercise.isFitness ?? null,
+      module: exercise.module ?? null,
+      malika_challenge: exercise.malikaChallenge ?? null,
+      updated_at: 0
+    }) === module;
+  });
 }
 
 export function subscribeToExerciseLibrary(

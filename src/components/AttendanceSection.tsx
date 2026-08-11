@@ -248,7 +248,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   };
 
   const handleDeletePlayer = (playerName: string) => {
-    if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla y de la clasificación?`)) {
+    if (confirm(`Are you sure you want to remove "${playerName}" from the roster and rankings?`)) {
       const lower = playerName.toLowerCase();
       if (onExcludePlayer) {
         onExcludePlayer(lower);

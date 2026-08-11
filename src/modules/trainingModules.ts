@@ -23,6 +23,7 @@ interface SessionOverlayBinding {
   fromModuleId: TrainingModuleId;
   fromBlock: SessionBlockKey;
   toBlock: SessionBlockKey;
+  position?: 'prepend' | 'append';
   decorate?: OverlayDecoration;
 }
 
@@ -79,6 +80,17 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
         fromModuleId: 'fitness',
         fromBlock: 'warmUp',
         toBlock: 'warmUp',
+        position: 'prepend',
+        decorate: {
+          isFitness: true,
+          hideGraphics: true
+        }
+      },
+      {
+        fromModuleId: 'fitness',
+        fromBlock: 'mainPart',
+        toBlock: 'warmUp',
+        position: 'prepend',
         decorate: {
           isFitness: true,
           hideGraphics: true
@@ -88,6 +100,7 @@ export const TRAINING_MODULES: Record<TrainingModuleId, TrainingModuleContract> 
         fromModuleId: 'fitness',
         fromBlock: 'coolDown',
         toBlock: 'coolDown',
+        position: 'prepend',
         decorate: {
           isFitness: true,
           hideGraphics: true
@@ -232,14 +245,36 @@ function buildModuleSessionView(session: TrainingSession, moduleId: TrainingModu
     coolDown: baseCoolDown
   };
 
+  const overlayPrepends: Record<SessionBlockKey, Exercise[]> = {
+    warmUp: [],
+    mainPart: [],
+    coolDown: []
+  };
+  const overlayAppends: Record<SessionBlockKey, Exercise[]> = {
+    warmUp: [],
+    mainPart: [],
+    coolDown: []
+  };
+
   (moduleDef.overlayReads || []).forEach((binding) => {
     const sourceBlock = getModuleBlock(session, binding.fromModuleId, binding.fromBlock);
-    const targetBlock = blocksByKey[binding.toBlock];
     const overlayExercises = decorateOverlayExercises(sourceBlock.exercises || [], binding.decorate);
+    if (binding.position === 'prepend') {
+      overlayPrepends[binding.toBlock].push(...overlayExercises);
+      return;
+    }
+    overlayAppends[binding.toBlock].push(...overlayExercises);
+  });
 
-    blocksByKey[binding.toBlock] = {
+  (Object.keys(blocksByKey) as SessionBlockKey[]).forEach((key) => {
+    const targetBlock = blocksByKey[key];
+    blocksByKey[key] = {
       ...targetBlock,
-      exercises: [...(targetBlock.exercises || []), ...overlayExercises]
+      exercises: [
+        ...overlayPrepends[key],
+        ...(targetBlock.exercises || []),
+        ...overlayAppends[key]
+      ]
     };
   });
 
@@ -335,6 +370,26 @@ export function updateSessionGroupsByModule(
 
 export function getModuleCloudUpdatedAt(session: CloudTrainingSession, moduleId: TrainingModuleId): number {
   return TRAINING_MODULES[moduleId].getCloudUpdatedAt(session);
+}
+
+export function mergeFootballSessionWithFitnessSource(
+  session: TrainingSession,
+  linkedFitness: {
+    fitnessWarmUp?: TrainingBlock;
+    fitnessMainPart?: TrainingBlock;
+    fitnessCoolDown?: TrainingBlock;
+    fitnessPlayerGroups?: PlayerGroup[];
+  } | null
+): TrainingSession {
+  if (!linkedFitness) return session;
+
+  return {
+    ...session,
+    fitnessWarmUp: linkedFitness.fitnessWarmUp ?? session.fitnessWarmUp,
+    fitnessMainPart: linkedFitness.fitnessMainPart ?? session.fitnessMainPart,
+    fitnessCoolDown: linkedFitness.fitnessCoolDown ?? session.fitnessCoolDown,
+    fitnessPlayerGroups: linkedFitness.fitnessPlayerGroups ?? session.fitnessPlayerGroups
+  };
 }
 
 export function resolveExerciseModule(exercise: Exercise): TrainingModuleId {

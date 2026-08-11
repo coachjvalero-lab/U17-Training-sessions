@@ -222,7 +222,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
   const handleRemovePlayer = (playerName: string) => {
     if (readOnly) return;
-    if (confirm(`¿Estás seguro de eliminar a "${playerName}" de la plantilla?`)) {
+    if (confirm(`Are you sure you want to remove "${playerName}" from the roster?`)) {
       const lower = playerName.toLowerCase();
       if (onExcludePlayer) {
         onExcludePlayer(lower);

@@ -3,6 +3,60 @@ import { supabase } from '../../supabaseClient';
 import type { FitnessSession, PlayerGroup, TrainingBlock } from '../../types';
 
 const FITNESS_SESSIONS_TABLE = 'fitness_sessions';
+const FITNESS_READ_RETRY_DELAY_MS = 1500;
+const FITNESS_MAX_READ_RETRIES = 1;
+
+function createFitnessRealtimeChannelName(): string {
+  return `u17-fitness-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+type FitnessSessionsErrorKind = 'load' | 'realtime';
+
+type FitnessSessionsError = Error & {
+  kind?: FitnessSessionsErrorKind;
+};
+
+function withErrorKind(error: unknown, kind: FitnessSessionsErrorKind): FitnessSessionsError {
+  if (error instanceof Error) {
+    const typed = error as FitnessSessionsError;
+    typed.kind = kind;
+    return typed;
+  }
+
+  const fallback = new Error(String(error)) as FitnessSessionsError;
+  fallback.kind = kind;
+  return fallback;
+}
+
+function isTransientReadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const details = error as {
+    code?: unknown;
+    status?: unknown;
+    message?: unknown;
+    details?: unknown;
+    hint?: unknown;
+  };
+
+  const code = details.code ? String(details.code) : '';
+  const status = typeof details.status === 'number' ? details.status : null;
+  const text = [details.message, details.details, details.hint]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase())
+    .join(' ');
+
+  return code === '57014'
+    || status === 500
+    || status === 502
+    || status === 503
+    || status === 504
+    || text.includes('timeout')
+    || text.includes('gateway')
+    || text.includes('temporar')
+    || text.includes('failed to fetch')
+    || text.includes('network');
+}
 
 type FitnessSessionRow = {
   id: string;
@@ -107,26 +161,48 @@ export function subscribeToFitnessSessions(
   const client = getClient();
   let active = true;
   let channel: RealtimeChannel | null = null;
+  let hasLoadedAtLeastOnce = false;
 
-  const loadAndEmit = async () => {
+  const loadAndEmit = async (attempt = 0) => {
     try {
       const sessions = await listFitnessSessions();
-      if (active) callback(sessions);
+      if (active) {
+        hasLoadedAtLeastOnce = true;
+        callback(sessions);
+      }
     } catch (error) {
-      if (active && onError) onError(error);
+      if (
+        active
+        && attempt < FITNESS_MAX_READ_RETRIES
+        && isTransientReadError(error)
+      ) {
+        setTimeout(() => {
+          if (!active) return;
+          void loadAndEmit(attempt + 1);
+        }, FITNESS_READ_RETRY_DELAY_MS);
+        return;
+      }
+
+      if (active && onError) onError(withErrorKind(error, 'load'));
     }
   };
 
   void loadAndEmit();
 
   channel = client
-    .channel('u17-fitness-sessions-realtime')
+    .channel(createFitnessRealtimeChannelName())
     .on('postgres_changes', { event: '*', schema: 'public', table: FITNESS_SESSIONS_TABLE }, () => {
       void loadAndEmit();
     })
     .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR' && onError) {
-        onError(new Error('Supabase realtime channel error for fitness sessions'));
+      if (status === 'CHANNEL_ERROR') {
+        if (!hasLoadedAtLeastOnce) {
+          void loadAndEmit();
+        }
+
+        if (onError) {
+          onError(withErrorKind(new Error('Supabase realtime channel error for fitness sessions'), 'realtime'));
+        }
       }
     });
 
