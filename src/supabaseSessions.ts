@@ -36,6 +36,43 @@ type SessionRow = {
 
 const SESSIONS_TABLE = 'sessions';
 
+function toErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'unknown';
+  const withCode = error as { code?: unknown };
+  return withCode.code ? String(withCode.code) : 'unknown';
+}
+
+function toErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  const withMessage = error as { message?: unknown };
+  return withMessage.message ? String(withMessage.message) : 'Unknown Supabase error';
+}
+
+function toErrorStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+  const withStatus = error as { status?: unknown };
+  return typeof withStatus.status === 'number' ? withStatus.status : null;
+}
+
+function isAuthSessionError(error: unknown): boolean {
+  const code = toErrorCode(error).toLowerCase();
+  const message = toErrorMessage(error).toLowerCase();
+  const status = toErrorStatus(error);
+
+  if (status === 401) return true;
+  if (code.includes('jwt') || code.includes('token') || code.includes('auth')) return true;
+
+  return (
+    message.includes('jwt') ||
+    message.includes('token') ||
+    message.includes('not authenticated') ||
+    message.includes('invalid claim')
+  );
+}
+
 function getSupabaseOrThrow() {
   if (!supabase) {
     throw new Error('Supabase client is not configured');
@@ -283,9 +320,22 @@ export async function saveSessionFieldsByRoleSupabase(
   const saveTimestamp = Date.now();
 
   const patch = getRolePatch(role, { ...session, id: sessionId }, saveTimestamp);
-  const { error } = await client
-    .from(SESSIONS_TABLE)
-    .upsert(patch as Record<string, unknown>, { onConflict: 'id' });
+  const write = async () => {
+    const { error } = await client
+      .from(SESSIONS_TABLE)
+      .upsert(patch as Record<string, unknown>, { onConflict: 'id' });
+    return error;
+  };
+
+  let error = await write();
+
+  // Recover once when the browser session/token expired between login and save.
+  if (error && isAuthSessionError(error)) {
+    const refreshResult = await client.auth.refreshSession();
+    if (!refreshResult.error) {
+      error = await write();
+    }
+  }
 
   if (error) {
     throw error;
