@@ -59,10 +59,11 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
   const isSharedHeaderReadOnly = moduleId !== 'football';
-  const planningRosterLookup = new Set(planningRoster.map((name) => name.trim().toLowerCase()));
-  const filteredAttendance = (session.attendance || []).filter((playerAttendance) =>
-    planningRosterLookup.has(playerAttendance.playerName.trim().toLowerCase())
-  );
+  const sessionAttendance = Array.isArray(session.attendance) ? session.attendance : [];
+  const attendanceOnlyPlayers = sessionAttendance
+    .map((entry) => entry.playerName?.trim())
+    .filter((name): name is string => Boolean(name));
+  const rosterForAttendance = Array.from(new Set([...planningRoster, ...attendanceOnlyPlayers]));
 
   const sessionWithSharedHeader: TrainingSession = {
     ...session,
@@ -72,11 +73,6 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
     time: sharedHeader.time,
     teamName: sharedHeader.teamName,
     microcycleDay: sharedHeader.microcycleDay
-  };
-
-  const modulePlanningSession: TrainingSession = {
-    ...session,
-    squadRoster: planningRoster
   };
 
   const updateHeaderFields = isSharedHeaderReadOnly ? (() => {}) : onUpdateHeader;
@@ -97,8 +93,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
 
       <div className="print:hidden">
         <SessionAttendanceTracker
-          attendance={filteredAttendance}
-          squadRoster={planningRoster}
+          attendance={sessionAttendance}
+          squadRoster={rosterForAttendance}
           onChangeAttendance={updateAttendance}
           onChangeRoster={updateRoster}
           excludedPlayers={excludedPlayers}
@@ -111,8 +107,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
       <div className="print:hidden">
         <PlayerGroupsSection
           groups={moduleView.playerGroups}
-          squadRoster={modulePlanningSession.squadRoster}
-          attendance={filteredAttendance}
+          squadRoster={rosterForAttendance}
+          attendance={sessionAttendance}
           onChangeGroups={onUpdateGroups}
           onChangeRoster={updateRoster}
           rosterReadOnly={isSharedHeaderReadOnly}

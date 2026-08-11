@@ -73,6 +73,56 @@ function isAuthSessionError(error: unknown): boolean {
   );
 }
 
+function isStatementTimeoutError(error: unknown): boolean {
+  const code = toErrorCode(error);
+  const message = toErrorMessage(error).toLowerCase();
+
+  if (code === '57014') return true;
+
+  return (
+    message.includes('statement timeout') ||
+    message.includes('query canceled') ||
+    message.includes('canceling statement')
+  );
+}
+
+async function writeSessionPatchByRole(
+  client: NonNullable<typeof supabase>,
+  sessionId: string,
+  patch: Record<string, unknown>
+): Promise<unknown | null> {
+  // Update first to avoid ON CONFLICT plans that can timeout under complex RLS checks.
+  const { data: updatedRows, error: updateError } = await client
+    .from(SESSIONS_TABLE)
+    .update(patch)
+    .eq('id', sessionId)
+    .select('id')
+    .limit(1);
+
+  if (updateError) {
+    return updateError;
+  }
+
+  if (Array.isArray(updatedRows) && updatedRows.length > 0) {
+    return null;
+  }
+
+  const { error: insertError } = await client
+    .from(SESSIONS_TABLE)
+    .insert(patch);
+
+  // Race condition: another client inserted just before us; retry as update.
+  if (insertError && toErrorCode(insertError) === '23505') {
+    const { error: retryUpdateError } = await client
+      .from(SESSIONS_TABLE)
+      .update(patch)
+      .eq('id', sessionId);
+    return retryUpdateError || null;
+  }
+
+  return insertError || null;
+}
+
 function getSupabaseOrThrow() {
   if (!supabase) {
     throw new Error('Supabase client is not configured');
@@ -319,13 +369,8 @@ export async function saveSessionFieldsByRoleSupabase(
   const client = getSupabaseOrThrow();
   const saveTimestamp = Date.now();
 
-  const patch = getRolePatch(role, { ...session, id: sessionId }, saveTimestamp);
-  const write = async () => {
-    const { error } = await client
-      .from(SESSIONS_TABLE)
-      .upsert(patch as Record<string, unknown>, { onConflict: 'id' });
-    return error;
-  };
+  const patch = getRolePatch(role, { ...session, id: sessionId }, saveTimestamp) as Record<string, unknown>;
+  const write = async () => writeSessionPatchByRole(client, sessionId, patch);
 
   let error = await write();
 
@@ -335,6 +380,11 @@ export async function saveSessionFieldsByRoleSupabase(
     if (!refreshResult.error) {
       error = await write();
     }
+  }
+
+  // Retry once for transient Postgres query timeout/cancellation (57014).
+  if (error && isStatementTimeoutError(error)) {
+    error = await write();
   }
 
   if (error) {

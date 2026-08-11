@@ -64,14 +64,14 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center print:grid-cols-12 print:gap-2">
         
         {/* Column 1: Team Badge upload (Span 3) */}
-        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:hidden">
+        <div className="md:col-span-3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-6 print:flex print:items-center print:justify-center print:col-span-2 print:border-r print:border-slate-200 print:pb-0 print:pr-2">
           <div 
             onClick={() => {
               if (!readOnly) {
                 fileInputRef.current?.click();
               }
             }}
-            className={`group relative w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 print:w-11 print:h-11 print:border-none print:bg-transparent ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-emerald-500 hover:bg-slate-100'}`}
+            className={`group relative w-28 h-28 md:w-32 md:h-32 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all bg-slate-50/80 print:w-16 print:h-16 print:border print:border-slate-200 print:bg-slate-50 print:rounded-lg ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-emerald-500 hover:bg-slate-100'}`}
           >
             {isUploadingLogo ? (
               <div className="flex flex-col items-center justify-center p-2 text-emerald-600 text-xs font-semibold">
@@ -116,7 +116,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
         </div>
 
         {/* Column 2: Main Info Fields (Span 9) */}
-        <div className="md:col-span-9 space-y-4 print:col-span-12 print:space-y-1">
+        <div className="md:col-span-9 space-y-4 print:col-span-10 print:space-y-1">
           {/* Team Name Title & Quick Save Button */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex-1">
@@ -130,7 +130,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 onChange={(e) => onChange({ teamName: e.target.value })}
                 readOnly={readOnly}
                 placeholder="e.g., A.D. San Pedro U17"
-                className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-[13pt] print:font-black print:pb-0 print:text-[#002142]"
+                className="w-full text-2xl md:text-3xl font-display font-black text-slate-900 tracking-tight focus:outline-none focus:border-b-2 focus:border-emerald-500 border-b border-transparent pb-1 transition-all print:text-[14pt] print:font-black print:pb-0 print:text-[#002142]"
               />
             </div>
 

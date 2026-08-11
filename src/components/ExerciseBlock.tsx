@@ -569,17 +569,23 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                     {ex.dimensions ? `${(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') ? ' • ' : ''}Pitch: ${ex.dimensions}` : ''}
                   </div>
                 ) : null}
-                {ex.description ? (
-                  <div className="mt-0.5 text-[8pt] text-slate-700 whitespace-pre-wrap leading-tight">{ex.description}</div>
-                ) : null}
-                {!ex.hideGraphics && ex.image ? (
-                  <div className="mt-1 border border-slate-200 rounded-md p-1">
-                    <SmartImage src={ex.image} alt="Training diagram" className="w-full h-20 object-contain" />
+                <div className="mt-2 print:grid print:grid-cols-[1.3fr_0.7fr] print:items-start print:gap-3">
+                  <div className="space-y-1">
+                    {ex.description ? (
+                      <div className="text-[8pt] text-slate-700 whitespace-pre-wrap leading-tight">{ex.description}</div>
+                    ) : null}
+                    {ex.playerGroups ? (
+                      <div className="text-[8pt] text-slate-700">Groups: {ex.playerGroups}</div>
+                    ) : null}
                   </div>
-                ) : null}
-                {ex.playerGroups ? (
-                  <div className="mt-0.5 text-[8pt] text-slate-700">Groups: {ex.playerGroups}</div>
-                ) : null}
+                  {!ex.hideGraphics && ex.image ? (
+                    <div className="mt-2 print:mt-0">
+                      <div className="border border-slate-200 rounded-md p-2 bg-slate-50/70 print:bg-white print:border-slate-300 print:p-3 print:min-w-[180px] print:max-w-[240px] print:shadow-sm">
+                        <SmartImage src={ex.image} alt="Training diagram" className="w-full h-28 object-contain print:h-40" />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             );
           })}
