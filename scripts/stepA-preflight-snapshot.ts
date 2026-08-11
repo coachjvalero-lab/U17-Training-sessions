@@ -26,6 +26,19 @@ function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
+function sortSquadIdsNumerically(ids: string[]): string[] {
+  return [...ids].sort((left, right) => {
+    const leftNumber = Number(left.replace(/^p/i, ''));
+    const rightNumber = Number(right.replace(/^p/i, ''));
+
+    if (Number.isNaN(leftNumber) || Number.isNaN(rightNumber)) {
+      return left.localeCompare(right);
+    }
+
+    return leftNumber - rightNumber;
+  });
+}
+
 async function fetchIds(table: string): Promise<string[]> {
   const pageSize = 1000;
   const ids: string[] = [];
@@ -116,6 +129,21 @@ async function main() {
   const exerciseIdChecksum = sha256(exerciseIds.join('|'));
   const squadIdChecksum = sha256(squadIds.join('|'));
   const legacyFitnessPayloadChecksum = sha256(payloadLines.join('\n'));
+  const expectedSquadIds = Array.from({ length: 22 }, (_, index) => `p${index + 1}`);
+  const actualSquadIdSet = new Set(squadIds);
+  const expectedSquadIdSet = new Set(expectedSquadIds);
+  const squadDuplicateIds = [...actualSquadIdSet]
+    .filter((id) => squadIds.filter((candidateId) => candidateId === id).length > 1);
+  const squadMissingIds = expectedSquadIds.filter((id) => !actualSquadIdSet.has(id));
+  const squadUnexpectedIds = [...actualSquadIdSet].filter((id) => !expectedSquadIdSet.has(id));
+  const squadIdsNumericOrder = sortSquadIdsNumerically(squadIds);
+  const squadHasExactP1ToP22 =
+    squadIds.length === 22
+    && actualSquadIdSet.size === 22
+    && expectedSquadIdSet.size === actualSquadIdSet.size
+    && squadMissingIds.length === 0
+    && squadUnexpectedIds.length === 0
+    && squadDuplicateIds.length === 0;
 
   const report = {
     ok: true,
@@ -131,8 +159,12 @@ async function main() {
     exerciseIdChecksum,
     squadPlayersCount: squadCountRes.count || 0,
     squadIdList: squadIds,
+    squadIdListNumericOrder: squadIdsNumericOrder,
     squadIdChecksum,
-    squadHasExactP1ToP22: squadIds.length === 22 && squadIds.every((id, idx) => id === `p${idx + 1}`),
+    squadMissingIds,
+    squadUnexpectedIds,
+    squadDuplicateIds,
+    squadHasExactP1ToP22,
     legacyFitnessPayloadChecksum
   };
 
