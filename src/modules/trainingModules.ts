@@ -338,6 +338,10 @@ export function getModuleCloudUpdatedAt(session: CloudTrainingSession, moduleId:
 }
 
 export function resolveExerciseModule(exercise: Exercise): TrainingModuleId {
+  if (exercise.module === 'football' || exercise.module === 'fitness' || exercise.module === 'gk') {
+    return exercise.module;
+  }
+
   const moduleByPredicate: Array<{ moduleId: TrainingModuleId; matches: (ex: Exercise) => boolean }> = [
     { moduleId: 'fitness', matches: (ex) => Boolean(ex.isFitness) },
     { moduleId: 'gk', matches: (ex) => GOALKEEPER_SPECIFIC_MOMENTS.has(ex.gameMoment) }

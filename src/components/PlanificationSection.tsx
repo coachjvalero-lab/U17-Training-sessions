@@ -293,8 +293,8 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
     let totalExercisesAll = 0;
 
     allSessionsToAnalyze.forEach(sess => {
-      const sessId = sess.id || `session-${sess.sessionNumber || '1'}`;
-      const sessNum = sess.sessionNumber ? `#${sess.sessionNumber}` : '#1';
+      const sessId = sess.id || `session-${sess.sessionNumber || 'draft'}`;
+      const sessNum = sess.sessionNumber ? `#${sess.sessionNumber}` : '#Draft';
       const sessObjective = sess.mainObjective || 'General Training Session';
 
       // Collect exercises exclusively from the Football tab (Warm Up, Main Part, Cool Down)

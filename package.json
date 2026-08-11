@@ -25,7 +25,13 @@
     "migrate:session-cards": "tsx scripts/migrate-firestore-domain.ts session-cards",
     "migrate:permissions": "tsx scripts/migrate-firestore-domain.ts permissions",
     "migrate:all-domains": "npm run migrate:permissions && npm run migrate:squad && npm run migrate:attendance && npm run migrate:team-logo && npm run migrate:exercises && npm run migrate:exercise-deleted-ids && npm run migrate:session-cards && npm run migrate:fixtures && npm run migrate:video && npm run migrate:physio",
-    "backfill:user-profiles": "tsx scripts/backfill-user-profiles-from-auth.ts"
+    "backfill:user-profiles": "tsx scripts/backfill-user-profiles-from-auth.ts",
+    "stepA:report-exercise-modules": "tsx scripts/report-exercise-module-classification.ts",
+    "stepA:report-exercise-modules:apply": "tsx scripts/report-exercise-module-classification.ts --apply",
+    "stepA:preflight-snapshot": "tsx scripts/stepA-preflight-snapshot.ts",
+    "stepA:backfill-fitness": "tsx scripts/backfill-fitness-sessions-from-legacy.ts",
+    "stepA:backfill-fitness:dry": "tsx scripts/backfill-fitness-sessions-from-legacy.ts --dry-run",
+    "stepA:validate-fitness-backfill": "tsx scripts/validate-fitness-backfill.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

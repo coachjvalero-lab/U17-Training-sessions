@@ -16,6 +16,7 @@ import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
 import { DEFAULT_MATCHES } from './components/CompetitionSection';
 import { FootballHubSection } from './components/FootballHubSection';
+import { FitnessHubSection } from './components/FitnessHubSection';
 import { ModuleSessionEditor } from './components/ModuleSessionEditor';
 import { MeetingsSection } from './components/MeetingsSection';
 import { 
@@ -97,6 +98,7 @@ import {
   supabase
 } from './supabaseClient';
 import { getSessionsDataProvider } from './supabaseSessions';
+import { FITNESS_V2_ENABLED } from './utils/featureFlags';
 import { 
   FileText,
   Loader2,
@@ -587,7 +589,7 @@ export default function App() {
     return normalizeSessionRoster({
       ...starter,
       id: 'memory-session-' + Date.now(),
-      sessionNumber: '001',
+      sessionNumber: '',
       date: new Date().toISOString().split('T')[0],
       teamName: 'U17 Women Al Ula',
       squadRoster: initialRoster,
@@ -1040,6 +1042,53 @@ export default function App() {
     setSession(prev => updateSessionGroupsByModule(prev, moduleId, playerGroups));
   };
 
+  const handleSyncLegacyFitnessFromIndependent = async (
+    fitnessSession: TrainingSession,
+    meta: { sessionUid: string; sessionNumber: string }
+  ) => {
+    const legacyId = meta.sessionUid || fitnessSession.id;
+    const existingLegacy = cloudSessions.find((s) => s.id === legacyId)
+      || cloudSessions.find((s) => s.sessionNumber === meta.sessionNumber);
+
+    const baseLegacy = existingLegacy
+      ? hydrateTrainingSession(existingLegacy)
+      : hydrateTrainingSession({
+          ...getEmptySession(),
+          id: legacyId,
+          teamName: fitnessSession.teamName,
+          date: fitnessSession.date,
+          time: fitnessSession.time,
+          sessionNumber: fitnessSession.sessionNumber,
+          microcycleDay: fitnessSession.microcycleDay,
+          mainObjective: fitnessSession.mainObjective,
+          materialsNeeded: fitnessSession.materialsNeeded,
+          observations: fitnessSession.observations,
+          squadRoster: fitnessSession.squadRoster || [],
+          attendance: fitnessSession.attendance || []
+        });
+
+    const mergedLegacy: TrainingSession = {
+      ...baseLegacy,
+      id: legacyId,
+      teamName: fitnessSession.teamName,
+      date: fitnessSession.date,
+      time: fitnessSession.time,
+      sessionNumber: fitnessSession.sessionNumber,
+      microcycleDay: fitnessSession.microcycleDay,
+      mainObjective: fitnessSession.mainObjective,
+      materialsNeeded: fitnessSession.materialsNeeded,
+      observations: fitnessSession.observations,
+      squadRoster: fitnessSession.squadRoster || baseLegacy.squadRoster,
+      attendance: fitnessSession.attendance || baseLegacy.attendance,
+      fitnessWarmUp: fitnessSession.fitnessWarmUp,
+      fitnessMainPart: fitnessSession.fitnessMainPart,
+      fitnessCoolDown: fitnessSession.fitnessCoolDown,
+      fitnessPlayerGroups: fitnessSession.fitnessPlayerGroups || []
+    };
+
+    await saveTrainingSessionBySection('fitness', mergedLegacy);
+  };
+
   const handleUpdateRoster = (squadRoster: string[]) => {
     setSession(prev => ({
       ...prev,
@@ -1247,6 +1296,11 @@ export default function App() {
   };
 
   const handleSaveActiveToCloud = async () => {
+    if (!session.sessionNumber.trim()) {
+      alert('Please set a session number before saving to cloud.');
+      return;
+    }
+
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
 
     // Role-specific conflict check: only compare the timestamp for fields this role owns
@@ -1312,6 +1366,11 @@ export default function App() {
   const handleCreateNewCloudSession = async () => {
     const newNumber = prompt('Enter new session number:', '1');
     if (newNumber === null) return;
+    const normalizedNumber = newNumber.trim();
+    if (!normalizedNumber) {
+      alert('Session number is required.');
+      return;
+    }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
 
@@ -1323,7 +1382,7 @@ export default function App() {
     const newSession: TrainingSession = normalizeSessionRoster({
       ...empty,
       id: newId,
-      sessionNumber: newNumber,
+      sessionNumber: normalizedNumber,
       date: today,
       teamName: 'U17 Women Al Ula',
       squadRoster: rosterFromSquad,
@@ -1420,7 +1479,7 @@ export default function App() {
             const newSession: TrainingSession = {
               ...empty,
               id: newId,
-              sessionNumber: '001',
+              sessionNumber: '',
               date: today,
               teamName: 'U17 Women Al Ula',
               squadRoster: rosterFromSquad,
@@ -1453,6 +1512,11 @@ export default function App() {
   };
 
   const handleCopyShareLink = async () => {
+    if (!session.sessionNumber.trim()) {
+      alert('Please set a session number before sharing.');
+      return;
+    }
+
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
 
     try {
@@ -1759,43 +1823,55 @@ export default function App() {
             )}
           />
         ) : activeSection === 'fitness' ? (
-          <FootballHubSection
-            session={session}
-            cloudSessions={cloudSessions}
-            onChangeSession={handleUpdateSession}
-            onAddExerciseToSession={handleAddExerciseFromLibrary}
-            onLoadCloudSession={handleLoadCloudSession}
-            onDeleteCloudSession={handleDeleteCloudSession}
-            onNewSession={handleCreateNewCloudSession}
-            squadRoster={fullSquadRoster}
-            fixtures={competitionFixtures}
-            onUpdateFixtures={handleUpdateCompetitionFixtures}
-            role="fitness"
-            renderActiveSessionEditor={() => (
-              <ModuleSessionEditor
-                moduleId="fitness"
-                session={session}
-                sharedHeader={sharedHeader}
-                planningRoster={fullSquadRoster}
-                currentLogo={teamLogo}
-                squadPlayers={squadPlayersWithStats}
-                isSaving={isCloudSaving}
-                expandedExercises={expandedExercises}
-                excludedPlayers={excludedPlayers}
-                onUpdateHeader={handleUpdateSession}
-                onSave={handleSaveActiveToCloud}
-                onUpdateAttendance={handleUpdateAttendance}
-                onUpdateRoster={handleUpdateRoster}
-                onUpdateGroups={handleUpdateGroups}
-                onUpdateExercises={handleUpdateExercises}
-                onToggleExpand={toggleExpand}
-                onExcludePlayer={handleExcludePlayer}
-                onIncludePlayer={handleIncludePlayer}
-                onUpdateLogo={handleUpdateTeamLogo}
-                onApplyMalikaPoints={handleApplyMalikaPoints}
-              />
-            )}
-          />
+          FITNESS_V2_ENABLED ? (
+            <FitnessHubSection
+              currentLogo={teamLogo}
+              squadPlayers={squadPlayersWithStats}
+              excludedPlayers={excludedPlayers}
+              onExcludePlayer={handleExcludePlayer}
+              onIncludePlayer={handleIncludePlayer}
+              onUpdateLogo={handleUpdateTeamLogo}
+              onSyncLegacyFitness={handleSyncLegacyFitnessFromIndependent}
+            />
+          ) : (
+            <FootballHubSection
+              session={session}
+              cloudSessions={cloudSessions}
+              onChangeSession={handleUpdateSession}
+              onAddExerciseToSession={handleAddExerciseFromLibrary}
+              onLoadCloudSession={handleLoadCloudSession}
+              onDeleteCloudSession={handleDeleteCloudSession}
+              onNewSession={handleCreateNewCloudSession}
+              squadRoster={fullSquadRoster}
+              fixtures={competitionFixtures}
+              onUpdateFixtures={handleUpdateCompetitionFixtures}
+              role="fitness"
+              renderActiveSessionEditor={() => (
+                <ModuleSessionEditor
+                  moduleId="fitness"
+                  session={session}
+                  sharedHeader={sharedHeader}
+                  planningRoster={fullSquadRoster}
+                  currentLogo={teamLogo}
+                  squadPlayers={squadPlayersWithStats}
+                  isSaving={isCloudSaving}
+                  expandedExercises={expandedExercises}
+                  excludedPlayers={excludedPlayers}
+                  onUpdateHeader={handleUpdateSession}
+                  onSave={handleSaveActiveToCloud}
+                  onUpdateAttendance={handleUpdateAttendance}
+                  onUpdateRoster={handleUpdateRoster}
+                  onUpdateGroups={handleUpdateGroups}
+                  onUpdateExercises={handleUpdateExercises}
+                  onToggleExpand={toggleExpand}
+                  onExcludePlayer={handleExcludePlayer}
+                  onIncludePlayer={handleIncludePlayer}
+                  onUpdateLogo={handleUpdateTeamLogo}
+                  onApplyMalikaPoints={handleApplyMalikaPoints}
+                />
+              )}
+            />
+          )
         ) : activeSection === 'gk' ? (
           <FootballHubSection
             session={session}

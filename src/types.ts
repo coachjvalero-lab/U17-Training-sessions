@@ -13,6 +13,8 @@ export type GameMoment =
   | 'Feet distribution'
   | 'Cross defending';
 
+export type ExerciseModule = 'football' | 'fitness' | 'gk';
+
 export type AbsenceReason = 'Vacation' | 'Study' | 'Injury' | 'Permission' | 'Unknown';
 
 export interface AttendanceStats {
@@ -101,6 +103,7 @@ export interface PlayerAttendance {
 
 export interface Exercise {
   id: string;
+  module?: ExerciseModule;
   name: string;
   gameMoment: GameMoment;
   subMoment: string;
@@ -120,6 +123,28 @@ export interface Exercise {
     title: string;
     defaultPoints: number;
   };
+}
+
+export interface FitnessSession {
+  id: string;
+  sessionUid: string;
+  legacySessionId?: string;
+  teamName: string;
+  date: string;
+  time: string;
+  sessionNumber: string;
+  microcycleDay: string;
+  mainObjective: string;
+  materialsNeeded: string;
+  observations?: string;
+  squadRoster: string[];
+  attendance: PlayerAttendance[];
+  fitnessWarmUp: TrainingBlock;
+  fitnessMainPart: TrainingBlock;
+  fitnessCoolDown: TrainingBlock;
+  fitnessPlayerGroups: PlayerGroup[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface TrainingBlock {

@@ -16,12 +16,13 @@ import {
   Copy,
   PenSquare
 } from 'lucide-react';
-import { CloudTrainingSession, Exercise, GameMoment, TrainingSession, TrainingBlock } from '../types';
+import { CloudTrainingSession, Exercise, ExerciseModule, GameMoment, TrainingSession, TrainingBlock } from '../types';
 import {
   deleteExerciseFromLibrary,
   getExerciseFromLibraryById,
   saveExerciseToLibrary,
-  subscribeToExerciseLibrary
+  subscribeToExerciseLibrary,
+  subscribeToExerciseLibraryByModule
 } from '../services/exercises/exerciseLibraryService';
 import {
   addDeletedExerciseIdsCloud,
@@ -48,15 +49,17 @@ interface ExercisesLibraryProps {
 export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   currentSession,
   cloudSessions,
-  onAddExerciseToSession
+  onAddExerciseToSession,
+  activeSection
 }) => {
+  const fixedModuleScope: ExerciseModule | null = activeSection === 'exercises' ? null : activeSection;
   const contextStorageKey = 'exercises_library';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
     searchTerm: '',
-    categoryFilter: 'all' as 'all' | 'football' | 'fitness' | 'gk',
+    categoryFilter: (fixedModuleScope || 'all') as 'all' | 'football' | 'fitness' | 'gk',
     momentFilter: 'all',
     targetSessionId: 'active',
-    targetCategory: 'football' as 'football' | 'fitness' | 'gk',
+    targetCategory: (fixedModuleScope || 'football') as 'football' | 'fitness' | 'gk',
     customSessionNum: ''
   });
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
@@ -86,23 +89,34 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     return computed;
   });
 
-  // Subscribe to the shared cloud exercise library in real time so every coach sees the same drills.
-  // Automatic cloud migration is disabled; migration must be triggered explicitly.
+  // Subscribe to exercise library with service-level module scoping when inside a module hub.
   useEffect(() => {
-    const unsubscribe = subscribeToExerciseLibrary((cloudExercises) => {
-      const list: Exercise[] = cloudExercises.map(({ updatedAt, ...ex }) => ex);
-      setCustomExercises(list);
-      try {
-        localStorage.setItem('u17_custom_exercise_library', JSON.stringify(list));
-      } catch (e) {
-        console.warn('Exercise library local cache warning:', e);
-      }
-    }, () => {
-      // Offline or subscription error: keep working with whatever is cached locally
-    });
+    const unsubscribe = fixedModuleScope
+      ? subscribeToExerciseLibraryByModule(fixedModuleScope, (cloudExercises) => {
+          const list: Exercise[] = cloudExercises.map(({ updatedAt, ...ex }) => ex);
+          setCustomExercises(list);
+          try {
+            localStorage.setItem('u17_custom_exercise_library', JSON.stringify(list));
+          } catch (e) {
+            console.warn('Exercise library local cache warning:', e);
+          }
+        }, () => {
+          // Offline or subscription error: keep working with whatever is cached locally
+        })
+      : subscribeToExerciseLibrary((cloudExercises) => {
+          const list: Exercise[] = cloudExercises.map(({ updatedAt, ...ex }) => ex);
+          setCustomExercises(list);
+          try {
+            localStorage.setItem('u17_custom_exercise_library', JSON.stringify(list));
+          } catch (e) {
+            console.warn('Exercise library local cache warning:', e);
+          }
+        }, () => {
+          // Offline or subscription error: keep working with whatever is cached locally
+        });
 
     return () => unsubscribe();
-  }, []);
+  }, [fixedModuleScope]);
 
   // Track deleted exercise IDs across all library exercises
   const [deletedExerciseIds, setDeletedExerciseIds] = useState<string[]>(() => {
@@ -141,7 +155,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     dimensions: '30x20m',
     coachRoles: '',
     playerGroups: '',
-    isFitness: false,
+    isFitness: (fixedModuleScope || 'football') === 'fitness',
     malikaChallenge: {
       enabled: false,
       title: '',
@@ -149,7 +163,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
     },
     image: ''
   });
-  const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>('football');
+  const [newExSection, setNewExSection] = useState<'football' | 'fitness' | 'gk'>(fixedModuleScope || 'football');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDuplicatingModal, setIsDuplicatingModal] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
@@ -183,11 +197,19 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
   // State to track dropdown for target block insertion
   const [openAddDropdownId, setOpenAddDropdownId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!fixedModuleScope) return;
+    setCategoryFilter(fixedModuleScope);
+    setTargetCategory(fixedModuleScope);
+    setNewExSection(fixedModuleScope);
+    setTargetSessionId('active');
+  }, [fixedModuleScope]);
+
   const openCreateExerciseModal = () => {
     setSaveErrorMsg('');
     setEditingExerciseId(null);
     setIsDuplicatingModal(false);
-    setNewExSection('football');
+    setNewExSection(fixedModuleScope || 'football');
     setNewEx({
       name: '',
       gameMoment: 'Attack',
@@ -197,7 +219,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       dimensions: '30x20m',
       coachRoles: '',
       playerGroups: '',
-      isFitness: false,
+      isFitness: (fixedModuleScope || 'football') === 'fitness',
       malikaChallenge: {
         enabled: false,
         title: '',
@@ -230,7 +252,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       },
       image: ''
     });
-    setNewExSection('football');
+    setNewExSection(fixedModuleScope || 'football');
   };
 
   // Save custom exercises to localStorage whenever updated
@@ -354,6 +376,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: ex.coachRoles || '',
       playerGroups: ex.playerGroups || '',
       isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      module: fixedModuleScope || ex.sectionCategory || resolveExerciseModule(ex),
       malikaChallenge: ex.malikaChallenge
         ? {
             enabled: Boolean(ex.malikaChallenge.enabled),
@@ -388,6 +411,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: ex.coachRoles || '',
       playerGroups: ex.playerGroups || '',
       isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      module: fixedModuleScope || ex.sectionCategory || resolveExerciseModule(ex),
       malikaChallenge: ex.malikaChallenge
         ? {
             enabled: Boolean(ex.malikaChallenge.enabled),
@@ -426,6 +450,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       coachRoles: ex.coachRoles || '',
       playerGroups: ex.playerGroups || '',
       isFitness: ex.isFitness || ex.sectionCategory === 'fitness',
+      module: fixedModuleScope || ex.sectionCategory || resolveExerciseModule(ex),
       malikaChallenge: ex.malikaChallenge?.enabled
         ? {
             enabled: true,
@@ -462,7 +487,8 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
       dimensions: newEx.dimensions || '30x20m',
       coachRoles: newEx.coachRoles || '',
       playerGroups: newEx.playerGroups || '',
-      isFitness: newExSection === 'fitness',
+      isFitness: (fixedModuleScope || newExSection) === 'fitness',
+      module: fixedModuleScope || newExSection,
       malikaChallenge: newEx.malikaChallenge?.enabled
         ? {
             enabled: true,
@@ -547,14 +573,14 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
         targetCategory
       });
 
-      const sectionCat = targetCategory;
+      const sectionCat = fixedModuleScope || targetCategory;
 
       // 1. Target is Active Session
       if (targetSessionId === 'active' || targetSessionId === currentSession.id) {
         onAddExerciseToSession(blockKey, clonedEx, sectionCat);
         setOpenAddDropdownId(null);
         const blockName = blockKey === 'warmUp' ? 'Warm Up' : blockKey === 'mainPart' ? 'Main Part' : 'Cool Down';
-        const sessNum = currentSession.sessionNumber || '1';
+        const sessNum = currentSession.sessionNumber || 'Draft';
         setAddedToast(`Added "${ex.name}" to ${blockName} (${sectionCat.toUpperCase()}) in Active Session #${sessNum}`);
         setTimeout(() => setAddedToast(null), 3500);
         return;
@@ -736,16 +762,22 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
 
           {/* Category Filter */}
           <div className="sm:col-span-3">
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as any)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#0f5981] cursor-pointer"
-            >
-              <option value="all">All Categories</option>
-              <option value="football">⚽ Football</option>
-              <option value="fitness">🏃 Fitness & Conditioning</option>
-              <option value="gk">🧤 Goalkeepers</option>
-            </select>
+            {fixedModuleScope ? (
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+                Scoped: {fixedModuleScope.toUpperCase()}
+              </div>
+            ) : (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#0f5981] cursor-pointer"
+              >
+                <option value="all">All Categories</option>
+                <option value="football">⚽ Football</option>
+                <option value="fitness">🏃 Fitness & Conditioning</option>
+                <option value="gk">🧤 Goalkeepers</option>
+              </select>
+            )}
           </div>
 
           {/* Game Moment Filter */}
@@ -769,7 +801,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
           <span>
             Showing <strong className="text-slate-900 font-extrabold">{filteredExercises.length}</strong> of <strong className="text-slate-900 font-extrabold">{allExercises.length}</strong> available exercises
           </span>
-          {(categoryFilter !== 'all' || momentFilter !== 'all' || searchTerm) && (
+          {!fixedModuleScope && (categoryFilter !== 'all' || momentFilter !== 'all' || searchTerm) && (
             <button
               type="button"
               onClick={() => {
@@ -935,7 +967,7 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                             setOpenAddDropdownId(null);
                           } else {
                             setOpenAddDropdownId(ex.id);
-                            setTargetCategory(ex.sectionCategory || 'football');
+                            setTargetCategory((fixedModuleScope || ex.sectionCategory || 'football') as 'football' | 'fitness' | 'gk');
                             setTargetSessionId('active');
                             setCustomSessionNum('');
                           }
@@ -978,19 +1010,19 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                               className="w-full bg-slate-800 border border-slate-700 text-xs font-bold text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-sky-400 cursor-pointer"
                             >
                               <option value="active">
-                                Active Session (#{currentSession.sessionNumber || '1'})
+                                Active Session (#{currentSession.sessionNumber || 'Draft'})
                               </option>
-                              {cloudSessions
+                              {!fixedModuleScope && cloudSessions
                                 .filter(s => s.id !== currentSession.id)
                                 .map(s => (
                                   <option key={s.id} value={s.id}>
-                                    Session #{s.sessionNumber || '1'} ({s.date || 'Saved'})
+                                    Session #{s.sessionNumber || 'Draft'} ({s.date || 'Saved'})
                                   </option>
                                 ))}
-                              <option value="new">+ Create New Session Number...</option>
+                              {!fixedModuleScope && <option value="new">+ Create New Session Number...</option>}
                             </select>
 
-                            {targetSessionId === 'new' && (
+                            {!fixedModuleScope && targetSessionId === 'new' && (
                               <div className="pt-1">
                                 <input
                                   type="text"
@@ -1003,47 +1035,48 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                             )}
                           </div>
 
-                          {/* 2. Target Category/Department */}
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">
-                              Department / Section
-                            </label>
-                            <div className="grid grid-cols-3 gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setTargetCategory('football')}
-                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
-                                  targetCategory === 'football' 
-                                    ? 'bg-emerald-600 text-white border-emerald-500' 
-                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                                }`}
-                              >
-                                ⚽ Football
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setTargetCategory('fitness')}
-                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
-                                  targetCategory === 'fitness' 
-                                    ? 'bg-amber-600 text-white border-amber-500' 
-                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                                }`}
-                              >
-                                🏃 Fitness
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setTargetCategory('gk')}
-                                className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
-                                  targetCategory === 'gk' 
-                                    ? 'bg-sky-600 text-white border-sky-500' 
-                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                                }`}
-                              >
-                                🧤 GK
-                              </button>
+                          {!fixedModuleScope && (
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black uppercase text-slate-400 block tracking-wider">
+                                Department / Section
+                              </label>
+                              <div className="grid grid-cols-3 gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setTargetCategory('football')}
+                                  className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                    targetCategory === 'football' 
+                                      ? 'bg-emerald-600 text-white border-emerald-500' 
+                                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                  }`}
+                                >
+                                  ⚽ Football
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTargetCategory('fitness')}
+                                  className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                    targetCategory === 'fitness' 
+                                      ? 'bg-amber-600 text-white border-amber-500' 
+                                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                  }`}
+                                >
+                                  🏃 Fitness
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTargetCategory('gk')}
+                                  className={`py-1 px-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                    targetCategory === 'gk' 
+                                      ? 'bg-sky-600 text-white border-sky-500' 
+                                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                  }`}
+                                >
+                                  🧤 GK
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           {/* 3. Target Block Selector Buttons */}
                           <div className="space-y-1 pt-1 border-t border-slate-800">
@@ -1154,11 +1187,21 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
               )}
               
               {/* Category Selector */}
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                  Exercise Category
-                </label>
-                <div className="grid grid-cols-3 gap-2">
+              {fixedModuleScope ? (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                    Exercise Category
+                  </label>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+                    Fixed: {fixedModuleScope.toUpperCase()}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                    Exercise Category
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -1207,8 +1250,9 @@ export const ExercisesLibrary: React.FC<ExercisesLibraryProps> = ({
                   >
                     🧤 Goalkeepers
                   </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Title */}
               <div>

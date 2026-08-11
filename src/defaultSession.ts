@@ -345,7 +345,7 @@ export const getEmptySession = (): TrainingSession => {
     teamName: 'U17 Women Al Ula',
     date: `${yyyy}-${mm}-${dd}`,
     time: '18:00 - 19:30',
-    sessionNumber: '1',
+    sessionNumber: '',
     microcycleDay: '-1',
     mainObjective: '',
     materialsNeeded: '',
