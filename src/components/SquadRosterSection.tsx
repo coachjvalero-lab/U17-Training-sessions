@@ -18,7 +18,7 @@ import {
   Camera,
   ArrowRight,
   Upload,
-  Link
+  Loader2
 } from 'lucide-react';
 import { SquadPlayer, TrainingSession } from '../types';
 import { CloudTrainingSession } from '../types';
@@ -27,6 +27,8 @@ import { processUploadedImageFile } from '../utils/heic';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { groupSquadPlayersByPosition } from '../utils/squadGrouping';
 import { normalizeSquadPhotoUrl } from '../utils/squadPhotos';
+import { supabase } from '../supabaseClient';
+import { updateSquadPlayerPhotoPath } from '../services/squad/squadService';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -45,6 +47,8 @@ type SquadSubTab = 'roster' | 'attendance' | 'malika';
 
 const GRAY_AVATAR_PLACEHOLDER =
   "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='48' fill='%23e2e8f0'/%3E%3Ccircle cx='120' cy='92' r='42' fill='%23cbd5e1'/%3E%3Cpath d='M48 202c12-34 38-52 72-52s60 18 72 52' fill='%23cbd5e1'/%3E%3C/svg%3E";
+const SQUAD_PHOTOS_BUCKET = 'squad-player-photos';
+const MAX_PHOTO_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   players,
@@ -80,60 +84,155 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<SquadPlayer | null>(null);
 
-  // Quick Photo Edit Modal State
-  const [quickPhotoPlayer, setQuickPhotoPlayer] = useState<SquadPlayer | null>(null);
-  const [quickPhotoUrl, setQuickPhotoUrl] = useState('');
-  const [quickPhotoSuccess, setQuickPhotoSuccess] = useState('');
+  const [photoPathOverrides, setPhotoPathOverrides] = useState<Record<string, string>>({});
+  const [photoUploadError, setPhotoUploadError] = useState('');
+  const [photoUploadSuccess, setPhotoUploadSuccess] = useState('');
+  const [isPhotoUploading, setIsPhotoUploading] = useState(false);
 
-  // Batch Photos Editor Modal State
-  const [isBatchPhotosModalOpen, setIsBatchPhotosModalOpen] = useState(false);
-  const [batchPhotoInputs, setBatchPhotoInputs] = useState<Record<string, string>>({});
+  const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
 
-  const handleOpenQuickPhoto = (player: SquadPlayer) => {
-    setQuickPhotoPlayer(player);
-    setQuickPhotoUrl(normalizeSquadPhotoUrl(player.photoUrl) || '');
-    setQuickPhotoSuccess('');
+  const dataUrlToBlob = (dataUrl: string): Blob => {
+    const parts = dataUrl.split(',');
+    if (parts.length !== 2) throw new Error('Invalid data URL');
+    const mimeMatch = parts[0].match(/^data:([^;]+);base64$/i);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const binary = atob(parts[1]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mimeType });
   };
 
-  const handleSaveQuickPhoto = (newUrl: string) => {
-    if (!quickPhotoPlayer) return;
-    const normalizedUrl = normalizeSquadPhotoUrl(newUrl);
-    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: normalizedUrl } : p);
-    onUpdatePlayers(updated);
-    setQuickPhotoSuccess('Photo updated successfully!');
-    setTimeout(() => {
-      setQuickPhotoSuccess('');
-      setQuickPhotoPlayer(null);
-    }, 800);
+  const resolveSignedPhotoUrl = async (photoPath: string): Promise<string | null> => {
+    if (!supabase) return null;
+    const normalized = normalizeSquadPhotoUrl(photoPath);
+    if (!normalized) return null;
+    const slashIndex = normalized.indexOf('/');
+    if (slashIndex <= 0 || slashIndex >= normalized.length - 1) return null;
+
+    const bucket = normalized.slice(0, slashIndex);
+    const objectPath = normalized.slice(slashIndex + 1);
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(objectPath, 3600);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
   };
 
-  const handleQuickPhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const getPhotoPath = (player: SquadPlayer): string | undefined => {
+    return photoPathOverrides[player.id] || normalizeSquadPhotoUrl(player.photoUrl);
+  };
+
+  const getDisplayPhotoSrc = (player: SquadPlayer): string => {
+    const path = getPhotoPath(player);
+    if (!path) return GRAY_AVATAR_PLACEHOLDER;
+    return signedPhotoUrls[path] || GRAY_AVATAR_PLACEHOLDER;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const uniquePaths = Array.from(
+      new Set(
+        players
+          .map((player) => getPhotoPath(player))
+          .filter((path): path is string => Boolean(path))
+      )
+    );
+
+    const missingPaths = uniquePaths.filter((path) => !signedPhotoUrls[path]);
+    if (missingPaths.length === 0) return;
+
+    void Promise.all(
+      missingPaths.map(async (path) => {
+        try {
+          const signedUrl = await resolveSignedPhotoUrl(path);
+          return signedUrl ? [path, signedUrl] as const : null;
+        } catch {
+          return null;
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      const nextEntries = entries.filter((entry): entry is readonly [string, string] => Boolean(entry));
+      if (nextEntries.length === 0) return;
+
+      setSignedPhotoUrls((prev) => {
+        const merged = { ...prev };
+        nextEntries.forEach(([path, url]) => {
+          merged[path] = url;
+        });
+        return merged;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [players, signedPhotoUrls]);
+
+  const handleEditorPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = '';
+    if (!file || !editingPlayer) return;
+
+    setPhotoUploadError('');
+    setPhotoUploadSuccess('');
+
+    if (!file.type.toLowerCase().startsWith('image/')) {
+      setPhotoUploadError('Invalid file type. Please select an image.');
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_FILE_SIZE_BYTES) {
+      setPhotoUploadError('File too large. Maximum allowed size is 8 MB.');
+      return;
+    }
+
+    if (!supabase) {
+      setPhotoUploadError('Supabase is not configured.');
+      return;
+    }
+
+    setIsPhotoUploading(true);
+
     try {
       const dataUrl = await processUploadedImageFile(file);
-      handleSaveQuickPhoto(dataUrl);
-    } catch (err) {
-      alert('Error processing photo file. Please try another image.');
+      const blob = dataUrlToBlob(dataUrl);
+      const objectPath = `${editingPlayer.id}.jpg`;
+      const storagePath = `${SQUAD_PHOTOS_BUCKET}/${objectPath}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(SQUAD_PHOTOS_BUCKET)
+        .upload(objectPath, blob, {
+          upsert: true,
+          contentType: blob.type || 'image/jpeg',
+          cacheControl: '3600'
+        });
+
+      if (uploadError) {
+        setPhotoUploadError('Photo upload failed. The existing photo was not changed.');
+        return;
+      }
+
+      try {
+        await updateSquadPlayerPhotoPath(editingPlayer.id, storagePath);
+      } catch {
+        setPhotoUploadError('Photo uploaded, but could not be saved to the player profile.');
+        return;
+      }
+
+      setPhotoPathOverrides((prev) => ({ ...prev, [editingPlayer.id]: storagePath }));
+
+      const signedUrl = await resolveSignedPhotoUrl(storagePath);
+      if (signedUrl) {
+        setSignedPhotoUrls((prev) => ({ ...prev, [storagePath]: signedUrl }));
+      }
+
+      setPhotoUploadSuccess('Photo saved successfully.');
+    } catch {
+      setPhotoUploadError('Photo upload failed. The existing photo was not changed.');
+    } finally {
+      setIsPhotoUploading(false);
     }
-  };
-
-  const handleOpenBatchPhotos = () => {
-    const initialMap: Record<string, string> = {};
-    players.forEach(p => {
-      initialMap[p.id] = normalizeSquadPhotoUrl(p.photoUrl) || '';
-    });
-    setBatchPhotoInputs(initialMap);
-    setIsBatchPhotosModalOpen(true);
-  };
-
-  const handleSaveBatchPhotos = () => {
-    const updated = players.map(p => ({
-      ...p,
-      photoUrl: normalizeSquadPhotoUrl(batchPhotoInputs[p.id]) || normalizeSquadPhotoUrl(p.photoUrl)
-    }));
-    onUpdatePlayers(updated);
-    setIsBatchPhotosModalOpen(false);
   };
 
   const [formData, setFormData] = useState<{
@@ -143,7 +242,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     position: SquadPlayer['position'];
     status: SquadPlayer['status'];
     notes: string;
-    photoUrl: string;
     age: string;
     nationality: string;
     preferredFoot: 'Right' | 'Left' | 'Both';
@@ -156,7 +254,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     position: 'CM',
     status: 'Active',
     notes: '',
-    photoUrl: '',
     age: '16',
     nationality: 'Saudi Arabia 🇸🇦',
     preferredFoot: 'Right',
@@ -176,6 +273,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingPlayer(null);
+    setPhotoUploadError('');
+    setPhotoUploadSuccess('');
     setFormData({
       firstName: '',
       lastName: '',
@@ -183,7 +282,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: 'CM',
       status: 'Active',
       notes: '',
-      photoUrl: '',
       age: '16',
       nationality: 'Saudi Arabia 🇸🇦',
       preferredFoot: 'Right',
@@ -195,6 +293,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   const handleOpenEditModal = (player: SquadPlayer) => {
     setEditingPlayer(player);
+    setPhotoUploadError('');
+    setPhotoUploadSuccess('');
     setFormData({
       firstName: player.firstName,
       lastName: player.lastName,
@@ -202,7 +302,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: player.position,
       status: player.status,
       notes: player.notes || '',
-      photoUrl: player.photoUrl || '',
       age: String(player.age || 16),
       nationality: player.nationality || 'Saudi Arabia 🇸🇦',
       preferredFoot: player.preferredFoot || 'Right',
@@ -215,7 +314,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const handleSavePlayer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName.trim() || !formData.lastName.trim()) return;
-    const normalizedPhotoUrl = formData.photoUrl.trim();
 
     if (editingPlayer) {
       const updated = players.map(p => 
@@ -228,7 +326,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               position: formData.position,
               status: formData.status,
               notes: formData.notes.trim(),
-              photoUrl: normalizedPhotoUrl,
               age: formData.age ? Number(formData.age) : undefined,
               nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
               preferredFoot: formData.preferredFoot,
@@ -247,7 +344,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         position: formData.position,
         status: formData.status,
         notes: formData.notes.trim(),
-        photoUrl: normalizedPhotoUrl,
         age: formData.age ? Number(formData.age) : 16,
         nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
         preferredFoot: formData.preferredFoot,
@@ -622,7 +718,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   </div>
                   <div className="flex items-center space-x-3">
                     <img
-                      src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
+                      src={getDisplayPhotoSrc(player)}
                       alt={`${player.firstName} ${player.lastName}`}
                       className="w-12 h-12 rounded-xl object-cover border border-slate-200"
                     />
@@ -669,7 +765,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       <td className="py-3 px-3">
                         <div className="flex items-center space-x-2.5">
                           <img
-                            src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
+                            src={getDisplayPhotoSrc(player)}
                             alt={`${player.firstName} ${player.lastName}`}
                             className="w-8 h-8 rounded-full object-cover border border-slate-200"
                           />
@@ -736,16 +832,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               <span>Table</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleOpenBatchPhotos}
-            className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center space-x-2 shrink-0 cursor-pointer"
-            title="Import or update player photo URLs in batch"
-          >
-            <Camera className="w-4 h-4 text-emerald-600" />
-            <span>Import / Batch Photos</span>
-          </button>
 
           <button
             type="button"
@@ -851,7 +937,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   <div className="flex flex-col items-center text-center space-y-2.5 my-2">
                     <div className="relative group/photo">
                       <img
-                        src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
+                        src={getDisplayPhotoSrc(player)}
                         alt={`${player.firstName} ${player.lastName}`}
                         className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 group-hover:border-emerald-500 transition-colors shadow-sm bg-slate-100"
                         onError={(e) => {
@@ -860,9 +946,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       />
                       <button
                         type="button"
-                        onClick={() => handleOpenQuickPhoto(player)}
+                        onClick={() => handleOpenEditModal(player)}
                         className="absolute -top-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
-                        title="Change player photo URL / image"
+                        title="Upload or replace player photo"
                       >
                         <Camera className="w-3 h-3" />
                       </button>
@@ -978,9 +1064,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-900">
                         <div className="flex items-center space-x-3">
-                          <div className="relative group/tblphoto cursor-pointer" onClick={() => handleOpenQuickPhoto(player)} title="Click to change player photo">
+                          <div className="relative group/tblphoto cursor-pointer" onClick={() => handleOpenEditModal(player)} title="Click to change player photo">
                             <img
-                              src={player.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
+                              src={getDisplayPhotoSrc(player)}
                               alt={player.firstName}
                               className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0 group-hover/tblphoto:border-emerald-500 transition-colors"
                             />
@@ -1079,20 +1165,41 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </label>
                 <div className="flex items-center space-x-3 mb-2">
                   <img
-                    src={formData.photoUrl.trim() || GRAY_AVATAR_PLACEHOLDER}
+                    src={editingPlayer ? getDisplayPhotoSrc(editingPlayer) : GRAY_AVATAR_PLACEHOLDER}
                     alt="Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-slate-200 shrink-0 bg-slate-100"
                   />
                   <div className="flex-1">
-                    <input
-                      type="text"
-                      value={formData.photoUrl}
-                      onChange={(e) => setFormData({ ...formData, photoUrl: e.target.value })}
-                      placeholder="Paste Image URL or pick preset below..."
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-emerald-500"
-                    />
+                    <label className="inline-flex items-center space-x-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold cursor-pointer">
+                      {isPhotoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>{isPhotoUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*,.heic,.heif"
+                        onChange={handleEditorPhotoUpload}
+                        disabled={!editingPlayer || isPhotoUploading}
+                        className="hidden"
+                      />
+                    </label>
+                    {!editingPlayer && (
+                      <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+                        Save the player first, then upload the photo.
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {photoUploadSuccess && (
+                  <p className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
+                    {photoUploadSuccess}
+                  </p>
+                )}
+
+                {photoUploadError && (
+                  <p className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
+                    {photoUploadError}
+                  </p>
+                )}
 
               </div>
 
@@ -1282,221 +1389,6 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* SINGLE PLAYER QUICK PHOTO UPDATE MODAL */}
-      {quickPhotoPlayer && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
-                  <Camera className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-[#002142]">
-                    Update Photo: {quickPhotoPlayer.firstName} {quickPhotoPlayer.lastName}
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Upload image file or paste URL from Iterpro / Web
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setQuickPhotoPlayer(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {quickPhotoSuccess && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>{quickPhotoSuccess}</span>
-              </div>
-            )}
-
-            {/* Current Preview */}
-            <div className="flex flex-col items-center justify-center py-2 space-y-2">
-              <img
-                src={quickPhotoUrl.trim() || GRAY_AVATAR_PLACEHOLDER}
-                alt="Preview"
-                className="w-24 h-24 rounded-2xl object-cover border-4 border-slate-100 shadow-md bg-slate-100"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = GRAY_AVATAR_PLACEHOLDER;
-                }}
-              />
-              <span className="text-[11px] font-mono text-slate-400 font-bold uppercase">
-                #{quickPhotoPlayer.number || '0'} • {quickPhotoPlayer.position}
-              </span>
-            </div>
-
-            {/* Upload File Option */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Option 1: Upload Image File (PNG, JPG, HEIC)
-              </label>
-              <label className="flex items-center justify-center space-x-2 px-4 py-3 bg-emerald-50 hover:bg-emerald-100 border border-dashed border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl transition-colors cursor-pointer">
-                <Upload className="w-4 h-4 text-emerald-600" />
-                <span>Select image file for {quickPhotoPlayer.firstName}</span>
-                <input
-                  type="file"
-                  accept="image/*,.heic,.heif"
-                  onChange={handleQuickPhotoFileUpload}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* URL Input Option */}
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Option 2: Paste Image URL Link
-              </label>
-              <div className="flex space-x-2">
-                <div className="relative flex-1">
-                  <Link className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="url"
-                    value={quickPhotoUrl}
-                    onChange={(e) => setQuickPhotoUrl(e.target.value)}
-                    placeholder="https://app.iterpro.com/player-photo.jpg"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSaveQuickPhoto(quickPhotoUrl)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shrink-0"
-                >
-                  Save URL
-                </button>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setQuickPhotoPlayer(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BATCH PHOTOS EDITOR MODAL */}
-      {isBatchPhotosModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-fadeIn max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
-                  <Camera className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-[#002142]">
-                    Batch Squad Photo Manager & Import
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Paste photo URLs or assign images for all {players.length} squad players in one place.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsBatchPhotosModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Players Photo List */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {players.map((p) => (
-                <div key={p.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-3">
-                  <img
-                    src={batchPhotoInputs[p.id]?.trim() || p.photoUrl?.trim() || GRAY_AVATAR_PLACEHOLDER}
-                    alt={p.firstName}
-                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-200"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = GRAY_AVATAR_PLACEHOLDER;
-                    }}
-                  />
-
-                  <div className="w-36 shrink-0">
-                    <h4 className="text-xs font-extrabold text-[#002142]">
-                      #{p.number || '-'} {p.firstName} {p.lastName}
-                    </h4>
-                    <span className="text-[10px] font-mono font-bold text-slate-400">
-                      {p.position} • {p.status}
-                    </span>
-                  </div>
-
-                  <div className="flex-1 relative">
-                    <input
-                      type="url"
-                      value={batchPhotoInputs[p.id] || ''}
-                      onChange={(e) => setBatchPhotoInputs({ ...batchPhotoInputs, [p.id]: e.target.value })}
-                      placeholder="Paste image URL..."
-                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:border-emerald-500"
-                    />
-                    <Link className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  </div>
-
-                  <label className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer shrink-0 flex items-center space-x-1">
-                    <Upload className="w-3 h-3 text-emerald-600" />
-                    <span>Upload</span>
-                    <input
-                      type="file"
-                      accept="image/*,.heic,.heif"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          const dataUrl = await processUploadedImageFile(file);
-                          setBatchPhotoInputs({ ...batchPhotoInputs, [p.id]: dataUrl });
-                        } catch (err) {
-                          alert('Error reading file');
-                        }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer buttons */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100 shrink-0">
-              <span className="text-xs text-slate-400 font-mono">
-                {Object.values(batchPhotoInputs).filter(Boolean).length} of {players.length} photos assigned
-              </span>
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsBatchPhotosModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveBatchPhotos}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition-colors shadow-md shadow-emerald-600/30 flex items-center space-x-1 cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save All Photo Changes</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

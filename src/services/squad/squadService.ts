@@ -71,7 +71,7 @@ function toRow(player: SquadPlayer, updatedAt: number): SquadPlayerRow {
     status: player.status,
     notes: player.notes ?? null,
     joined_date: player.joinedDate ?? null,
-    photo_url: player.photoUrl ?? null,
+    photo_url: normalizeSquadPhotoUrl(player.photoUrl) ?? null,
     age: player.age ?? null,
     nationality: player.nationality ?? null,
     preferred_foot: player.preferredFoot ?? null,
@@ -273,6 +273,21 @@ export async function saveSquadPlayer(player: SquadPlayer): Promise<number> {
   const { error } = await getClient()
     .from(SQUAD_TABLE)
     .upsert(toRow(player, updatedAt), { onConflict: 'id' });
+
+  if (error) throw error;
+  return updatedAt;
+}
+
+export async function updateSquadPlayerPhotoPath(playerId: string, photoPath: string | null): Promise<number> {
+  const updatedAt = Date.now();
+  const patch = {
+    photo_url: normalizeSquadPhotoUrl(photoPath || undefined) ?? null,
+    updated_at: updatedAt
+  };
+  const { error } = await getClient()
+    .from(SQUAD_TABLE)
+    .update(patch)
+    .eq('id', playerId);
 
   if (error) throw error;
   return updatedAt;
