@@ -572,6 +572,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 {ex.description ? (
                   <div className="mt-0.5 text-[8pt] text-slate-700 whitespace-pre-wrap leading-tight">{ex.description}</div>
                 ) : null}
+                {!ex.hideGraphics && ex.image ? (
+                  <div className="mt-1 border border-slate-200 rounded-md p-1">
+                    <SmartImage src={ex.image} alt="Training diagram" className="w-full h-20 object-contain" />
+                  </div>
+                ) : null}
                 {ex.playerGroups ? (
                   <div className="mt-0.5 text-[8pt] text-slate-700">Groups: {ex.playerGroups}</div>
                 ) : null}

@@ -26,6 +26,7 @@ import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { groupSquadPlayersByPosition } from '../utils/squadGrouping';
+import { normalizeSquadPhotoUrl } from '../utils/squadPhotos';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -90,14 +91,14 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   const handleOpenQuickPhoto = (player: SquadPlayer) => {
     setQuickPhotoPlayer(player);
-    setQuickPhotoUrl(player.photoUrl || '');
+    setQuickPhotoUrl(normalizeSquadPhotoUrl(player.photoUrl) || '');
     setQuickPhotoSuccess('');
   };
 
   const handleSaveQuickPhoto = (newUrl: string) => {
     if (!quickPhotoPlayer) return;
-    const normalizedUrl = newUrl.trim();
-    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: normalizedUrl || undefined } : p);
+    const normalizedUrl = normalizeSquadPhotoUrl(newUrl);
+    const updated = players.map(p => p.id === quickPhotoPlayer.id ? { ...p, photoUrl: normalizedUrl } : p);
     onUpdatePlayers(updated);
     setQuickPhotoSuccess('Photo updated successfully!');
     setTimeout(() => {
@@ -120,7 +121,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const handleOpenBatchPhotos = () => {
     const initialMap: Record<string, string> = {};
     players.forEach(p => {
-      initialMap[p.id] = p.photoUrl || '';
+      initialMap[p.id] = normalizeSquadPhotoUrl(p.photoUrl) || '';
     });
     setBatchPhotoInputs(initialMap);
     setIsBatchPhotosModalOpen(true);
@@ -129,7 +130,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const handleSaveBatchPhotos = () => {
     const updated = players.map(p => ({
       ...p,
-      photoUrl: batchPhotoInputs[p.id]?.trim() || p.photoUrl || undefined
+      photoUrl: normalizeSquadPhotoUrl(batchPhotoInputs[p.id]) || normalizeSquadPhotoUrl(p.photoUrl)
     }));
     onUpdatePlayers(updated);
     setIsBatchPhotosModalOpen(false);
@@ -227,7 +228,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
               position: formData.position,
               status: formData.status,
               notes: formData.notes.trim(),
-              photoUrl: normalizedPhotoUrl || undefined,
+              photoUrl: normalizedPhotoUrl,
               age: formData.age ? Number(formData.age) : undefined,
               nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
               preferredFoot: formData.preferredFoot,
@@ -246,7 +247,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         position: formData.position,
         status: formData.status,
         notes: formData.notes.trim(),
-        photoUrl: normalizedPhotoUrl || undefined,
+        photoUrl: normalizedPhotoUrl,
         age: formData.age ? Number(formData.age) : 16,
         nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
         preferredFoot: formData.preferredFoot,

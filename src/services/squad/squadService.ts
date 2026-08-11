@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import { getDataProvider } from '../../supabaseClient';
 import type { SquadPlayer } from '../../types';
+import { normalizeSquadPhotoUrl } from '../../utils/squadPhotos';
 
 const SQUAD_TABLE = 'squad_players';
 
@@ -47,7 +48,7 @@ function fromRow(row: SquadPlayerRow): CloudSquadPlayer {
     status: row.status,
     notes: row.notes ?? undefined,
     joinedDate: row.joined_date ?? undefined,
-    photoUrl: row.photo_url ?? undefined,
+    photoUrl: normalizeSquadPhotoUrl(row.photo_url),
     age: row.age ?? undefined,
     nationality: row.nationality ?? undefined,
     preferredFoot: row.preferred_foot ?? undefined,

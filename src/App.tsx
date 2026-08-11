@@ -41,6 +41,7 @@ import {
   subscribeToSquadPlayers
 } from './services/squad/squadService';
 import { applyMalikaAwardsToSquad } from './services/squad/malikaService';
+import { normalizeSquadPlayerPhotos } from './utils/squadPhotos';
 import {
   addExcludedPlayers,
   removeExcludedPlayers,
@@ -282,9 +283,9 @@ export default function App() {
     const computed = (() => {
       try {
         const saved = localStorage.getItem('u17_squad_players');
-        if (saved) return JSON.parse(saved);
+        if (saved) return normalizeSquadPlayerPhotos(JSON.parse(saved));
       } catch (e) {}
-      return DEFAULT_DETAILED_SQUAD;
+      return normalizeSquadPlayerPhotos(DEFAULT_DETAILED_SQUAD);
     })();
     initialSquadPlayersRef.current = computed;
     return computed;
@@ -306,7 +307,7 @@ export default function App() {
 
       const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
       setSquadPlayers((prev) => {
-        const resolved = resolveSquadPlayersForDisplay(list, prev);
+        const resolved = normalizeSquadPlayerPhotos(resolveSquadPlayersForDisplay(list, prev));
         const same = prev.length === resolved.length && prev.every((player, index) => {
           const next = resolved[index];
           return next && player.id === next.id && JSON.stringify(player) === JSON.stringify(next);
