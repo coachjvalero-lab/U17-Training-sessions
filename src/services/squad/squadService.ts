@@ -1,4 +1,4 @@
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import { getDataProvider } from '../../supabaseClient';
 import type { SquadPlayer } from '../../types';
@@ -93,6 +93,54 @@ async function listSquadPlayers(): Promise<CloudSquadPlayer[]> {
   return ((data || []) as SquadPlayerRow[]).map(fromRow);
 }
 
+function coerceUpdatedAt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toRowFromRealtimePayload(raw: unknown): SquadPlayerRow | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const row = raw as Partial<SquadPlayerRow>;
+  const updatedAt = coerceUpdatedAt(row.updated_at);
+  if (updatedAt === null) return null;
+
+  if (
+    typeof row.id !== 'string' ||
+    typeof row.first_name !== 'string' ||
+    typeof row.last_name !== 'string' ||
+    typeof row.position !== 'string' ||
+    typeof row.status !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    number: row.number ?? null,
+    position: row.position,
+    status: row.status,
+    notes: row.notes ?? null,
+    joined_date: row.joined_date ?? null,
+    photo_url: row.photo_url ?? null,
+    age: row.age ?? null,
+    nationality: row.nationality ?? null,
+    preferred_foot: row.preferred_foot ?? null,
+    height_cm: row.height_cm ?? null,
+    weight_kg: row.weight_kg ?? null,
+    attendance_stats: row.attendance_stats ?? null,
+    malika_points: row.malika_points ?? null,
+    malika_history: row.malika_history ?? null,
+    updated_at: updatedAt
+  };
+}
+
 export function subscribeToSquadPlayers(
   callback: (players: CloudSquadPlayer[]) => void,
   onError?: (error: unknown) => void
@@ -102,6 +150,14 @@ export function subscribeToSquadPlayers(
   const enabled = true;
   let active = true;
   let channel: RealtimeChannel | null = null;
+  let localPlayers: CloudSquadPlayer[] = [];
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const emit = (players: CloudSquadPlayer[]) => {
+    if (!active) return;
+    localPlayers = players;
+    callback(players);
+  };
 
   const loadAndEmit = async () => {
     try {
@@ -112,7 +168,7 @@ export function subscribeToSquadPlayers(
         error: null,
         count: players.length
       });
-      if (active) callback(players);
+      emit(players);
     } catch (error) {
       console.log('[SUPABASE SQUAD]', {
         provider,
@@ -134,12 +190,67 @@ export function subscribeToSquadPlayers(
     }
   };
 
+  const scheduleReload = (reason: string) => {
+    if (!active || reloadTimer) return;
+    reloadTimer = setTimeout(() => {
+      reloadTimer = null;
+      console.log('[SUPABASE SQUAD]', {
+        provider,
+        enabled,
+        event: 'FALLBACK_RELOAD',
+        reason
+      });
+      void loadAndEmit();
+    }, 120);
+  };
+
+  const handleRealtimeChange = (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+    if (!active) return;
+
+    const eventType = payload.eventType;
+
+    if (eventType === 'DELETE') {
+      const oldRow = payload.old as { id?: unknown } | null;
+      const id = oldRow && typeof oldRow.id === 'string' ? oldRow.id : null;
+      if (!id) {
+        scheduleReload('delete-missing-id');
+        return;
+      }
+
+      const next = localPlayers.filter((player) => player.id !== id);
+      emit(next);
+      return;
+    }
+
+    if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      const row = toRowFromRealtimePayload(payload.new);
+      if (!row) {
+        scheduleReload(`${eventType.toLowerCase()}-incomplete-payload`);
+        return;
+      }
+
+      const nextPlayer = fromRow(row);
+      const index = localPlayers.findIndex((player) => player.id === nextPlayer.id);
+      if (index === -1) {
+        emit([...localPlayers, nextPlayer]);
+        return;
+      }
+
+      const next = [...localPlayers];
+      next[index] = nextPlayer;
+      emit(next);
+      return;
+    }
+
+    scheduleReload('unknown-event-type');
+  };
+
   void loadAndEmit();
 
   channel = client
     .channel('u17-squad-players-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: SQUAD_TABLE }, () => {
-      void loadAndEmit();
+    .on('postgres_changes', { event: '*', schema: 'public', table: SQUAD_TABLE }, (payload) => {
+      handleRealtimeChange(payload as RealtimePostgresChangesPayload<Record<string, unknown>>);
     })
     .subscribe((status) => {
       if (status === 'CHANNEL_ERROR' && onError) {
@@ -149,6 +260,10 @@ export function subscribeToSquadPlayers(
 
   return () => {
     active = false;
+    if (reloadTimer) {
+      clearTimeout(reloadTimer);
+      reloadTimer = null;
+    }
     if (channel) void client.removeChannel(channel);
   };
 }
