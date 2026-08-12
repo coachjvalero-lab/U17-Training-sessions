@@ -129,6 +129,7 @@ export interface FitnessSession {
   id: string;
   sessionUid: string;
   legacySessionId?: string;
+  teamId?: string;
   teamName: string;
   date: string;
   time: string;
@@ -182,6 +183,7 @@ export interface MatchFixture {
 
 export interface TrainingSession {
   id: string;
+  teamId?: string;
   teamName: string;
   date: string;
   time: string;
@@ -212,6 +214,90 @@ export interface CloudTrainingSession extends TrainingSession {
   footballUpdatedAt?: number;
   fitnessUpdatedAt?: number;
   gkUpdatedAt?: number;
+}
+
+export type MicrocycleStatus = 'draft' | 'active' | 'archived';
+
+export type MicrocycleLoadValue =
+  | 'Very Low'
+  | 'Low / Moderate-Low'
+  | 'Moderate-High'
+  | 'Very High'
+  | 'Match'
+  | string;
+
+export type MicrocycleAvailabilityCategory =
+  | 'absent'
+  | 'injured'
+  | 'a_team'
+  | 'u15'
+  | 'national_team_u20'
+  | 'national_team_u17';
+
+export interface MicrocycleDayConcept {
+  id: string;
+  microcycleDayId: string;
+  sortOrder: number;
+  concept: string;
+  objective: string;
+}
+
+export interface MicrocycleDay {
+  id: string;
+  microcycleId: string;
+  dayOrder: number;
+  dayDate: string;
+  dayLabel: string;
+  trainingSession: string;
+  sessionType: string;
+  mdLabel: string;
+  duration: string;
+  load: MicrocycleLoadValue;
+  stage: string;
+  before: string;
+  preTrainingSession: string;
+  warmUp: string;
+  pitch: string;
+  objectivesText: string;
+  postTrainingSession: string;
+  after: string;
+  notes: string;
+  sessionId?: string;
+  concepts: MicrocycleDayConcept[];
+}
+
+export interface MicrocyclePlayerAvailability {
+  id: string;
+  microcycleId: string;
+  category: MicrocycleAvailabilityCategory;
+  playerId?: string;
+  playerNameSnapshot: string;
+  notes: string;
+}
+
+export interface Microcycle {
+  id: string;
+  teamId: string;
+  teamName: string;
+  name: string;
+  weekNumber?: number;
+  startDate: string;
+  endDate: string;
+  status: MicrocycleStatus;
+  teamTotal?: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  days: MicrocycleDay[];
+  availability: MicrocyclePlayerAvailability[];
+}
+
+export interface MicrocycleSearchFilters {
+  date: string;
+  weekNumber: string;
+  concept: string;
+  sessionType: string;
+  load: string;
 }
 
 export interface SessionCardDocument {
@@ -279,6 +365,7 @@ export interface MeetingActionItem {
 
 export interface Meeting {
   id: string;
+  teamId?: string;
   title: string;
   date: string;              // ISO date
   startTime?: string;        // HH:MM

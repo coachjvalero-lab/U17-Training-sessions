@@ -36,7 +36,7 @@ import {
   type UserProfile,
 } from '../services/meetings/meetingsService';
 import type { AppUser } from '../services/auth/authService';
-import { isUserAdmin } from '../utils/permissions';
+import { useAuthorization } from '../services/permissions/authorization';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -883,7 +883,7 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
 
   const userEmail = currentUser.email ?? '';
   const userId = currentUser.uid ?? '';  // Get UUID from Supabase Auth
-  const userIsAdminFlag = isUserAdmin(userEmail);
+  const { isAdmin: userIsAdminFlag, can } = useAuthorization(userEmail);
 
   // Load available users
   useEffect(() => {
@@ -1008,11 +1008,11 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
   // ---- permission helpers ----
   const canWrite = (m?: Meeting | null) => {
     if (userIsAdminFlag) return true;
-    if (!m) return true; // creation
-    return true; // section access is enforced by RLS
+    if (!m) return can('meetings');
+    return can('meetings');
   };
   const canDeleteMeeting = (m: Meeting) =>
-    userIsAdminFlag || m.createdByUserId === userId;
+    userIsAdminFlag || can('meetings');
 
   // ---- Detail view ----
   if (selectedMeeting && !showForm) {
@@ -1080,6 +1080,7 @@ export const MeetingsSection: React.FC<MeetingsSectionProps> = ({ currentUser, o
         <button
           type="button"
           onClick={() => { setEditingMeeting(null); setShowForm(true); }}
+          disabled={!canWrite(null)}
           className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 rounded-xl cursor-pointer transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" /> New Meeting

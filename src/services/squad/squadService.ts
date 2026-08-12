@@ -177,6 +177,17 @@ function toRowFromRealtimePayload(raw: unknown): SquadPlayerRow | null {
   };
 }
 
+function squadRealtimeDebugRow(row: Partial<SquadPlayerRow> | null | undefined) {
+  if (!row) return null;
+  return {
+    id: typeof row.id === 'string' ? row.id : null,
+    name: `${typeof row.first_name === 'string' ? row.first_name : ''} ${typeof row.last_name === 'string' ? row.last_name : ''}`.trim() || null,
+    position: typeof row.position === 'string' ? row.position : null,
+    nationality: typeof row.nationality === 'string' ? row.nationality : null,
+    timestamp: new Date().toISOString()
+  };
+}
+
 export function subscribeToSquadPlayers(
   callback: (players: CloudSquadPlayer[]) => void,
   onError?: (error: unknown) => void
@@ -236,6 +247,11 @@ export function subscribeToSquadPlayers(
         event: 'FALLBACK_RELOAD',
         reason
       });
+      console.log('[Squad READ]', {
+        source: 'fallback-reload',
+        reason,
+        timestamp: new Date().toISOString()
+      });
       void loadAndEmit();
     }, 120);
   };
@@ -244,6 +260,12 @@ export function subscribeToSquadPlayers(
     if (!active) return;
 
     const eventType = payload.eventType;
+    console.log('[Squad REALTIME]', {
+      eventType,
+      row: eventType === 'DELETE'
+        ? squadRealtimeDebugRow(payload.old as Partial<SquadPlayerRow>)
+        : squadRealtimeDebugRow(payload.new as Partial<SquadPlayerRow>)
+    });
 
     if (eventType === 'DELETE') {
       const oldRow = payload.old as { id?: unknown } | null;
@@ -335,12 +357,16 @@ export async function updateSquadPlayer(playerId: string, patch: EditableSquadPl
 }
 
 export async function saveSquadPlayer(player: SquadPlayer): Promise<number> {
+  // Backward-compatible helper kept for callers that still pass a full player object.
   const updatedAt = Date.now();
   const { error } = await getClient()
     .from(SQUAD_TABLE)
     .upsert(toRow(player, updatedAt), { onConflict: 'id' });
 
-  if (error) throw error;
+  if (error) {
+    console.error('[SUPABASE SQUAD] upsert failed', error);
+    throw error;
+  }
   return updatedAt;
 }
 
@@ -355,7 +381,10 @@ export async function updateSquadPlayerPhotoPath(playerId: string, photoPath: st
     .update(patch)
     .eq('id', playerId);
 
-  if (error) throw error;
+  if (error) {
+    console.error('[SUPABASE SQUAD] photo update failed', error);
+    throw error;
+  }
   return updatedAt;
 }
 
@@ -365,5 +394,8 @@ export async function deleteSquadPlayer(playerId: string): Promise<void> {
     .delete()
     .eq('id', playerId);
 
-  if (error) throw error;
+  if (error) {
+    console.error('[SUPABASE SQUAD] delete failed', error);
+    throw error;
+  }
 }

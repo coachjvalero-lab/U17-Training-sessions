@@ -1,15 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { PortalSection } from '../../types';
-import type { UserPermission } from '../../utils/permissions';
-
-const USER_ROLES_TABLE = 'user_roles';
-
-type UserRoleRow = {
-  email: string;
-  role: UserPermission['role'];
-  allowed_sections: string[] | null;
-};
+import type { UserPermission } from './permissionModel';
 
 type UserProfileRow = {
   user_id: string;
@@ -18,30 +10,23 @@ type UserProfileRow = {
   is_active: boolean;
 };
 
+type AuthorizationUserRow = {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  is_active: boolean;
+  is_admin: boolean;
+  section_keys: string[] | null;
+};
+
+export type AuthorizationTeam = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
-}
-
-function defaultSectionsByRole(role: UserPermission['role']): PortalSection[] {
-  if (role === 'admin') {
-    return ['football', 'fitness', 'gk', 'squad', 'attendance', 'physio', 'video', 'exercises', 'planning', 'meetings'];
-  }
-  if (role === 'coach') {
-    return ['football', 'squad', 'attendance', 'video', 'exercises', 'planning'];
-  }
-  if (role === 'fitness_coach') {
-    return ['fitness', 'squad', 'attendance', 'exercises', 'planning'];
-  }
-  if (role === 'gk_coach') {
-    return ['gk', 'squad', 'attendance', 'exercises', 'planning'];
-  }
-  if (role === 'physio') {
-    return ['physio', 'squad', 'attendance'];
-  }
-  if (role === 'analyst') {
-    return ['video', 'exercises', 'football', 'planning'];
-  }
-  return [];
 }
 
 function getClient() {
@@ -49,104 +34,78 @@ function getClient() {
   return supabase;
 }
 
-function fromRow(row: UserRoleRow): UserPermission {
-  return {
-    email: row.email,
-    role: row.role,
-    allowedSections: Array.isArray(row.allowed_sections)
-      ? row.allowed_sections as UserPermission['allowedSections']
-      : []
-  };
-}
-
-function toPermissionFromRoleRow(email: string, roleRow?: UserRoleRow): UserPermission {
-  const role = roleRow?.role || 'custom';
-  const allowedSections = Array.isArray(roleRow?.allowed_sections) && roleRow.allowed_sections.length > 0
-    ? roleRow.allowed_sections as PortalSection[]
-    : defaultSectionsByRole(role);
+function toPermissionFromAuthorizationRow(row: AuthorizationUserRow): UserPermission {
+  const sectionKeys = Array.isArray(row.section_keys) ? row.section_keys : [];
 
   return {
-    email,
-    role,
-    allowedSections
-  };
+    userId: row.user_id,
+    email: normalizeEmail(row.email),
+    displayName: row.display_name,
+    isActive: Boolean(row.is_active),
+    isAdmin: Boolean(row.is_admin),
+    allowedSections: sectionKeys.filter(Boolean) as PortalSection[]
+  } as UserPermission;
 }
 
 export async function listIdentityUsersWithPermissions(): Promise<UserPermission[]> {
   const client = getClient();
 
-  const [profilesResult, rolesResult] = await Promise.all([
-    client
+  const { data, error } = await client.rpc('admin_list_section_authorization_users');
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data || []) as AuthorizationUserRow[];
+  const users = rows
+    .filter((row) => Boolean(row.email))
+    .map((row) => toPermissionFromAuthorizationRow(row));
+
+  // Legacy fallback only when centralized rows are still empty during migration.
+  if (users.length === 0) {
+    const { data: profilesData, error: profilesError } = await client
       .from('user_profiles')
       .select('user_id, email, display_name, is_active')
       .eq('is_active', true)
-      .order('email', { ascending: true }),
-    client
-      .from(USER_ROLES_TABLE)
-      .select('email, role, allowed_sections')
-  ]);
+      .order('email', { ascending: true });
+    if (profilesError) throw profilesError;
 
-  if (profilesResult.error) throw profilesResult.error;
-  if (rolesResult.error) throw rolesResult.error;
-
-  const rolesByEmail = new Map<string, UserRoleRow>();
-  for (const roleRow of (rolesResult.data || []) as UserRoleRow[]) {
-    rolesByEmail.set(normalizeEmail(roleRow.email), roleRow);
+    const fallbackProfiles = (profilesData || []) as UserProfileRow[];
+    return fallbackProfiles
+      .filter((profile) => Boolean(profile.email))
+      .map((profile) => ({
+        userId: profile.user_id,
+        email: normalizeEmail(profile.email),
+        displayName: profile.display_name,
+        isActive: Boolean(profile.is_active),
+        isAdmin: false,
+        allowedSections: []
+      } as UserPermission));
   }
 
-  const profileRows = (profilesResult.data || []) as UserProfileRow[];
-  const usersFromProfiles = profileRows
-    .filter((profile) => Boolean(profile.email))
-    .map((profile) => {
-      const email = normalizeEmail(profile.email);
-      const roleRow = rolesByEmail.get(email);
-      return toPermissionFromRoleRow(email, roleRow);
-    });
-
-  // Backward-compatible fallback: if identity profiles are not backfilled yet,
-  // keep permissions management functional using legacy user_roles rows.
-  if (usersFromProfiles.length === 0 && rolesByEmail.size > 0) {
-    return Array.from(rolesByEmail.entries())
-      .map(([email, roleRow]) => toPermissionFromRoleRow(email, roleRow))
-      .sort((a, b) => a.email.localeCompare(b.email));
-  }
-
-  // Include role rows that do not have a profile yet to avoid accidental invisibility.
-  const usersByEmail = new Map<string, UserPermission>();
-  for (const user of usersFromProfiles) {
-    usersByEmail.set(user.email, user);
-  }
-  for (const [email, roleRow] of rolesByEmail.entries()) {
-    if (!usersByEmail.has(email)) {
-      usersByEmail.set(email, toPermissionFromRoleRow(email, roleRow));
-    }
-  }
-
-  return Array.from(usersByEmail.values())
+  return users
     .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 async function listUserPermissions(): Promise<UserPermission[]> {
   const client = getClient();
-  const { data: authData, error: authError } = await client.auth.getSession();
-  const authEmail = authData?.session?.user?.email || null;
-  if (authError) {
-    console.warn('[PermissionsService] auth session read failed', authError);
-  }
-
-  const { data, error } = await client
-    .from(USER_ROLES_TABLE)
-    .select('email, role, allowed_sections')
-    .order('email', { ascending: true });
-
+  const { data, error } = await client.rpc('admin_list_section_authorization_users');
   if (error) throw error;
-  const mapped = ((data || []) as UserRoleRow[]).map(fromRow);
-  console.log('[PermissionsService] list user roles', {
-    authEmail,
-    rows: mapped.length,
-    emails: mapped.map((item) => item.email)
-  });
-  return mapped;
+  return ((data || []) as AuthorizationUserRow[]).map(toPermissionFromAuthorizationRow);
+}
+
+export async function listAuthorizationTeams(): Promise<AuthorizationTeam[]> {
+  const client = getClient();
+  const { data, error } = await client
+    .from('auth_teams')
+    .select('id, name, is_active')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    isActive: Boolean(row.is_active)
+  }));
 }
 
 export function subscribeToUserPermissions(
@@ -173,8 +132,14 @@ export function subscribeToUserPermissions(
   void loadAndEmit();
 
   channel = client
-    .channel('u17-user-roles-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: USER_ROLES_TABLE }, () => {
+    .channel('u17-authorization-admin-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
+      void loadAndEmit();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_section_access' }, () => {
+      void loadAndEmit();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_role_assignments' }, () => {
       void loadAndEmit();
     })
     .subscribe((status) => {
@@ -191,35 +156,21 @@ export function subscribeToUserPermissions(
 
 export async function saveUserPermissions(list: UserPermission[]): Promise<void> {
   const client = getClient();
-  const rows = list.map((permission) => ({
-    email: permission.email.trim().toLowerCase(),
-    role: permission.role,
-    allowed_sections: permission.allowedSections,
-    updated_at: new Date().toISOString()
-  }));
+  for (const permission of list) {
+    const email = permission.email.trim().toLowerCase();
+    const sectionKeys = permission.allowedSections;
+    const displayName = typeof permission.displayName === 'string' ? permission.displayName.trim() : '';
+    const isActive = permission.isActive;
 
-  const { data: existing, error: existingError } = await client
-    .from(USER_ROLES_TABLE)
-    .select('email');
-  if (existingError) throw existingError;
+    const { error } = await client.rpc('admin_set_user_section_access', {
+      target_email: email,
+      target_display_name: displayName,
+      target_is_active: isActive,
+      target_section_keys: sectionKeys
+    });
 
-  if (rows.length > 0) {
-    const { error: upsertError } = await client
-      .from(USER_ROLES_TABLE)
-      .upsert(rows, { onConflict: 'email' });
-    if (upsertError) throw upsertError;
-  }
-
-  const desiredEmails = new Set(rows.map((row) => row.email));
-  const emailsToDelete = (existing || [])
-    .map((row: { email: string }) => row.email)
-    .filter((email: string) => !desiredEmails.has(email));
-
-  if (emailsToDelete.length > 0) {
-    const { error: deleteError } = await client
-      .from(USER_ROLES_TABLE)
-      .delete()
-      .in('email', emailsToDelete);
-    if (deleteError) throw deleteError;
+    if (error) {
+      throw error;
+    }
   }
 }

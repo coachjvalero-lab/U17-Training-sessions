@@ -3,8 +3,40 @@ import {
   saveSessionFieldsByRoleSupabase,
   subscribeToSessionsSupabase
 } from '../supabaseSessions';
-import { CloudTrainingSession, PortalSection, TrainingSession } from '../types';
+import { saveFitnessSession } from '../services/fitness/fitnessSessionsService';
+import { CloudTrainingSession, FitnessSession, PortalSection, TrainingSession } from '../types';
 import { DEFAULT_MODULE_ID, getModuleIdFromSection } from './trainingModules';
+
+function toFitnessSessionRecord(session: TrainingSession): FitnessSession {
+  const normalizedSessionUid = (session.id || '').trim();
+  if (!normalizedSessionUid || normalizedSessionUid.startsWith('empty-session-')) {
+    throw new Error('Fitness persistence requires a valid session UID.');
+  }
+
+  const now = Date.now();
+  return {
+    id: `fit-${normalizedSessionUid}`,
+    sessionUid: normalizedSessionUid,
+    legacySessionId: normalizedSessionUid,
+    teamId: session.teamId,
+    teamName: session.teamName,
+    date: session.date,
+    time: session.time,
+    sessionNumber: session.sessionNumber,
+    microcycleDay: session.microcycleDay,
+    mainObjective: session.mainObjective,
+    materialsNeeded: session.materialsNeeded,
+    observations: session.observations,
+    squadRoster: session.squadRoster || [],
+    attendance: session.attendance || [],
+    fitnessWarmUp: session.fitnessWarmUp,
+    fitnessMainPart: session.fitnessMainPart,
+    fitnessCoolDown: session.fitnessCoolDown,
+    fitnessPlayerGroups: session.fitnessPlayerGroups || [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
 
 export function subscribeTrainingSessions(
   callback: (sessions: CloudTrainingSession[]) => void,
@@ -42,6 +74,17 @@ export async function saveTrainingSessionBySection(
   session: TrainingSession
 ): Promise<{ moduleId: 'football' | 'fitness' | 'gk'; savedAt: number }> {
   const moduleId = getModuleIdFromSection(section) || DEFAULT_MODULE_ID;
-  const savedAt = await saveSessionFieldsByRoleSupabase(session.id, moduleId, session);
-  return { moduleId, savedAt };
+
+  if (moduleId === 'football') {
+    const savedAt = await saveSessionFieldsByRoleSupabase(session.id, moduleId, session);
+    return { moduleId, savedAt };
+  }
+
+  if (moduleId === 'fitness') {
+    const payload = toFitnessSessionRecord(session);
+    const savedAt = await saveFitnessSession(payload);
+    return { moduleId, savedAt };
+  }
+
+  throw new Error('GK module has no independent persistence model yet. Writes are blocked by design.');
 }

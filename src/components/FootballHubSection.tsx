@@ -13,7 +13,7 @@ import {
   BookOpen,
   Trash2
 } from 'lucide-react';
-import { TrainingSession, Exercise, MatchFixture, CloudTrainingSession } from '../types';
+import { TrainingSession, Exercise, MatchFixture, CloudTrainingSession, SquadPlayer } from '../types';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
@@ -78,6 +78,7 @@ interface FootballHubSectionProps {
   cloudSessions: CloudTrainingSession[];
   onChangeSession: (updatedSession: Partial<TrainingSession>) => void;
   renderActiveSessionEditor: () => React.ReactNode;
+  squadPlayers?: SquadPlayer[];
   squadRoster?: string[];
   fixtures?: MatchFixture[];
   onUpdateFixtures?: (fixtures: MatchFixture[]) => void;
@@ -97,6 +98,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   session,
   cloudSessions,
   renderActiveSessionEditor,
+  squadPlayers = [],
   squadRoster = [],
   fixtures,
   onUpdateFixtures,
@@ -448,7 +450,12 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
 
       {/* 2. SUB-CONTENT VIEW DIRECTED BY SELECTED MODULE */}
       {footballSubTab === 'planning' ? (
-        <PlanificationSection session={session} cloudSessions={cloudSessions} />
+        <PlanificationSection
+          session={session}
+          cloudSessions={cloudSessions}
+          squadPlayers={squadPlayers}
+          onOpenSession={onLoadCloudSession}
+        />
       ) : footballSubTab === 'competition' ? (
         <CompetitionSection
           session={session}

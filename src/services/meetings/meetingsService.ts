@@ -14,6 +14,7 @@ import type {
 
 interface MeetingRow {
   id: string;
+  team_id: string | null;
   title: string;
   date: string;
   start_time: string | null;
@@ -80,6 +81,7 @@ function meetingFromRow(
 ): Meeting {
   return {
     id: row.id,
+    teamId: row.team_id ?? undefined,
     title: row.title,
     date: row.date,
     startTime: row.start_time ?? undefined,
@@ -226,10 +228,12 @@ async function fetchActionItems(meetingIds: string[]): Promise<Map<string, Meeti
 
 async function listMeetings(): Promise<Meeting[]> {
   const client = getClient();
-  const { data, error } = await client
+  const query = client
     .from('meetings')
     .select('*')
     .order('date', { ascending: false });
+
+  const { data, error } = await query;
   if (error) throw error;
   const rows = (data ?? []) as MeetingRow[];
   if (rows.length === 0) return [];

@@ -69,7 +69,7 @@ import {
   saveVideoAnalysisToCloud,
   subscribeToVideoAnalysis
 } from './services/video/videoAnalysisService';
-import { initPermissionsCloudSync } from './utils/permissions';
+import { setAuthorizationUserEmail } from './services/permissions/authorization';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState, writeWorkspaceRestoreState } from './utils/workspaceRestore';
 import {
   DEFAULT_MODULE_ID,
@@ -101,6 +101,7 @@ import {
 } from './supabaseClient';
 import { getSessionsDataProvider } from './supabaseSessions';
 import { FITNESS_V2_ENABLED } from './utils/featureFlags';
+import { TeamProvider } from './contexts/TeamContext';
 import { 
   FileText,
   Loader2,
@@ -176,10 +177,10 @@ function registerSupabaseDataDiagnosticsHelper() {
   if (typeof window === 'undefined' || !supabase) return;
 
   (window as any).__u17SupabaseDataDiagnostics = async () => {
-    const [sessionsResult, squadResult, rolesResult] = await Promise.allSettled([
+    const [sessionsResult, squadResult, sectionAccessResult] = await Promise.allSettled([
       supabase.from('sessions').select('id', { count: 'exact', head: true }),
       supabase.from('squad_players').select('id', { count: 'exact', head: true }),
-      supabase.from('user_roles').select('*')
+      supabase.from('user_section_access').select('user_id', { count: 'exact', head: true })
     ]);
 
     const toSummary = (result: PromiseSettledResult<any>) => {
@@ -218,7 +219,7 @@ function registerSupabaseDataDiagnosticsHelper() {
       },
       sessions: toSummary(sessionsResult),
       squadPlayers: toSummary(squadResult),
-      userRoles: toSummary(rolesResult)
+      userSectionAccess: toSummary(sectionAccessResult)
     };
 
     console.log('[SUPABASE DATA DIAGNOSTICS]', diagnostics);
@@ -564,6 +565,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    setAuthorizationUserEmail(currentUser?.email ?? null);
+  }, [currentUser?.email]);
+
   // Load and merge into a single unified session.
   // Firestore is now the source of truth for the shared sessions list; localStorage
   // is only kept as a transient cache for the current browser and must not decide
@@ -588,7 +593,6 @@ export default function App() {
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [isCloudSaving, setIsCloudSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [, setPermissionsSyncVersion] = useState(0);
 
   // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
   const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
@@ -627,15 +631,6 @@ export default function App() {
   }, [cloudSessions, excludedPlayers, session, squadPlayers]);
 
   const squadPlayersWithStats = squadStatistics.players;
-
-  // Single app-level permissions sync initialization (avoids duplicate initializations across components).
-  useEffect(() => {
-    if (!currentUser?.email) return;
-    const unsubscribe = initPermissionsCloudSync(() => {
-      setPermissionsSyncVersion(v => v + 1);
-    });
-    return () => unsubscribe();
-  }, [currentUser?.email]);
 
   useEffect(() => {
     const isDark = themeMode === 'dark';
@@ -1206,7 +1201,9 @@ export default function App() {
 
     if (!needsSync) return;
 
-    handleUpdateSquadPlayers(nextPlayers);
+    void handleUpdateSquadPlayers(nextPlayers).catch((err) => {
+      console.warn('Cloud save failed for squad player:', err);
+    });
   }, [cloudSessions, session.attendance, squadPlayers, squadStatistics.players]);
 
   const handleApplyMalikaPoints = ({
@@ -1229,7 +1226,9 @@ export default function App() {
       awards,
       awardedAt: Date.now()
     });
-    handleUpdateSquadPlayers(nextPlayers);
+    void handleUpdateSquadPlayers(nextPlayers).catch((err) => {
+      console.warn('Cloud save failed for squad player:', err);
+    });
   };
 
   const handleUpdatePhysioRecords = (records: PhysioRecord[]) => {
@@ -1260,7 +1259,9 @@ export default function App() {
 
   const handleUpdateSquadStatusFromPhysio = (playerId: string, newStatus: SquadPlayer['status']) => {
     const updated = squadPlayers.map(p => p.id === playerId ? { ...p, status: newStatus } : p);
-    handleUpdateSquadPlayers(updated);
+    void handleUpdateSquadPlayers(updated).catch((err) => {
+      console.warn('Cloud save failed for squad player:', err);
+    });
   };
 
   const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
@@ -1355,6 +1356,10 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    if (role === 'gk') {
+      alert('GK persistence is blocked: no independent GK storage is implemented yet.');
+      return;
+    }
 
     // Role-specific conflict check: only compare the timestamp for fields this role owns
     const cloudCopy = cloudSessions.find(s => s.id === session.id);
@@ -1426,6 +1431,10 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    if (role === 'gk') {
+      alert('GK session creation is blocked: no independent GK storage is implemented yet.');
+      return;
+    }
 
     const empty = getEmptySession();
     const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
@@ -1449,7 +1458,7 @@ export default function App() {
         global: optimisticTime,
         football: role === 'football' ? optimisticTime : 0,
         fitness: role === 'fitness' ? optimisticTime : 0,
-        gk: role === 'gk' ? optimisticTime : 0
+        gk: 0
       });
       setSession(newSession);
 
@@ -1460,7 +1469,7 @@ export default function App() {
           global: savedTime,
           football: role === 'football' ? savedTime : 0,
           fitness: role === 'fitness' ? savedTime : 0,
-          gk: role === 'gk' ? savedTime : 0
+          gk: 0
         });
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
@@ -1514,6 +1523,10 @@ export default function App() {
 
   const handleDeleteCloudSession = async (sessionId: string, sessionNum: string, event: React.MouseEvent) => {
     event.stopPropagation(); // prevent loading when clicking delete
+    if (activeSection === 'gk') {
+      alert('GK deletion is blocked: no independent GK storage is implemented yet.');
+      return;
+    }
     if (confirm(`Are you absolutely sure you want to delete session #${sessionNum} from the cloud database? This cannot be undone.`)) {
       try {
         setIsCloudSaving(true);
@@ -1574,6 +1587,10 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    if (role === 'gk') {
+      alert('GK share/save is blocked: no independent GK storage is implemented yet.');
+      return;
+    }
 
     try {
       setIsCloudSaving(true);
@@ -1748,55 +1765,58 @@ export default function App() {
   // Standalone Portal Navigation Hub View (No sidebar, clean light layout)
   if (activeSection === 'hub') {
     return (
-      <>
-        <PortalHub
-          onSelectSection={setActiveSection}
-          squadCount={squadPlayersWithStats.length}
-          activeSessionDate={session.date}
-          totalExercisesCount={libraryCount}
-          squadPlayers={squadPlayersWithStats}
-          physioRecords={physioRecords}
-          videoSessions={videoSessions}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-          currentLogo={teamLogo}
-          onUpdateLogo={handleUpdateTeamLogo}
-        />
-        {renderThemeToggle()}
-        {renderSyncBanner()}
-      </>
+      <TeamProvider userEmail={currentUser?.email ?? null}>
+        <>
+          <PortalHub
+            onSelectSection={setActiveSection}
+            squadCount={squadPlayersWithStats.length}
+            activeSessionDate={session.date}
+            totalExercisesCount={libraryCount}
+            squadPlayers={squadPlayersWithStats}
+            physioRecords={physioRecords}
+            videoSessions={videoSessions}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            currentLogo={teamLogo}
+            onUpdateLogo={handleUpdateTeamLogo}
+          />
+          {renderThemeToggle()}
+          {renderSyncBanner()}
+        </>
+      </TeamProvider>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
-      {renderThemeToggle()}
-      {renderSyncBanner()}
+    <TeamProvider userEmail={currentUser?.email ?? null}>
+      <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
+        {renderThemeToggle()}
+        {renderSyncBanner()}
       
-      {/* Lateral Dark Blue Navigation Sidebar */}
-      <Sidebar
-        session={session}
-        currentLogo={teamLogo}
-        activeSection={activeSection}
-        setActiveSection={setActiveSection}
-        totalLibraryExercisesCount={libraryCount}
-        onClearSession={handleClearSession}
-        onNewSession={handleCreateNewCloudSession}
-        cloudSessions={cloudSessions}
-        isLoadingCloud={isLoadingCloud}
-        isCloudSaving={isCloudSaving}
-        onSaveToCloud={handleSaveActiveToCloud}
-        onLoadCloudSession={handleLoadCloudSession}
-        onDeleteCloudSession={handleDeleteCloudSession}
-        copiedLink={copiedLink}
-        onCopyShareLink={handleCopyShareLink}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onUpdateLogo={handleUpdateTeamLogo}
-      />
+        {/* Lateral Dark Blue Navigation Sidebar */}
+        <Sidebar
+          session={session}
+          currentLogo={teamLogo}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+          totalLibraryExercisesCount={libraryCount}
+          onClearSession={handleClearSession}
+          onNewSession={handleCreateNewCloudSession}
+          cloudSessions={cloudSessions}
+          isLoadingCloud={isLoadingCloud}
+          isCloudSaving={isCloudSaving}
+          onSaveToCloud={handleSaveActiveToCloud}
+          onLoadCloudSession={handleLoadCloudSession}
+          onDeleteCloudSession={handleDeleteCloudSession}
+          copiedLink={copiedLink}
+          onCopyShareLink={handleCopyShareLink}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onUpdateLogo={handleUpdateTeamLogo}
+        />
 
-      {/* Main Content Workspace Area */}
-      <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
+        {/* Main Content Workspace Area */}
+        <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
         {activeSection === 'squad' || activeSection === 'attendance' ? (
           <SquadRosterSection
             players={squadPlayersWithStats}
@@ -1826,6 +1846,8 @@ export default function App() {
           <PlanificationSection
             session={session}
             cloudSessions={cloudSessions}
+            squadPlayers={squadPlayersWithStats}
+            onOpenSession={handleLoadCloudSession}
           />
         ) : activeSection === 'meetings' ? (
           <MeetingsSection
@@ -1848,6 +1870,7 @@ export default function App() {
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
+            squadPlayers={squadPlayersWithStats}
             squadRoster={fullSquadRoster}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
@@ -1897,6 +1920,7 @@ export default function App() {
               onLoadCloudSession={handleLoadCloudSession}
               onDeleteCloudSession={handleDeleteCloudSession}
               onNewSession={handleCreateNewCloudSession}
+              squadPlayers={squadPlayersWithStats}
               squadRoster={fullSquadRoster}
               fixtures={competitionFixtures}
               onUpdateFixtures={handleUpdateCompetitionFixtures}
@@ -1936,6 +1960,7 @@ export default function App() {
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
+            squadPlayers={squadPlayersWithStats}
             squadRoster={goalkeeperRoster}
             fixtures={competitionFixtures}
             onUpdateFixtures={handleUpdateCompetitionFixtures}
@@ -2082,7 +2107,8 @@ export default function App() {
           </div>
         </footer>
 
+        </div>
       </div>
-    </div>
+    </TeamProvider>
   );
 }

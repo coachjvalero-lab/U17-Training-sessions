@@ -1,11 +1,13 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession, TrainingSession } from './types';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
+import { getSelectedTeamIdSnapshot, getTeamNameById } from './services/permissions/teamSelectionStore';
 
 type SessionRole = 'football' | 'fitness' | 'gk';
 
 type SessionRow = {
   id: string;
+  team_id: string | null;
   team_name: string | null;
   date: string | null;
   time: string | null;
@@ -35,6 +37,20 @@ type SessionRow = {
 };
 
 const SESSIONS_TABLE = 'sessions';
+function resolveTeamForSessionWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
+  const explicitTeamId = (session.teamId || '').trim();
+  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
+  const resolvedTeamId = explicitTeamId || selectedTeamId || null;
+
+  const explicitName = (session.teamName || '').trim();
+  const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
+  const resolvedTeamName = explicitName || catalogName || 'U17 Women Al Ula';
+
+  return {
+    teamId: resolvedTeamId,
+    teamName: resolvedTeamName
+  };
+}
 
 function createSessionsRealtimeChannelName(): string {
   return `u17-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -140,6 +156,7 @@ function toCloudTrainingSession(row: SessionRow): CloudTrainingSession {
   return {
     ...empty,
     id: row.id,
+    teamId: row.team_id || undefined,
     teamName: row.team_name || empty.teamName,
     date: row.date || empty.date,
     time: row.time || empty.time,
@@ -170,9 +187,11 @@ function toCloudTrainingSession(row: SessionRow): CloudTrainingSession {
 }
 
 function getRolePatch(role: SessionRole, session: TrainingSession, timestamp: number) {
+  const resolvedTeam = resolveTeamForSessionWrite(session);
   const shared = {
     id: session.id,
-    team_name: session.teamName,
+    team_id: resolvedTeam.teamId,
+    team_name: resolvedTeam.teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,
@@ -228,9 +247,11 @@ export function isSupabaseSessionsEnabled(): boolean {
 }
 
 function toSupabaseSessionRow(session: CloudTrainingSession): Record<string, unknown> {
+  const resolvedTeam = resolveTeamForSessionWrite(session);
   return {
     id: session.id,
-    team_name: session.teamName,
+    team_id: resolvedTeam.teamId,
+    team_name: resolvedTeam.teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,
@@ -309,10 +330,12 @@ export async function subscribeToSessionsSupabase(
   });
 
   const loadAndEmit = async () => {
-    const { data, error } = await client
+    let query = client
       .from(SESSIONS_TABLE)
       .select('*')
       .order('updated_at', { ascending: false });
+
+    const { data, error } = await query;
 
     if (error) {
       const errorSummary = error as unknown as { code?: unknown; message?: unknown; status?: unknown };

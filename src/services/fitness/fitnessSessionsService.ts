@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { FitnessSession, PlayerGroup, TrainingBlock } from '../../types';
+import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamSelectionStore';
 
 const FITNESS_SESSIONS_TABLE = 'fitness_sessions';
 const FITNESS_READ_RETRY_DELAY_MS = 1500;
@@ -62,6 +63,7 @@ type FitnessSessionRow = {
   id: string;
   session_uid: string;
   legacy_session_id: string | null;
+  team_id: string | null;
   team_name: string | null;
   date: string | null;
   time: string | null;
@@ -80,11 +82,35 @@ type FitnessSessionRow = {
   updated_at: number | null;
 };
 
+type SessionCatalogRow = {
+  session_uid: string;
+  session_number: string;
+  session_date: string;
+  source_legacy_session_id: string;
+  created_at: number;
+  updated_at: number;
+};
+
 function getClient() {
   if (!supabase) {
     throw new Error('Supabase client is not configured');
   }
   return supabase;
+}
+
+function resolveTeamForFitnessWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
+  const explicitTeamId = (session.teamId || '').trim();
+  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
+  const resolvedTeamId = explicitTeamId || selectedTeamId || null;
+
+  const explicitName = (session.teamName || '').trim();
+  const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
+  const resolvedTeamName = explicitName || catalogName || 'U17 Women Al Ula';
+
+  return {
+    teamId: resolvedTeamId,
+    teamName: resolvedTeamName
+  };
 }
 
 function defaultBlock(id: string, title: string): TrainingBlock {
@@ -101,7 +127,8 @@ function fromRow(row: FitnessSessionRow): FitnessSession {
     id: row.id,
     sessionUid,
     legacySessionId: row.legacy_session_id || undefined,
-    teamName: row.team_name || 'U17 Women Al Ula',
+    teamId: row.team_id || undefined,
+    teamName: row.team_name || '',
     date: row.date || new Date().toISOString().slice(0, 10),
     time: row.time || '18:30 - 20:00',
     sessionNumber: row.session_number || '001',
@@ -121,11 +148,13 @@ function fromRow(row: FitnessSessionRow): FitnessSession {
 }
 
 function toRow(session: FitnessSession, updatedAt: number): FitnessSessionRow {
+  const resolvedTeam = resolveTeamForFitnessWrite(session);
   return {
     id: session.id,
     session_uid: session.sessionUid,
     legacy_session_id: session.legacySessionId || null,
-    team_name: session.teamName,
+    team_id: resolvedTeam.teamId,
+    team_name: resolvedTeam.teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,
@@ -144,11 +173,35 @@ function toRow(session: FitnessSession, updatedAt: number): FitnessSessionRow {
   };
 }
 
+async function ensureSessionCatalogIdentity(session: FitnessSession, updatedAt: number): Promise<void> {
+  const sessionUid = session.sessionUid?.trim();
+  if (!sessionUid) {
+    throw new Error('Fitness session cannot be saved without a valid session UID.');
+  }
+
+  const sessionCatalogPayload: SessionCatalogRow = {
+    session_uid: sessionUid,
+    session_number: session.sessionNumber || '',
+    session_date: session.date,
+    source_legacy_session_id: session.legacySessionId || sessionUid,
+    created_at: session.createdAt || updatedAt,
+    updated_at: updatedAt
+  };
+
+  const { error } = await getClient()
+    .from('session_catalog')
+    .upsert(sessionCatalogPayload, { onConflict: 'session_uid' });
+
+  if (error) throw error;
+}
+
 async function listFitnessSessions(): Promise<FitnessSession[]> {
-  const { data, error } = await getClient()
+  const query = getClient()
     .from(FITNESS_SESSIONS_TABLE)
     .select('*')
     .order('updated_at', { ascending: false });
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return ((data || []) as FitnessSessionRow[]).map(fromRow);
@@ -214,6 +267,7 @@ export function subscribeToFitnessSessions(
 
 export async function saveFitnessSession(session: FitnessSession): Promise<number> {
   const updatedAt = Date.now();
+  await ensureSessionCatalogIdentity(session, updatedAt);
   const payload = toRow(session, updatedAt);
   const { error } = await getClient()
     .from(FITNESS_SESSIONS_TABLE)

@@ -24,7 +24,8 @@ import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../type
 import { AppUser } from '../services/auth/authService';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
-import { getUserAllowedSections, isUserAdmin } from '../utils/permissions';
+import { useAuthorization } from '../services/permissions/authorization';
+import { useTeamContext } from '../contexts/TeamContext';
 import { AdminPermissionsModal } from './AdminPermissionsModal';
 
 interface PortalHubProps {
@@ -61,8 +62,8 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [logoSuccessMessage, setLogoSuccessMessage] = useState('');
 
-  const allowedSections = getUserAllowedSections(currentUser?.email);
-  const userIsAdmin = isUserAdmin(currentUser?.email);
+  const { allowedSections, isAdmin: userIsAdmin } = useAuthorization(currentUser?.email);
+  const { availableTeams, selectedTeamId, setSelectedTeamId, isLoadingTeams } = useTeamContext();
 
   const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Closed').length;
   const activePlayersCount = squadPlayers.length || squadCount;
@@ -212,6 +213,25 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans select-none print:hidden">
       <div className="max-w-7xl mx-auto space-y-8">
+        <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Team Workspace Context</div>
+              <p className="text-xs text-slate-600 font-semibold">Optional context for team-related forms. Authorization is section-based.</p>
+            </div>
+            <select
+              value={selectedTeamId}
+              onChange={(event) => setSelectedTeamId(event.target.value)}
+              disabled={isLoadingTeams || availableTeams.length === 0}
+              className="min-w-[220px] bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-800"
+            >
+              <option value="">{isLoadingTeams ? 'Loading teams...' : 'Select team...'}</option>
+              {availableTeams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         
         {/* Top Al Ula Official Header Card */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">

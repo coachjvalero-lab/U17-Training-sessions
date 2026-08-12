@@ -27,6 +27,16 @@ Run SQL in this order from Supabase SQL Editor:
 4. supabase/phase2c_backfill_identity_from_user_roles.sql
 5. supabase/phase3_domain_schema.sql
 6. supabase/phase3_domain_rls.sql
+7. supabase/migrations/20260812_authorization_section_simplified_foundation.sql
+8. supabase/migrations/20260812_authorization_section_simplified_rls.sql
+9. supabase/migrations/20260812_admin_identity_user_management_section_only.sql
+
+Do NOT execute these superseded migrations for the section-only rollout:
+
+- supabase/migrations/20260812_authorization_canonical_model.sql
+- supabase/migrations/20260812_authorization_team_scope_rls.sql
+
+See details in supabase/SUPERSEDED_AUTH_MIGRATIONS.md.
 
 ## 2) Environment checks
 
@@ -82,7 +92,7 @@ Or run one by one:
 
 - login (supabase auth session exists)
 - logout
-- permissions load from public.user_roles
+- permissions load from public.user_section_access + public.app_sections
 - sessions read/write
 - squad read/create/edit/delete
 - attendance excluded players read/write
@@ -107,6 +117,26 @@ Firebase can be removed when all conditions are true:
 - RLS works for all migrated tables
 - realtime works for all required domains
 - data counts and ID checks are clean
+
+## 7) Section-only authorization checks
+
+- app_sections includes all active modules:
+  - football
+  - fitness
+  - gk
+  - squad
+  - attendance
+  - physio
+  - video
+  - exercises
+  - planning
+  - meetings
+- compare legacy vs new access via:
+  - select * from public.admin_compare_legacy_and_section_access();
+- conflict report review:
+  - select * from public.authorization_section_backfill_conflicts order by created_at desc;
+- frontend context RPC:
+  - select public.get_my_allowed_sections();
 
 After that:
 

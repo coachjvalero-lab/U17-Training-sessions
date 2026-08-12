@@ -6,6 +6,18 @@ export type AppUser = {
   email: string | null;
 };
 
+export type AdminAuthUserStatus = {
+  normalizedEmail: string;
+  authUserExists: boolean;
+  authUserId: string | null;
+  authEmail: string | null;
+  profileExists: boolean;
+  profileUserId: string | null;
+  sectionAccessCount: number;
+  isAdminUser: boolean;
+  isConsistent: boolean;
+};
+
 function getSupabaseOrThrow() {
   if (!supabase || !isSupabaseConfigured) {
     throw new Error('Supabase Auth is not configured.');
@@ -18,6 +30,20 @@ function normalizeUserEmail(usernameOrEmail: string): string {
   if (!clean) return '';
   if (clean.includes('@')) return clean;
   return `${clean}@alula.com`;
+}
+
+function toAdminStatus(raw: any): AdminAuthUserStatus {
+  return {
+    normalizedEmail: String(raw?.normalizedEmail || ''),
+    authUserExists: Boolean(raw?.authUserExists),
+    authUserId: raw?.authUserId ? String(raw.authUserId) : null,
+    authEmail: raw?.authEmail ? String(raw.authEmail) : null,
+    profileExists: Boolean(raw?.profileExists),
+    profileUserId: raw?.profileUserId ? String(raw.profileUserId) : null,
+    sectionAccessCount: Number(raw?.sectionAccessCount || 0),
+    isAdminUser: Boolean(raw?.isAdminUser),
+    isConsistent: Boolean(raw?.isConsistent)
+  };
 }
 
 function toAppUser(user: { id: string; email?: string | null } | null): AppUser | null {
@@ -119,4 +145,46 @@ export async function adminCreateUserAccount(emailOrUsername: string, pass: stri
   if (error) {
     throw error;
   }
+}
+
+export async function adminCheckAuthUserByEmail(emailOrUsername: string): Promise<AdminAuthUserStatus> {
+  const client = getSupabaseOrThrow();
+  const email = normalizeUserEmail(emailOrUsername);
+  if (!email) {
+    throw new Error('Email/username is required.');
+  }
+
+  const { data, error } = await client.rpc('admin_get_auth_user_status', {
+    target_email: email
+  });
+
+  if (error) throw error;
+  if (!data) {
+    throw new Error('Unable to resolve auth user status.');
+  }
+
+  return toAdminStatus(data);
+}
+
+export async function adminSyncIdentityProfilesForEmails(emails: string[]): Promise<void> {
+  const client = getSupabaseOrThrow();
+  const normalized = Array.from(
+    new Set(
+      emails
+        .map((item) => normalizeUserEmail(item))
+        .filter((item) => item.length > 0)
+    )
+  );
+
+  if (normalized.length === 0) return;
+
+  const { error } = await client.rpc('admin_sync_identity_profiles_for_emails', {
+    target_emails: normalized
+  });
+
+  if (error) throw error;
+}
+
+export async function adminSyncIdentityAuthorizationForEmails(emails: string[]): Promise<void> {
+  return adminSyncIdentityProfilesForEmails(emails);
 }
