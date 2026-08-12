@@ -31,6 +31,22 @@ export interface CloudSquadPlayer extends SquadPlayer {
   updatedAt: number;
 }
 
+export type EditableSquadPlayerPatch = {
+  firstName?: string;
+  lastName?: string;
+  number?: number | null;
+  position?: SquadPlayer['position'];
+  status?: SquadPlayer['status'];
+  notes?: string | null;
+  joinedDate?: string | null;
+  age?: number | null;
+  nationality?: string | null;
+  preferredFoot?: SquadPlayer['preferredFoot'] | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  photoUrl?: string | null;
+};
+
 function getClient() {
   if (!supabase) {
     throw new Error('Supabase client is not configured');
@@ -82,6 +98,26 @@ function toRow(player: SquadPlayer, updatedAt: number): SquadPlayerRow {
     malika_history: player.malikaHistory ?? [],
     updated_at: updatedAt
   };
+}
+
+function toEditablePatchRow(patch: EditableSquadPlayerPatch, updatedAt: number): Record<string, unknown> {
+  const row: Record<string, unknown> = { updated_at: updatedAt };
+
+  if (patch.firstName !== undefined) row.first_name = patch.firstName;
+  if (patch.lastName !== undefined) row.last_name = patch.lastName;
+  if (patch.number !== undefined) row.number = patch.number === null ? null : String(patch.number);
+  if (patch.position !== undefined) row.position = patch.position;
+  if (patch.status !== undefined) row.status = patch.status;
+  if (patch.notes !== undefined) row.notes = patch.notes;
+  if (patch.joinedDate !== undefined) row.joined_date = patch.joinedDate;
+  if (patch.age !== undefined) row.age = patch.age;
+  if (patch.nationality !== undefined) row.nationality = patch.nationality;
+  if (patch.preferredFoot !== undefined) row.preferred_foot = patch.preferredFoot;
+  if (patch.heightCm !== undefined) row.height_cm = patch.heightCm;
+  if (patch.weightKg !== undefined) row.weight_kg = patch.weightKg;
+  if (patch.photoUrl !== undefined) row.photo_url = normalizeSquadPhotoUrl(patch.photoUrl ?? undefined) ?? null;
+
+  return row;
 }
 
 async function listSquadPlayers(): Promise<CloudSquadPlayer[]> {
@@ -266,6 +302,36 @@ export function subscribeToSquadPlayers(
     }
     if (channel) void client.removeChannel(channel);
   };
+}
+
+export async function createSquadPlayer(player: SquadPlayer): Promise<number> {
+  const updatedAt = Date.now();
+  const { error } = await getClient()
+    .from(SQUAD_TABLE)
+    .insert(toRow(player, updatedAt));
+
+  if (error) {
+    console.error('[SUPABASE SQUAD] create failed', error);
+    throw error;
+  }
+
+  return updatedAt;
+}
+
+export async function updateSquadPlayer(playerId: string, patch: EditableSquadPlayerPatch): Promise<number> {
+  const updatedAt = Date.now();
+  const rowPatch = toEditablePatchRow(patch, updatedAt);
+  const { error } = await getClient()
+    .from(SQUAD_TABLE)
+    .update(rowPatch)
+    .eq('id', playerId);
+
+  if (error) {
+    console.error('[SUPABASE SQUAD] update failed', error);
+    throw error;
+  }
+
+  return updatedAt;
 }
 
 export async function saveSquadPlayer(player: SquadPlayer): Promise<number> {

@@ -32,7 +32,7 @@ import { updateSquadPlayerPhotoPath } from '../services/squad/squadService';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
-  onUpdatePlayers: (updated: SquadPlayer[]) => void;
+  onUpdatePlayers: (updated: SquadPlayer[]) => Promise<void>;
   session?: TrainingSession;
   cloudSessions?: CloudTrainingSession[];
   onChangeSession?: (fields: Partial<TrainingSession>) => void;
@@ -88,6 +88,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const [photoUploadError, setPhotoUploadError] = useState('');
   const [photoUploadSuccess, setPhotoUploadSuccess] = useState('');
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [isSavingPlayer, setIsSavingPlayer] = useState(false);
 
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
 
@@ -275,6 +277,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     setEditingPlayer(null);
     setPhotoUploadError('');
     setPhotoUploadSuccess('');
+    setSaveError('');
     setFormData({
       firstName: '',
       lastName: '',
@@ -295,6 +298,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     setEditingPlayer(player);
     setPhotoUploadError('');
     setPhotoUploadSuccess('');
+    setSaveError('');
     setFormData({
       firstName: player.firstName,
       lastName: player.lastName,
@@ -311,61 +315,85 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSavePlayer = (e: React.FormEvent) => {
+  const handleSavePlayer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName.trim() || !formData.lastName.trim()) return;
+    if (isSavingPlayer) return;
 
-    if (editingPlayer) {
-      const updated = players.map(p => 
-        p.id === editingPlayer.id 
-          ? {
-              ...p,
-              firstName: formData.firstName.trim(),
-              lastName: formData.lastName.trim(),
-              number: formData.number ? Number(formData.number) : undefined,
-              position: formData.position,
-              status: formData.status,
-              notes: formData.notes.trim(),
-              age: formData.age ? Number(formData.age) : undefined,
-              nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
-              preferredFoot: formData.preferredFoot,
-              heightCm: formData.heightCm ? Number(formData.heightCm) : undefined,
-              weightKg: formData.weightKg ? Number(formData.weightKg) : undefined
-            }
-          : p
-      );
-      onUpdatePlayers(updated);
-    } else {
-      const newPlayer: SquadPlayer = {
-        id: 'p-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        number: formData.number ? Number(formData.number) : undefined,
-        position: formData.position,
-        status: formData.status,
-        notes: formData.notes.trim(),
-        age: formData.age ? Number(formData.age) : 16,
-        nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
-        preferredFoot: formData.preferredFoot,
-        heightCm: formData.heightCm ? Number(formData.heightCm) : 168,
-        weightKg: formData.weightKg ? Number(formData.weightKg) : 56,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-      onUpdatePlayers([...players, newPlayer]);
+    setSaveError('');
+    setIsSavingPlayer(true);
+
+    try {
+      if (editingPlayer) {
+        const updated = players.map(p => 
+          p.id === editingPlayer.id 
+            ? {
+                ...p,
+                firstName: formData.firstName.trim(),
+                lastName: formData.lastName.trim(),
+                number: formData.number ? Number(formData.number) : undefined,
+                position: formData.position,
+                status: formData.status,
+                notes: formData.notes.trim(),
+                age: formData.age ? Number(formData.age) : undefined,
+                nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
+                preferredFoot: formData.preferredFoot,
+                heightCm: formData.heightCm ? Number(formData.heightCm) : undefined,
+                weightKg: formData.weightKg ? Number(formData.weightKg) : undefined
+              }
+            : p
+        );
+        await onUpdatePlayers(updated);
+      } else {
+        const newPlayer: SquadPlayer = {
+          id: 'p-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          number: formData.number ? Number(formData.number) : undefined,
+          position: formData.position,
+          status: formData.status,
+          notes: formData.notes.trim(),
+          age: formData.age ? Number(formData.age) : 16,
+          nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
+          preferredFoot: formData.preferredFoot,
+          heightCm: formData.heightCm ? Number(formData.heightCm) : 168,
+          weightKg: formData.weightKg ? Number(formData.weightKg) : 56,
+          joinedDate: new Date().toISOString().split('T')[0]
+        };
+        await onUpdatePlayers([...players, newPlayer]);
+      }
+
+      setIsModalOpen(false);
+    } catch (err) {
+      const error = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+      const parts = [
+        typeof error?.message === 'string' ? error.message : null,
+        typeof error?.details === 'string' ? error.details : null,
+        typeof error?.hint === 'string' ? error.hint : null,
+        typeof error?.code === 'string' ? `Code: ${error.code}` : null
+      ].filter(Boolean) as string[];
+
+      setSaveError(parts.length > 0 ? parts.join(' | ') : 'Could not save player. Please try again.');
+    } finally {
+      setIsSavingPlayer(false);
     }
-
-    setIsModalOpen(false);
   };
 
   const handleDeletePlayer = (id: string, name: string) => {
     if (confirm(`Are you sure you want to remove ${name} from the squad roster?`)) {
-      onUpdatePlayers(players.filter(p => p.id !== id));
+      void onUpdatePlayers(players.filter(p => p.id !== id)).catch((err) => {
+        const error = err as { message?: unknown };
+        alert(typeof error?.message === 'string' ? error.message : 'Could not delete player. Please try again.');
+      });
     }
   };
 
   const handleQuickStatusChange = (id: string, newStatus: SquadPlayer['status']) => {
     const updated = players.map(p => p.id === id ? { ...p, status: newStatus } : p);
-    onUpdatePlayers(updated);
+    void onUpdatePlayers(updated).catch((err) => {
+      const error = err as { message?: unknown };
+      alert(typeof error?.message === 'string' ? error.message : 'Could not update player status. Please try again.');
+    });
   };
 
   // Filter Logic
@@ -1201,6 +1229,12 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   </p>
                 )}
 
+                {saveError && (
+                  <p className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
+                    {saveError}
+                  </p>
+                )}
+
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1382,10 +1416,11 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl transition-colors shadow-md shadow-emerald-600/30 flex items-center space-x-1"
+                  disabled={isSavingPlayer}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-400 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-xl transition-colors shadow-md shadow-emerald-600/30 flex items-center space-x-1"
                 >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Player</span>
+                  {isSavingPlayer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>{isSavingPlayer ? 'Saving...' : 'Save Player'}</span>
                 </button>
               </div>
             </form>

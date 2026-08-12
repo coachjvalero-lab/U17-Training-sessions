@@ -37,8 +37,9 @@ import {
   type AppUser
 } from './services/auth/authService';
 import {
+  createSquadPlayer,
   deleteSquadPlayer,
-  saveSquadPlayer,
+  updateSquadPlayer,
   subscribeToSquadPlayers
 } from './services/squad/squadService';
 import { applyMalikaAwardsToSquad } from './services/squad/malikaService';
@@ -85,7 +86,6 @@ import {
   updateSessionGroupsByModule
 } from './modules/trainingModules';
 import { subscribeToFitnessSessions } from './services/fitness/fitnessSessionsService';
-import { resolveSquadPlayersForDisplay } from './utils/squadGrouping';
 import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
   deleteTrainingSession,
@@ -295,42 +295,25 @@ export default function App() {
     return computed;
   });
 
-  // Track whether the one-time squad roster migration attempt has settled, so an empty
-  // cloud collection while it's still in flight doesn't briefly flash an empty roster.
-  const hasSquadMigrationSettledRef = useRef(false);
-
   // Subscribe to the shared cloud squad roster in real time so every coach sees the same players.
   // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
-    hasSquadMigrationSettledRef.current = true;
-
     const unsubscribe = subscribeToSquadPlayers((cloudPlayers) => {
-      if (cloudPlayers.length === 0 && !hasSquadMigrationSettledRef.current) {
-        return;
-      }
-
       const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
-      setSquadPlayers((prev) => {
-        const resolved = normalizeSquadPlayerPhotos(resolveSquadPlayersForDisplay(list, prev));
-        const same = prev.length === resolved.length && prev.every((player, index) => {
-          const next = resolved[index];
-          return next && player.id === next.id && JSON.stringify(player) === JSON.stringify(next);
-        });
-
-        if (same) {
-          return prev;
-        }
-
-        try {
-          localStorage.setItem('u17_squad_players', JSON.stringify(resolved));
-        } catch (e) {
-          console.warn('Squad roster local cache warning:', e);
-        }
-
-        return resolved;
+      const resolved = normalizeSquadPlayerPhotos(list);
+      console.log('[Squad SYNC]', {
+        source: 'realtime/read',
+        count: resolved.length
       });
-    }, () => {
-      // Offline or subscription error: keep working with whatever is cached locally
+      setSquadPlayers(resolved);
+      try {
+        localStorage.setItem('u17_squad_players', JSON.stringify(resolved));
+      } catch (e) {
+        console.warn('Squad roster local cache warning:', e);
+      }
+    }, (error) => {
+      console.log('[Squad SYNC ERROR]', error);
+      // Keep current in-memory state on read/realtime errors.
     });
 
     return () => unsubscribe();
@@ -1112,7 +1095,7 @@ export default function App() {
     }));
   };
 
-  const handleUpdateSquadPlayers = (updated: SquadPlayer[]) => {
+  const handleUpdateSquadPlayers = async (updated: SquadPlayer[]) => {
     const previous = squadPlayers;
     const next = updated.map((player) => ({ ...player }));
     setSquadPlayers(next);
@@ -1120,23 +1103,77 @@ export default function App() {
       localStorage.setItem('u17_squad_players', JSON.stringify(next));
     } catch (e) {}
 
-    // Sync only what changed to Firestore (per-player docs), so simultaneous edits by different
-    // coaches never overwrite each other's changes to a different player.
+    // Persist squad changes to Supabase using explicit create/update/delete operations.
+    // Updates only send editable fields to avoid overwriting module-owned data.
     const previousById = new Map(previous.map(p => [p.id, p]));
     const updatedIds = new Set(updated.map(p => p.id));
+    const toNullableNumber = (value: SquadPlayer['number'] | null | undefined): number | null => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const persistOps: Promise<unknown>[] = [];
 
     next.forEach(player => {
       const prevPlayer = previousById.get(player.id);
-      if (!prevPlayer || JSON.stringify(prevPlayer) !== JSON.stringify(player)) {
-        saveSquadPlayer(player).catch(err => console.warn('Cloud save failed for squad player:', err));
+      if (!prevPlayer) {
+        persistOps.push(createSquadPlayer(player));
+        return;
+      }
+
+      const patch: {
+        firstName?: string;
+        lastName?: string;
+        number?: number | null;
+        position?: SquadPlayer['position'];
+        status?: SquadPlayer['status'];
+        notes?: string | null;
+        joinedDate?: string | null;
+        age?: number | null;
+        nationality?: string | null;
+        preferredFoot?: SquadPlayer['preferredFoot'] | null;
+        heightCm?: number | null;
+        weightKg?: number | null;
+        photoUrl?: string | null;
+      } = {};
+
+      if (prevPlayer.firstName !== player.firstName) patch.firstName = player.firstName;
+      if (prevPlayer.lastName !== player.lastName) patch.lastName = player.lastName;
+      const prevNumber = toNullableNumber(prevPlayer.number);
+      const nextNumber = toNullableNumber(player.number);
+      if (prevNumber !== nextNumber) patch.number = nextNumber;
+      if (prevPlayer.position !== player.position) patch.position = player.position;
+      if (prevPlayer.status !== player.status) patch.status = player.status;
+      if ((prevPlayer.notes ?? null) !== (player.notes ?? null)) patch.notes = player.notes ?? null;
+      if ((prevPlayer.joinedDate ?? null) !== (player.joinedDate ?? null)) patch.joinedDate = player.joinedDate ?? null;
+      if ((prevPlayer.age ?? null) !== (player.age ?? null)) patch.age = player.age ?? null;
+      if ((prevPlayer.nationality ?? null) !== (player.nationality ?? null)) patch.nationality = player.nationality ?? null;
+      if ((prevPlayer.preferredFoot ?? null) !== (player.preferredFoot ?? null)) patch.preferredFoot = player.preferredFoot ?? null;
+      if ((prevPlayer.heightCm ?? null) !== (player.heightCm ?? null)) patch.heightCm = player.heightCm ?? null;
+      if ((prevPlayer.weightKg ?? null) !== (player.weightKg ?? null)) patch.weightKg = player.weightKg ?? null;
+      if ((prevPlayer.photoUrl ?? null) !== (player.photoUrl ?? null)) patch.photoUrl = player.photoUrl ?? null;
+
+      if (Object.keys(patch).length > 0) {
+        persistOps.push(updateSquadPlayer(player.id, patch));
       }
     });
 
     previous.forEach(player => {
       if (!updatedIds.has(player.id)) {
-        deleteSquadPlayer(player.id).catch(err => console.warn('Cloud delete failed for squad player:', err));
+        persistOps.push(deleteSquadPlayer(player.id));
       }
     });
+
+    try {
+      await Promise.all(persistOps);
+    } catch (error) {
+      setSquadPlayers(previous);
+      try {
+        localStorage.setItem('u17_squad_players', JSON.stringify(previous));
+      } catch (e) {}
+      throw error;
+    }
 
     const formattedRoster = next.map(p => 
       p.position === 'GK' ? `${p.firstName} (GK)` : `${p.firstName} ${p.lastName}`
