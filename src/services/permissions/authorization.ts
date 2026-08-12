@@ -20,6 +20,8 @@ const EMPTY_CONTEXT: AuthorizationContext = {
 
 let cachedContext: AuthorizationContext = EMPTY_CONTEXT;
 let cachedForEmail: string | null = null;
+// Tracks in-flight RPC calls per email to prevent duplicate concurrent requests
+const pendingLoads = new Map<string, Promise<AuthorizationContext>>();
 
 function normalizeEmail(email?: string | null): string | null {
   const clean = (email || '').trim().toLowerCase();
@@ -52,12 +54,20 @@ async function loadAuthorizationContext(userEmail?: string | null): Promise<Auth
     return cachedContext;
   }
 
-  const { data, error } = await supabase.rpc('get_my_allowed_sections');
-  if (error) throw error;
+  // Return the existing in-flight promise if one is already running for this email
+  const existing = pendingLoads.get(normalizedEmail);
+  if (existing) return existing;
 
-  cachedContext = normalizeContext(data);
-  cachedForEmail = normalizedEmail;
-  return cachedContext;
+  const p = (async () => {
+    const { data, error } = await supabase.rpc('get_my_allowed_sections');
+    if (error) throw error;
+    cachedContext = normalizeContext(data);
+    cachedForEmail = normalizedEmail;
+    return cachedContext;
+  })().finally(() => pendingLoads.delete(normalizedEmail));
+
+  pendingLoads.set(normalizedEmail, p);
+  return p;
 }
 
 function canFromContext(
@@ -130,11 +140,11 @@ export function useAuthorization(userEmail?: string | null) {
 
   const allowedSections = useMemo(
     () => {
-      if (!context.userId) return [];
+      // Admin check comes first: isAdmin: true is only set by a successful authenticated RPC call
       if (context.isAdmin) {
         return ['football', 'fitness', 'gk', 'squad', 'attendance', 'physio', 'video', 'exercises', 'planning', 'meetings'] as PortalSection[];
       }
-
+      if (!context.userId) return [];
       return Array.from(new Set(context.sections));
     },
     [context]
