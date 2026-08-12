@@ -608,7 +608,7 @@ export default function App() {
   const [, setPermissionsSyncVersion] = useState(0);
 
   // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'offline-queued' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
@@ -1025,7 +1025,7 @@ export default function App() {
         if (cachedSessions.length > 0) {
           setCloudSessions(cachedSessions);
         }
-        setCloudSyncStatus({ status: 'offline-queued', message: 'Session subscription is temporarily unavailable.' });
+        setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
         console.warn('Sessions subscription is temporarily unavailable.');
       }
     );
@@ -1367,7 +1367,7 @@ export default function App() {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
         console.error('[handleSaveActiveToCloud] Cloud save failed:', cloudErr);
         setCloudSyncStatus({ status: 'error', message: `Session save failed (${errorCode})` });
-        alert(`Saved locally, pending upload to the cloud. Code: ${errorCode}`);
+        alert(`Session save failed. Code: ${errorCode}`);
       }
     } catch (error) {
       const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
@@ -1671,7 +1671,6 @@ export default function App() {
     const bannerConfig: Record<string, { text: string; className: string }> = {
       saving: { text: 'Saving to the cloud…', className: 'bg-slate-800 text-white' },
       retrying: { text: 'Cloud save failed, retrying…', className: 'bg-amber-500 text-slate-950' },
-      'offline-queued': { text: 'Saved locally, pending upload to the cloud.', className: 'bg-rose-600 text-white' },
       saved: { text: 'Saved to the cloud ✓', className: 'bg-emerald-500 text-slate-950' },
       error: { text: cloudSyncStatus.message || 'Error saving to the cloud', className: 'bg-rose-700 text-white' },
     };
