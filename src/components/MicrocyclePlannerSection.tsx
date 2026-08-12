@@ -193,14 +193,15 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     status: 'draft'
   });
 
+  const effectiveTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null;
+
   useEffect(() => {
-    const selectedTeam = teams.find((team) => team.id === selectedTeamId);
     setCreateInput((prev) => ({
       ...prev,
-      teamId: selectedTeam?.id || '',
-      teamName: selectedTeam?.name || ''
+      teamId: effectiveTeam?.id || prev.teamId || '',
+      teamName: effectiveTeam?.name || prev.teamName || ''
     }));
-  }, [selectedTeamId, teams]);
+  }, [effectiveTeam]);
 
   useEffect(() => {
     const unsubscribe = subscribeToMicrocycles(
@@ -305,8 +306,9 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const handleCreateNew = async () => {
     try {
-      if (!createInput.teamId.trim()) {
-        alert('Select an active team context before creating a microcycle.');
+      const team = teams.find((item) => item.id === createInput.teamId) ?? effectiveTeam;
+      if (!team) {
+        alert('No team is available for this microcycle.');
         return;
       }
       if (!can('planning')) {
@@ -316,6 +318,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
       const created = await createMicrocycle({
         ...createInput,
+        teamId: team.id,
+        teamName: team.name,
         name: createInput.name.trim() || `Microcycle ${createInput.weekNumber || ''}`.trim(),
         status: createInput.status || 'draft'
       });
@@ -1088,27 +1092,36 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">Team</span>
-                <select
-                  value={createInput.teamId}
-                  onChange={(e) => {
-                    const selectedId = e.target.value;
-                    const selectedTeam = teams.find((team) => team.id === selectedId);
-                    setCreateInput((prev) => ({
-                      ...prev,
-                      teamId: selectedId,
-                      teamName: selectedTeam?.name || ''
-                    }));
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
-                >
-                  <option value="">Select a team...</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>{team.name}</option>
-                  ))}
-                </select>
-              </label>
+              {teams.length > 1 ? (
+                <label className="space-y-1">
+                  <span className="text-xs font-bold text-slate-600">Team</span>
+                  <select
+                    value={createInput.teamId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const selectedTeam = teams.find((team) => team.id === selectedId);
+                      setCreateInput((prev) => ({
+                        ...prev,
+                        teamId: selectedId,
+                        teamName: selectedTeam?.name || ''
+                      }));
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  >
+                    <option value="">Select a team...</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-slate-600">Team</span>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700">
+                    {effectiveTeam?.name || 'Single team available'}
+                  </div>
+                </div>
+              )}
               <label className="space-y-1">
                 <span className="text-xs font-bold text-slate-600">Duplicate from current</span>
                 <button

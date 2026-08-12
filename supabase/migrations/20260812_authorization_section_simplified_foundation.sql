@@ -185,7 +185,7 @@ select distinct
   up.user_id,
   sec.id,
   now(),
-  null
+  null::uuid
 from public.user_roles ur
 join public.user_profiles up
   on lower(trim(up.email)) = lower(trim(ur.email))

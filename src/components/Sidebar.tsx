@@ -216,25 +216,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      <div className="bg-[#001428] border border-slate-700 rounded-2xl p-2.5 space-y-1.5">
-        <div className="text-[10px] font-black uppercase tracking-wider text-sky-200/70">Team Workspace Context</div>
-        <select
-          value={selectedTeamId}
-          onChange={(event) => setSelectedTeamId(event.target.value)}
-          disabled={isLoadingTeams || availableTeams.length === 0}
-          className="w-full bg-[#001d39] border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-100"
-        >
-          <option value="">{isLoadingTeams ? 'Loading teams...' : 'Select team...'}</option>
-          {availableTeams.map((team) => (
-            <option key={team.id} value={team.id}>{team.name}</option>
-          ))}
-        </select>
-        {availableTeams.length > 1 && !selectedTeamId && (
-          <div className="text-[10px] text-amber-300 font-semibold">
-            Optional: select a team to prefill team-related forms.
-          </div>
-        )}
-      </div>
 
       {/* Navigation Section Tabs */}
       <div className="space-y-1">
