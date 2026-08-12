@@ -129,7 +129,7 @@ function createDaysFromRange(startDate: string, endDate: string): MicrocycleDay[
   let cursor = new Date(start);
   let order = 0;
 
-  while (cursor <= end && order < 14) {
+  while (cursor <= end) {
     const base = createMicrocycleDayTemplate(startDate, order);
     const iso = cursor.toISOString().slice(0, 10);
     base.dayDate = iso;
@@ -140,6 +140,33 @@ function createDaysFromRange(startDate: string, endDate: string): MicrocycleDay[
   }
 
   return days;
+}
+
+function reconcileDaysForRange(draft: Microcycle): Microcycle {
+  const templateDays = createDaysFromRange(draft.startDate, draft.endDate);
+  const existingByDate = new Map(draft.days.map((day) => [day.dayDate, day]));
+
+  return {
+    ...draft,
+    days: templateDays.map((templateDay) => {
+      const existing = existingByDate.get(templateDay.dayDate);
+      if (!existing) {
+        return {
+          ...templateDay,
+          microcycleId: draft.id
+        };
+      }
+
+      return {
+        ...deepClone(existing),
+        id: existing.id,
+        microcycleId: draft.id,
+        dayOrder: templateDay.dayOrder,
+        dayDate: templateDay.dayDate,
+        dayLabel: templateDay.dayLabel
+      };
+    })
+  };
 }
 
 export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> = ({
@@ -211,6 +238,19 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     return unsubscribe;
   }, [isDirty, selectedMicrocycleId]);
 
+  useEffect(() => {
+    if (!draft) return;
+
+    const expectedDates = createDaysFromRange(draft.startDate, draft.endDate).map((day) => day.dayDate).join('|');
+    const currentDates = draft.days.map((day) => day.dayDate).join('|');
+    if (expectedDates === currentDates) return;
+
+    const reconciled = reconcileDaysForRange(draft);
+    if (reconciled.days.length !== draft.days.length || reconciled.days.some((day, index) => day.dayDate !== draft.days[index]?.dayDate)) {
+      updateDraft(reconciled);
+    }
+  }, [draft?.startDate, draft?.endDate]);
+
   const filteredHistory = useMemo(() => {
     return microcycles.filter((microcycle) => {
       const dateMatch = !filters.date || microcycle.days.some((day) => day.dayDate === filters.date);
@@ -240,12 +280,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     const map = new Map<string, CloudTrainingSession[]>();
 
     draft.days.forEach((day) => {
-      const sessions = cloudSessions.filter((session) => {
-        const sameDate = session.date === day.dayDate;
-        const sameTeam = (session.teamName || '').toLowerCase() === (draft.teamName || '').toLowerCase();
-        return sameDate && sameTeam;
-      });
-      map.set(day.id, sessions);
+      map.set(day.id, cloudSessions);
     });
 
     return map;
