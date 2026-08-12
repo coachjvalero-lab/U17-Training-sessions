@@ -1762,31 +1762,6 @@ export default function App() {
     );
   }
 
-  // Standalone Portal Navigation Hub View (No sidebar, clean light layout)
-  if (activeSection === 'hub') {
-    return (
-      <TeamProvider userEmail={currentUser?.email ?? null}>
-        <>
-          <PortalHub
-            onSelectSection={setActiveSection}
-            squadCount={squadPlayersWithStats.length}
-            activeSessionDate={session.date}
-            totalExercisesCount={libraryCount}
-            squadPlayers={squadPlayersWithStats}
-            physioRecords={physioRecords}
-            videoSessions={videoSessions}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-            currentLogo={teamLogo}
-            onUpdateLogo={handleUpdateTeamLogo}
-          />
-          {renderThemeToggle()}
-          {renderSyncBanner()}
-        </>
-      </TeamProvider>
-    );
-  }
-
   return (
     <TeamProvider userEmail={currentUser?.email ?? null}>
       <div className="min-h-screen bg-slate-100 text-slate-800 font-sans flex flex-col md:flex-row print:block print:bg-white">
@@ -1816,8 +1791,25 @@ export default function App() {
         />
 
         {/* Main Content Workspace Area */}
-        <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
-        {activeSection === 'squad' || activeSection === 'attendance' ? (
+        {activeSection === 'hub' ? (
+          <div className="flex-1 min-w-0">
+            <PortalHub
+              onSelectSection={setActiveSection}
+              squadCount={squadPlayersWithStats.length}
+              activeSessionDate={session.date}
+              totalExercisesCount={libraryCount}
+              squadPlayers={squadPlayersWithStats}
+              physioRecords={physioRecords}
+              videoSessions={videoSessions}
+              currentUser={currentUser}
+              onLogout={handleLogout}
+              currentLogo={teamLogo}
+              onUpdateLogo={handleUpdateTeamLogo}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
+          {activeSection === 'squad' || activeSection === 'attendance' ? (
           <SquadRosterSection
             players={squadPlayersWithStats}
             onUpdatePlayers={handleUpdateSquadPlayers}
@@ -2107,7 +2099,8 @@ export default function App() {
           </div>
         </footer>
 
-        </div>
+          </div>
+        )}
       </div>
     </TeamProvider>
   );
