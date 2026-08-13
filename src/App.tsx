@@ -1493,6 +1493,26 @@ export default function App() {
       // New sessions are created through the same modular save pipeline as any other save.
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, newSession);
+        const cloudSession: CloudTrainingSession = {
+          ...newSession,
+          updatedAt: savedTime,
+          footballUpdatedAt: role === 'football' ? savedTime : undefined,
+          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
+          gkUpdatedAt: role === 'gk' ? savedTime : undefined,
+        };
+
+        setCloudSessions((prev) => {
+          const withoutDuplicate = prev.filter((item) => item.id !== newSession.id);
+          return [cloudSession, ...withoutDuplicate];
+        });
+
+        try {
+          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
+            cloudSession,
+            ...cloudSessions.filter((item) => item.id !== newSession.id)
+          ]));
+        } catch (e) {}
+
         initializeSessionSyncState(newSession, {
           global: savedTime,
           football: role === 'football' ? savedTime : 0,
