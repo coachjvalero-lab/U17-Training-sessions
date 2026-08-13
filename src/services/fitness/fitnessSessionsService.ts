@@ -6,6 +6,8 @@ import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamS
 const FITNESS_SESSIONS_TABLE = 'fitness_sessions';
 const FITNESS_READ_RETRY_DELAY_MS = 1500;
 const FITNESS_MAX_READ_RETRIES = 1;
+const DEFAULT_FITNESS_TEAM_ID = 'u17-women-alula';
+const DEFAULT_FITNESS_TEAM_NAME = 'U17 Women Al Ula';
 
 function createFitnessRealtimeChannelName(): string {
   return `u17-fitness-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -101,11 +103,11 @@ function getClient() {
 function resolveTeamForFitnessWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
   const explicitTeamId = (session.teamId || '').trim();
   const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
-  const resolvedTeamId = explicitTeamId || selectedTeamId || null;
+  const resolvedTeamId = explicitTeamId || selectedTeamId || DEFAULT_FITNESS_TEAM_ID;
 
   const explicitName = (session.teamName || '').trim();
   const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
-  const resolvedTeamName = explicitName || catalogName || 'U17 Women Al Ula';
+  const resolvedTeamName = explicitName || catalogName || DEFAULT_FITNESS_TEAM_NAME;
 
   return {
     teamId: resolvedTeamId,

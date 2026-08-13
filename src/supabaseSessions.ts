@@ -1,7 +1,7 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession, TrainingSession } from './types';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
-import { getSelectedTeamIdSnapshot, getTeamNameById } from './services/permissions/teamSelectionStore';
+import { resolveTeamForSessionWrite } from './utils/sessionTeam';
 import { isNoContentSuccess } from './utils/supabaseNoContent';
 
 type SessionRole = 'football' | 'fitness' | 'gk';
@@ -38,21 +38,6 @@ type SessionRow = {
 };
 
 const SESSIONS_TABLE = 'sessions';
-function resolveTeamForSessionWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
-  const explicitTeamId = (session.teamId || '').trim();
-  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
-  const resolvedTeamId = explicitTeamId || selectedTeamId || null;
-
-  const explicitName = (session.teamName || '').trim();
-  const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
-  const resolvedTeamName = explicitName || catalogName || 'U17 Women Al Ula';
-
-  return {
-    teamId: resolvedTeamId,
-    teamName: resolvedTeamName
-  };
-}
-
 function createSessionsRealtimeChannelName(): string {
   return `u17-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -3,8 +3,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export type DataProvider = 'supabase';
 export type BackendProvider = 'supabase';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const env = typeof import.meta !== 'undefined' && import.meta && 'env' in import.meta ? import.meta.env : {};
+const supabaseUrl = (env as Record<string, string | undefined>).VITE_SUPABASE_URL;
+const supabaseAnonKey = (env as Record<string, string | undefined>).VITE_SUPABASE_ANON_KEY;
 
 export function getDataProvider(): DataProvider {
   return 'supabase';
