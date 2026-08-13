@@ -35,7 +35,7 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight">Planification & Microcycle</h1>
             <p className="text-xs text-sky-200 mt-1">
-              Weekly microcycle history, editable day planning, session linkage, and squad availability.
+              Weekly microcycle board, editable day planning, session linkage, and squad availability.
             </p>
           </div>
 

@@ -276,8 +276,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     });
   }, [filters, microcycles]);
 
-  const selectedIndex = useMemo(() => filteredHistory.findIndex((row) => row.id === selectedMicrocycleId), [filteredHistory, selectedMicrocycleId]);
-  const selectedInAllIndex = useMemo(() => microcycles.findIndex((row) => row.id === selectedMicrocycleId), [microcycles, selectedMicrocycleId]);
+  const selectedIndex = useMemo(() => microcycles.findIndex((row) => row.id === selectedMicrocycleId), [microcycles, selectedMicrocycleId]);
 
   const selectedLinkedSessionsByDate = useMemo(() => {
     if (!draft) return new Map<string, CloudTrainingSession[]>();
@@ -414,8 +413,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   };
 
   const handleDuplicatePrevious = async () => {
-    if (selectedInAllIndex === -1) return;
-    const source = microcycles[selectedInAllIndex + 1];
+    if (selectedIndex === -1) return;
+    const source = microcycles[selectedIndex + 1];
     if (!source) {
       alert('No previous microcycle available to duplicate.');
       return;
@@ -508,7 +507,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const setPreviousOrNext = (direction: -1 | 1) => {
     if (selectedIndex === -1) return;
-    const next = filteredHistory[selectedIndex + direction];
+    const next = microcycles[selectedIndex + direction];
     if (!next) return;
     selectMicrocycle(next.id);
   };
@@ -591,10 +590,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     return cloudSessions.find((session) => session.id === sessionId) || null;
   };
 
-  const historyCounterLabel = `${filteredHistory.length} of ${microcycles.length}`;
-
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-5 pb-10">
+    <div className="space-y-5 pb-10">
       <datalist id="load-list">
         {LOAD_SUGGESTIONS.map((item) => (
           <option key={item} value={item} />
@@ -611,88 +608,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         ))}
       </datalist>
 
-      <aside className="bg-[#002142] rounded-3xl border border-slate-800 p-4 text-white h-fit xl:sticky xl:top-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-black uppercase tracking-wide">Microcycle History</h2>
-            <p className="text-[11px] text-sky-200 mt-0.5">{historyCounterLabel}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-            <input
-              value={filters.concept}
-              onChange={(e) => setFilters((prev) => ({ ...prev, concept: e.target.value }))}
-              placeholder="Search concept"
-              className="w-full bg-slate-900/70 border border-slate-700 rounded-lg pl-8 pr-2.5 py-2 text-xs"
-            />
-          </div>
-          <input
-            type="date"
-            value={filters.date}
-            onChange={(e) => setFilters((prev) => ({ ...prev, date: e.target.value }))}
-            className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 text-xs"
-          />
-          <input
-            value={filters.weekNumber}
-            onChange={(e) => setFilters((prev) => ({ ...prev, weekNumber: e.target.value }))}
-            placeholder="Week number"
-            className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 text-xs"
-          />
-          <input
-            value={filters.sessionType}
-            onChange={(e) => setFilters((prev) => ({ ...prev, sessionType: e.target.value }))}
-            placeholder="Session type"
-            className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 text-xs"
-          />
-          <input
-            value={filters.load}
-            onChange={(e) => setFilters((prev) => ({ ...prev, load: e.target.value }))}
-            placeholder="Load"
-            className="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-2.5 py-2 text-xs"
-          />
-        </div>
-
-        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-          {filteredHistory.map((item) => {
-            const selected = item.id === selectedMicrocycleId;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => selectMicrocycle(item.id)}
-                className={`w-full text-left p-3 rounded-xl border transition-colors ${
-                  selected
-                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
-                    : 'bg-slate-900/70 border-slate-700 text-slate-200 hover:border-slate-500'
-                }`}
-              >
-                <div className="text-xs font-black">{item.name}</div>
-                <div className="text-[11px] text-slate-300 mt-1">
-                  W{item.weekNumber || '-'} • {item.startDate} to {item.endDate}
-                </div>
-                <div className="text-[10px] uppercase mt-1.5 tracking-wide text-slate-400">{item.status}</div>
-              </button>
-            );
-          })}
-          {filteredHistory.length === 0 && (
-            <div className="text-xs text-slate-300 bg-slate-900/60 border border-slate-700 rounded-xl p-3">
-              No microcycles match the current filters.
-            </div>
-          )}
-        </div>
-      </aside>
-
       <section className="space-y-4">
         {!draft && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-600">
@@ -702,38 +617,40 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
         {draft && (
           <>
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-5 shadow-sm sticky top-2 z-30">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-2">
+            <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <input
                       value={draft.name}
                       onChange={(e) => updateDraft({ ...draft, name: e.target.value })}
-                      className="text-lg font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5"
+                      className="w-full max-w-[420px] text-2xl md:text-3xl font-black tracking-tight text-slate-900 bg-transparent border-0 border-b-2 border-slate-200 focus:border-slate-900 focus:ring-0 px-0 py-1"
                     />
-                    <span className="px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600">
+                    <span className="px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">
                       {draft.status}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
                     <input
                       type="number"
                       placeholder="Week"
                       value={draft.weekNumber || ''}
                       onChange={(e) => updateDraft({ ...draft, weekNumber: e.target.value ? Number(e.target.value) : undefined })}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                      className="w-20 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700"
                     />
                     <input
                       type="date"
                       value={draft.startDate}
                       onChange={(e) => updateDraft({ ...draft, startDate: e.target.value })}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
                     />
+                    <span className="text-slate-400 font-bold">to</span>
                     <input
                       type="date"
                       value={draft.endDate}
                       onChange={(e) => updateDraft({ ...draft, endDate: e.target.value })}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
                     />
                     <select
                       value={draft.teamId}
@@ -746,7 +663,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                           teamName: selectedTeam?.name || draft.teamName
                         });
                       }}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                      className="min-w-[190px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
                     >
                       <option value="">Select team...</option>
                       {teams.map((team) => (
@@ -758,7 +675,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                       placeholder="Team total"
                       value={draft.teamTotal || ''}
                       onChange={(e) => updateDraft({ ...draft, teamTotal: e.target.value ? Number(e.target.value) : undefined })}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                      className="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
                     />
                   </div>
                 </div>
@@ -766,9 +683,17 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsCreateOpen(true)}
+                    className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New Week
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setPreviousOrNext(1)}
                     disabled={selectedIndex <= 0}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                     Previous
@@ -776,8 +701,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   <button
                     type="button"
                     onClick={() => setPreviousOrNext(-1)}
-                    disabled={selectedIndex === -1 || selectedIndex >= filteredHistory.length - 1}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+                    disabled={selectedIndex === -1 || selectedIndex >= microcycles.length - 1}
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
                   >
                     Next
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -785,7 +710,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   <button
                     type="button"
                     onClick={handleDuplicateCurrent}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     Duplicate
@@ -793,7 +718,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   <button
                     type="button"
                     onClick={handleDuplicatePrevious}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     Duplicate Previous
@@ -811,14 +736,14 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                       });
                       updateDraft(next);
                     }}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700"
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700"
                   >
                     Regenerate Week Days
                   </button>
                   <button
                     type="button"
                     onClick={handleDeleteCurrent}
-                    className="px-3 py-2 rounded-lg border border-rose-300 text-xs font-bold text-rose-700 inline-flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl border border-rose-300 text-xs font-bold text-rose-700 inline-flex items-center gap-1"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete
@@ -827,7 +752,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                     type="button"
                     disabled={!isDirty || isSaving}
                     onClick={handleSave}
-                    className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-black disabled:opacity-40 inline-flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black disabled:opacity-40 inline-flex items-center gap-1"
                   >
                     <Save className="w-3.5 h-3.5" />
                     {isSaving ? 'Saving...' : 'Save'}
@@ -835,33 +760,38 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                 </div>
               </div>
 
-              <div className="mt-3 text-xs font-semibold">
+              <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
+                <span>Weekly board view</span>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span>{draft.teamName}</span>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span>{draft.days.length} days</span>
                 {isDirty && <span className="text-amber-700">Unsaved changes</span>}
                 {!isDirty && saveStatus === 'saved' && <span className="text-emerald-700">Saved</span>}
                 {saveStatus === 'error' && <span className="text-rose-700">Save failed: {saveError}</span>}
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-[1250px] w-full border-collapse text-xs">
+                <table className="min-w-[1320px] w-full border-collapse text-xs table-fixed">
                   <thead>
                     <tr className="bg-slate-100 border-b border-slate-200">
-                      <th className="sticky left-0 z-20 bg-slate-100 text-left px-3 py-2.5 font-black uppercase tracking-wide text-slate-600 min-w-[210px]">
+                      <th className="sticky left-0 z-20 bg-slate-100 text-left px-3 py-3 font-black uppercase tracking-wide text-slate-600 w-[220px]">
                         Planning Category
                       </th>
                       {draft.days.map((day) => (
-                        <th key={day.id} className="px-3 py-2.5 text-left border-l border-slate-200 min-w-[185px]">
-                          <div className="font-black text-slate-800">{day.dayLabel || 'Day'}</div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">{day.dayDate}</div>
+                        <th key={day.id} className="px-3 py-3 text-left border-l border-slate-200 w-[157px] align-bottom">
+                          <div className="font-black text-slate-800 text-sm">{day.dayLabel || 'Day'}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 font-medium">{day.dayDate}</div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {DAY_FIELDS.map((row) => (
-                      <tr key={row.key} className="align-top border-b border-slate-100">
-                        <td className="sticky left-0 z-10 bg-white px-3 py-2 font-bold text-slate-700 border-r border-slate-100">
+                    {DAY_FIELDS.map((row, rowIndex) => (
+                      <tr key={row.key} className={`align-top border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                        <td className="sticky left-0 z-10 bg-inherit px-3 py-2.5 font-bold text-slate-700 border-r border-slate-100 align-top">
                           {row.label}
                         </td>
                         {draft.days.map((day) => {
@@ -870,7 +800,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
                           if (row.type === 'sessionLink') {
                             return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100">
+                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
                                 <select
                                   value={day.sessionId || ''}
                                   onChange={(e) => setDayValue(day.id, 'sessionId', e.target.value)}
@@ -906,7 +836,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
                           if (row.type === 'concepts') {
                             return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5">
+                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
                                 {day.concepts.map((concept) => (
                                   <div key={concept.id} className="flex items-center gap-1.5">
                                     <input
@@ -938,7 +868,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
                           if (row.type === 'objectives') {
                             return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5">
+                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
                                 {day.concepts.length === 0 && (
                                   <div className="text-[11px] text-slate-400">Add a concept first</div>
                                 )}
@@ -959,7 +889,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                           if (row.type === 'textarea') {
                             const field = row.key as keyof MicrocycleDay;
                             return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100">
+                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
                                 <textarea
                                   rows={2}
                                   value={String((day as any)[field] || '')}
@@ -972,7 +902,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
                           const field = row.key as keyof MicrocycleDay;
                           return (
-                            <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100">
+                            <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
                               <input
                                 type={field === 'dayDate' ? 'date' : 'text'}
                                 list={row.listId}
@@ -990,7 +920,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
+            <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-emerald-700" />
                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Squad Availability</h3>
