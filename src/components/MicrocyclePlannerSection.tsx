@@ -28,7 +28,6 @@ import {
   subscribeToMicrocycles,
   type CreateMicrocycleInput
 } from '../services/planning/microcycleService';
-import { can } from '../services/permissions/authorization';
 import { useTeamContext } from '../contexts/TeamContext';
 import { classifySupabaseError } from '../services/supabaseError';
 
@@ -193,15 +192,19 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     status: 'draft'
   });
 
-  const effectiveTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? null;
+  const defaultSingleTeam = useMemo(() => ({
+    id: 'u17-women-alula',
+    name: 'U17 Women Al Ula'
+  }), []);
+  const effectiveTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? defaultSingleTeam;
 
   useEffect(() => {
     setCreateInput((prev) => ({
       ...prev,
-      teamId: effectiveTeam?.id || prev.teamId || '',
-      teamName: effectiveTeam?.name || prev.teamName || ''
+      teamId: effectiveTeam?.id || prev.teamId || defaultSingleTeam.id,
+      teamName: effectiveTeam?.name || prev.teamName || defaultSingleTeam.name
     }));
-  }, [effectiveTeam]);
+  }, [effectiveTeam, defaultSingleTeam]);
 
   useEffect(() => {
     const unsubscribe = subscribeToMicrocycles(
@@ -311,10 +314,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         alert('No team is available for this microcycle.');
         return;
       }
-      if (!can('planning')) {
-        alert('You are not authorized to create planning data for this team.');
-        return;
-      }
 
       const created = await createMicrocycle({
         ...createInput,
@@ -362,11 +361,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   const handleDuplicateCurrent = async () => {
     if (!draft) return;
     try {
-      if (!can('planning')) {
-        alert('You are not authorized to duplicate planning data for this team.');
-        return;
-      }
-
       const created = await createMicrocycle({
         teamId: draft.teamId,
         teamName: draft.teamName,
@@ -428,11 +422,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     }
 
     try {
-      if (!can('planning')) {
-        alert('You are not authorized to duplicate planning data for this team.');
-        return;
-      }
-
       const created = await createMicrocycle({
         teamId: source.teamId,
         teamName: source.teamName,
@@ -486,10 +475,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const handleDeleteCurrent = async () => {
     if (!draft) return;
-    if (!can('planning')) {
-      alert('You are not authorized to delete planning data for this team.');
-      return;
-    }
     const shouldDelete = window.confirm(`Delete ${draft.name}? This cannot be undone.`);
     if (!shouldDelete) return;
 
@@ -505,11 +490,6 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const handleSave = async () => {
     if (!draft) return;
-    if (!can('planning')) {
-      setSaveStatus('error');
-      setSaveError('Authorization denied for planning section.');
-      return;
-    }
 
     try {
       setIsSaving(true);

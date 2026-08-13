@@ -8,6 +8,15 @@ import {
   setTeamCatalogSnapshot
 } from '../services/permissions/teamSelectionStore';
 
+const DEFAULT_SINGLE_TEAM_ID = 'u17-women-alula';
+const DEFAULT_SINGLE_TEAM_NAME = 'U17 Women Al Ula';
+
+const DEFAULT_SINGLE_TEAM: AuthorizationTeam = {
+  id: DEFAULT_SINGLE_TEAM_ID,
+  name: DEFAULT_SINGLE_TEAM_NAME,
+  isActive: true
+};
+
 type TeamContextValue = {
   availableTeams: AuthorizationTeam[];
   selectedTeamId: string;
@@ -33,17 +42,17 @@ function normalizeEmail(email?: string | null): string {
 
 export function TeamProvider({ userEmail, children }: TeamProviderProps) {
   const normalizedEmail = normalizeEmail(userEmail);
-  const [availableTeams, setAvailableTeams] = useState<AuthorizationTeam[]>([]);
-  const [selectedTeamId, setSelectedTeamIdState] = useState<string>(() => getSelectedTeamIdSnapshot() || '');
+  const [availableTeams, setAvailableTeams] = useState<AuthorizationTeam[]>([DEFAULT_SINGLE_TEAM]);
+  const [selectedTeamId, setSelectedTeamIdState] = useState<string>(() => getSelectedTeamIdSnapshot() || DEFAULT_SINGLE_TEAM_ID);
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
 
   useEffect(() => {
     let active = true;
 
     if (!normalizedEmail) {
-      setAvailableTeams([]);
-      setSelectedTeamIdState('');
-      setSelectedTeamIdSnapshot(null);
+      setAvailableTeams([DEFAULT_SINGLE_TEAM]);
+      setSelectedTeamIdState(DEFAULT_SINGLE_TEAM_ID);
+      setSelectedTeamIdSnapshot(DEFAULT_SINGLE_TEAM_ID);
       setIsLoadingTeams(false);
       return;
     }
@@ -54,7 +63,7 @@ export function TeamProvider({ userEmail, children }: TeamProviderProps) {
       .then((rows) => {
         if (!active) return;
 
-        const filtered = rows;
+        const filtered = rows.length > 0 ? rows : [DEFAULT_SINGLE_TEAM];
 
         setAvailableTeams(filtered);
         setTeamCatalogSnapshot(filtered.map((team) => ({ id: team.id, name: team.name })));
@@ -79,16 +88,20 @@ export function TeamProvider({ userEmail, children }: TeamProviderProps) {
           return;
         }
 
-        setSelectedTeamIdState('');
-        setSelectedTeamIdSnapshot(null);
-        persistSelectedTeamId(normalizedEmail, null);
+        setSelectedTeamIdState(DEFAULT_SINGLE_TEAM_ID);
+        setSelectedTeamIdSnapshot(DEFAULT_SINGLE_TEAM_ID);
+        persistSelectedTeamId(normalizedEmail, DEFAULT_SINGLE_TEAM_ID);
       })
       .catch((error) => {
         console.error('[TeamContext] Failed loading teams', error);
         if (!active) return;
-        setAvailableTeams([]);
-        setSelectedTeamIdState('');
-        setSelectedTeamIdSnapshot(null);
+        const fallbackTeams = [DEFAULT_SINGLE_TEAM];
+        setAvailableTeams(fallbackTeams);
+        setSelectedTeamIdState(DEFAULT_SINGLE_TEAM_ID);
+        setSelectedTeamIdSnapshot(DEFAULT_SINGLE_TEAM_ID);
+        if (normalizedEmail) {
+          persistSelectedTeamId(normalizedEmail, DEFAULT_SINGLE_TEAM_ID);
+        }
       })
       .finally(() => {
         if (active) setIsLoadingTeams(false);

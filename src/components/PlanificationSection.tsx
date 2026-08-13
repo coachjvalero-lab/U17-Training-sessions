@@ -3,7 +3,6 @@ import { BarChart3, CalendarDays } from 'lucide-react';
 import type { CloudTrainingSession, SquadPlayer, TrainingSession } from '../types';
 import { MicrocyclePlannerSection } from './MicrocyclePlannerSection';
 import { PlanificationAnalyticsSection } from './PlanificationAnalyticsSection';
-import { can } from '../services/permissions/authorization';
 
 interface PlanificationSectionProps {
   session: TrainingSession;
@@ -19,7 +18,7 @@ export const PlanificationSection: React.FC<PlanificationSectionProps> = ({
   onOpenSession
 }) => {
   const [view, setView] = useState<'planner' | 'analytics'>('planner');
-  const hasPlanningRead = can('planning');
+  const hasPlanningRead = true;
 
   if (!hasPlanningRead) {
     return (
