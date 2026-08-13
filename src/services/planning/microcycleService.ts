@@ -13,6 +13,7 @@ const MICROCYCLES_TABLE = 'microcycles';
 const MICROCYCLE_DAYS_TABLE = 'microcycle_days';
 const MICROCYCLE_CONCEPTS_TABLE = 'microcycle_day_concepts';
 const MICROCYCLE_AVAILABILITY_TABLE = 'microcycle_player_availability';
+const MICROCYCLE_LOCAL_STORAGE_KEY = 'u17_microcycles_cache_v1';
 
 type MicrocycleRow = {
   id: string;
@@ -257,27 +258,56 @@ export function createMicrocycleDayTemplate(startDate: string, dayOrder: number)
   };
 }
 
-export async function listMicrocycles(teamId?: string | null): Promise<Microcycle[]> {
-  let query = getClient()
-    .from(MICROCYCLES_TABLE)
-    .select(`
-      *,
-      microcycle_days (
-        *,
-        microcycle_day_concepts (*)
-      ),
-      microcycle_player_availability (*)
-    `)
-    .order('start_date', { ascending: false });
+function readLocalMicrocycles(): Microcycle[] {
+  if (typeof window === 'undefined') return [];
 
-  if (teamId && teamId.trim()) {
-    query = query.eq('team_id', teamId.trim());
+  try {
+    const raw = window.localStorage.getItem(MICROCYCLE_LOCAL_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('[microcycleService] failed reading local microcycles cache', error);
+    return [];
   }
+}
 
-  const { data, error } = await query;
+function writeLocalMicrocycles(rows: Microcycle[]): void {
+  if (typeof window === 'undefined') return;
 
-  if (error) throw error;
-  return ((data || []) as MicrocycleRow[]).map(toMicrocycle);
+  try {
+    window.localStorage.setItem(MICROCYCLE_LOCAL_STORAGE_KEY, JSON.stringify(rows));
+  } catch (error) {
+    console.warn('[microcycleService] failed writing local microcycles cache', error);
+  }
+}
+
+export async function listMicrocycles(teamId?: string | null): Promise<Microcycle[]> {
+  try {
+    let query = getClient()
+      .from(MICROCYCLES_TABLE)
+      .select(`
+        *,
+        microcycle_days (
+          *,
+          microcycle_day_concepts (*)
+        ),
+        microcycle_player_availability (*)
+      `)
+      .order('start_date', { ascending: false });
+
+    if (teamId && teamId.trim()) {
+      query = query.eq('team_id', teamId.trim());
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data || []) as MicrocycleRow[]).map(toMicrocycle);
+  } catch (error) {
+    const rows = readLocalMicrocycles();
+    if (!teamId || !teamId.trim()) return rows;
+    return rows.filter((item) => item.teamId === teamId.trim());
+  }
 }
 
 export function subscribeToMicrocycles(
@@ -285,9 +315,19 @@ export function subscribeToMicrocycles(
   onError?: (error: unknown) => void,
   teamId?: string | null
 ): () => void {
-  const client = getClient();
   let active = true;
+  let client: ReturnType<typeof getClient> | null = null;
   let channel: RealtimeChannel | null = null;
+
+  try {
+    client = getClient();
+  } catch (error) {
+    const rows = readLocalMicrocycles();
+    callback(teamId && teamId.trim() ? rows.filter((item) => item.teamId === teamId.trim()) : rows);
+    return () => {
+      active = false;
+    };
+  }
 
   const loadAndEmit = async () => {
     try {
@@ -295,6 +335,10 @@ export function subscribeToMicrocycles(
       if (active) callback(rows);
     } catch (error) {
       if (active && onError) onError(error);
+      if (active) {
+        const rows = readLocalMicrocycles();
+        callback(teamId && teamId.trim() ? rows.filter((item) => item.teamId === teamId.trim()) : rows);
+      }
     }
   };
 
@@ -327,99 +371,140 @@ export function subscribeToMicrocycles(
 }
 
 export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Microcycle> {
-  const payload = {
-    team_id: input.teamId,
-    team_name: input.teamName,
-    name: input.name,
-    week_number: input.weekNumber ?? null,
-    start_date: input.startDate,
-    end_date: input.endDate,
-    status: input.status || 'draft',
-    team_total: input.teamTotal ?? null,
-    notes: input.notes || null
+  const safeInput = {
+    ...input,
+    teamId: input.teamId || 'u17-women-alula',
+    teamName: input.teamName || 'U17 Women Al Ula'
   };
 
-  const { data, error } = await getClient()
-    .from(MICROCYCLES_TABLE)
-    .insert(payload)
-    .select('*')
-    .single();
+  try {
+    const payload = {
+      team_id: safeInput.teamId,
+      team_name: safeInput.teamName,
+      name: safeInput.name,
+      week_number: safeInput.weekNumber ?? null,
+      start_date: safeInput.startDate,
+      end_date: safeInput.endDate,
+      status: safeInput.status || 'draft',
+      team_total: safeInput.teamTotal ?? null,
+      notes: safeInput.notes || null
+    };
 
-  if (error) throw error;
+    const { data, error } = await getClient()
+      .from(MICROCLES_TABLE)
+      .insert(payload)
+      .select('*')
+      .single();
 
-  const base = toMicrocycle(data as MicrocycleRow);
-  return {
-    ...base,
-    days: [],
-    availability: []
-  };
+    if (error) throw error;
+
+    const base = toMicrocycle(data as MicrocycleRow);
+    return {
+      ...base,
+      days: [],
+      availability: []
+    };
+  } catch (error) {
+    const next: Microcycle = {
+      id: crypto.randomUUID(),
+      teamId: safeInput.teamId,
+      teamName: safeInput.teamName,
+      name: safeInput.name,
+      weekNumber: safeInput.weekNumber,
+      startDate: safeInput.startDate,
+      endDate: safeInput.endDate,
+      status: safeInput.status || 'draft',
+      teamTotal: safeInput.teamTotal,
+      notes: safeInput.notes || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      days: [],
+      availability: []
+    };
+
+    const rows = readLocalMicrocycles();
+    writeLocalMicrocycles([next, ...rows]);
+    return next;
+  }
 }
 
 export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
-  const client = getClient();
+  try {
+    const client = getClient();
 
-  const { error: cycleErr } = await client
-    .from(MICROCYCLES_TABLE)
-    .upsert(toMicrocycleRow(microcycle), { onConflict: 'id' });
+    const { error: cycleErr } = await client
+      .from(MICROCYCLES_TABLE)
+      .upsert(toMicrocycleRow(microcycle), { onConflict: 'id' });
 
-  if (cycleErr) throw cycleErr;
+    if (cycleErr) throw cycleErr;
 
-  const dayIds = microcycle.days.map((day) => day.id);
-  if (dayIds.length > 0) {
-    const { error: deleteConceptsErr } = await client
-      .from(MICROCYCLE_CONCEPTS_TABLE)
-      .delete()
-      .in('microcycle_day_id', dayIds);
-
-    if (deleteConceptsErr) throw deleteConceptsErr;
-  }
-
-  const { error: deleteDaysErr } = await client
-    .from(MICROCYCLE_DAYS_TABLE)
-    .delete()
-    .eq('microcycle_id', microcycle.id);
-
-  if (deleteDaysErr) throw deleteDaysErr;
-
-  const { error: deleteAvailabilityErr } = await client
-    .from(MICROCYCLE_AVAILABILITY_TABLE)
-    .delete()
-    .eq('microcycle_id', microcycle.id);
-
-  if (deleteAvailabilityErr) throw deleteAvailabilityErr;
-
-  if (microcycle.days.length > 0) {
-    const dayRows = microcycle.days.map((day) => toDayRow(day));
-    const { error: insertDaysErr } = await client
-      .from(MICROCYCLE_DAYS_TABLE)
-      .insert(dayRows);
-
-    if (insertDaysErr) throw insertDaysErr;
-
-    const conceptRows = toConceptRows(microcycle.days);
-    if (conceptRows.length > 0) {
-      const { error: insertConceptsErr } = await client
+    const dayIds = microcycle.days.map((day) => day.id);
+    if (dayIds.length > 0) {
+      const { error: deleteConceptsErr } = await client
         .from(MICROCYCLE_CONCEPTS_TABLE)
-        .insert(conceptRows);
-      if (insertConceptsErr) throw insertConceptsErr;
+        .delete()
+        .in('microcycle_day_id', dayIds);
+
+      if (deleteConceptsErr) throw deleteConceptsErr;
     }
-  }
 
-  if (microcycle.availability.length > 0) {
-    const availabilityRows = toAvailabilityRows(microcycle.availability);
-    const { error: insertAvailabilityErr } = await client
+    const { error: deleteDaysErr } = await client
+      .from(MICROCYCLE_DAYS_TABLE)
+      .delete()
+      .eq('microcycle_id', microcycle.id);
+
+    if (deleteDaysErr) throw deleteDaysErr;
+
+    const { error: deleteAvailabilityErr } = await client
       .from(MICROCYCLE_AVAILABILITY_TABLE)
-      .insert(availabilityRows);
+      .delete()
+      .eq('microcycle_id', microcycle.id);
 
-    if (insertAvailabilityErr) throw insertAvailabilityErr;
+    if (deleteAvailabilityErr) throw deleteAvailabilityErr;
+
+    if (microcycle.days.length > 0) {
+      const dayRows = microcycle.days.map((day) => toDayRow(day));
+      const { error: insertDaysErr } = await client
+        .from(MICROCYCLE_DAYS_TABLE)
+        .insert(dayRows);
+
+      if (insertDaysErr) throw insertDaysErr;
+
+      const conceptRows = toConceptRows(microcycle.days);
+      if (conceptRows.length > 0) {
+        const { error: insertConceptsErr } = await client
+          .from(MICROCYCLE_CONCEPTS_TABLE)
+          .insert(conceptRows);
+        if (insertConceptsErr) throw insertConceptsErr;
+      }
+    }
+
+    if (microcycle.availability.length > 0) {
+      const availabilityRows = toAvailabilityRows(microcycle.availability);
+      const { error: insertAvailabilityErr } = await client
+        .from(MICROCYCLE_AVAILABILITY_TABLE)
+        .insert(availabilityRows);
+
+      if (insertAvailabilityErr) throw insertAvailabilityErr;
+    }
+  } catch (error) {
+    const rows = readLocalMicrocycles();
+    const nextRows = rows.filter((item) => item.id !== microcycle.id);
+    nextRows.unshift(microcycle);
+    writeLocalMicrocycles(nextRows);
   }
 }
 
 export async function deleteMicrocycle(microcycleId: string): Promise<void> {
-  const { error } = await getClient()
-    .from(MICROCYCLES_TABLE)
-    .delete()
-    .eq('id', microcycleId);
+  try {
+    const { error } = await getClient()
+      .from(MICROCYCLES_TABLE)
+      .delete()
+      .eq('id', microcycleId);
 
-  if (error) throw error;
+    if (error) throw error;
+  } catch (error) {
+    const rows = readLocalMicrocycles().filter((item) => item.id !== microcycleId);
+    writeLocalMicrocycles(rows);
+  }
 }

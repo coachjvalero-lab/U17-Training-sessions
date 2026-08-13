@@ -344,8 +344,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         name: '',
         startDate: isoDateFromToday(),
         endDate: isoDateFromToday(6),
-        teamId: '',
-        teamName: ''
+        teamId: effectiveTeam?.id || defaultSingleTeam.id,
+        teamName: effectiveTeam?.name || defaultSingleTeam.name
       }));
       setSelectedMicrocycleId(next.id);
       setDraft(next);
