@@ -101,8 +101,6 @@ import {
 } from './supabaseClient';
 import { getSessionsDataProvider } from './supabaseSessions';
 import { FITNESS_V2_ENABLED } from './utils/featureFlags';
-import { shouldSurfaceSessionSubscriptionError } from './utils/cloudStatusPolicy';
-import { sanitizeCloudSessions } from './utils/cloudSessionSanitizer';
 import { TeamProvider } from './contexts/TeamContext';
 import { 
   FileText,
@@ -701,7 +699,6 @@ export default function App() {
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
-  const hasLoadedRemoteSessionRef = useRef(false);
   // Track timestamps per role to detect conflicts only for the fields each role owns
   const lastLoadedSessionTimeRef = useRef<{
     global: number;
@@ -921,39 +918,29 @@ export default function App() {
     setIsLoadingCloud(true);
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
-        const cleanSessions = sanitizeCloudSessions(sessions);
-        console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions (cleaned:', cleanSessions.length, ')');
-
-        setCloudSessions((prevSessions) => {
-          const hasPrev = prevSessions.length > 0;
-          const nextSessions = cleanSessions.length > 0 || !hasPrev ? cleanSessions : prevSessions;
-          if (nextSessions.length > 0) {
-            try {
-              localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(nextSessions));
-            } catch (e) {}
-          }
-          return nextSessions;
-        });
-
-        hasLoadedRemoteSessionRef.current = true;
+        console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions');
+        setCloudSessions(sessions);
+        try {
+          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
+        } catch (e) {}
         setIsLoadingCloud(false);
 
-        if (cleanSessions.length > 0) {
+        if (sessions.length > 0) {
           // Read URL query parameters to see if a specific session ID was requested
           const urlParams = new URLSearchParams(window.location.search);
           const targetId = urlParams.get('session');
           const isFirstLoad = !hasInitialCloudLoadedRef.current;
           const currentId = currentSessionIdRef.current;
-          const activeSessionStillExists = currentId ? cleanSessions.some(s => s.id === currentId) : false;
+          const activeSessionStillExists = currentId ? sessions.some(s => s.id === currentId) : false;
           const activeSessionSnapshot = currentId
-            ? cleanSessions.find(s => s.id === currentId)
+            ? sessions.find(s => s.id === currentId)
             : undefined;
 
           // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
           // (most recent session by date) ONLY on the very first cold start.
           let sessionToLoad = targetId
-            ? cleanSessions.find(s => s.id === targetId)
-            : (isFirstLoad ? cleanSessions[0] : cleanSessions.find(s => s.id === currentId));
+            ? sessions.find(s => s.id === targetId)
+            : (isFirstLoad ? sessions[0] : sessions.find(s => s.id === currentId));
 
           if (targetId && !sessionToLoad && currentSessionIdRef.current === targetId) {
             // Requested session hasn't reached Firestore yet — keep showing what we have.
@@ -961,8 +948,8 @@ export default function App() {
             return;
           }
 
-          if (!activeSessionStillExists && !sessionToLoad && cleanSessions.length > 0) {
-            sessionToLoad = cleanSessions[0];
+          if (!activeSessionStillExists && !sessionToLoad) {
+            sessionToLoad = sessions[0];
           }
 
           if (sessionToLoad) {
@@ -1012,27 +999,12 @@ export default function App() {
         console.log('[App] Sessions subscription error - falling back to cache');
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
-
         const cachedSessions = readCachedCloudSessions();
-        const currentKnownSessions = cloudSessions.length > 0 ? cloudSessions : cachedSessions;
-
-        if (currentKnownSessions.length > 0) {
-          setCloudSessions(currentKnownSessions);
-        } else if (cachedSessions.length > 0) {
+        if (cachedSessions.length > 0) {
           setCloudSessions(cachedSessions);
         }
-
-        const shouldShowError = shouldSurfaceSessionSubscriptionError({
-          hasCachedSessions: currentKnownSessions.length > 0 || cachedSessions.length > 0,
-          hasLoadedRemoteSession: hasLoadedRemoteSessionRef.current
-        });
-
-        if (shouldShowError) {
-          setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
-          console.warn('Sessions subscription is temporarily unavailable.');
-        } else {
-          setCloudSyncStatus({ status: 'idle' });
-        }
+        setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
+        console.warn('Sessions subscription is temporarily unavailable.');
       }
     );
     return () => unsubscribe();
@@ -1425,26 +1397,6 @@ export default function App() {
 
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
-
-        const cloudSession: CloudTrainingSession = {
-          ...sessionToSave,
-          updatedAt: savedTime,
-          footballUpdatedAt: role === 'football' ? savedTime : undefined,
-          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
-          gkUpdatedAt: role === 'gk' ? savedTime : undefined,
-        };
-
-        setCloudSessions((prev) => {
-          const withoutCurrent = prev.filter((item) => item.id !== sessionToSave.id);
-          return [cloudSession, ...withoutCurrent];
-        });
-
-        try {
-          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
-            cloudSession,
-            ...cloudSessions.filter((item) => item.id !== sessionToSave.id)
-          ]));
-        } catch (e) {}
         
         // Update with the actual server timestamp
         markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
@@ -1513,26 +1465,6 @@ export default function App() {
       // New sessions are created through the same modular save pipeline as any other save.
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, newSession);
-        const cloudSession: CloudTrainingSession = {
-          ...newSession,
-          updatedAt: savedTime,
-          footballUpdatedAt: role === 'football' ? savedTime : undefined,
-          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
-          gkUpdatedAt: role === 'gk' ? savedTime : undefined,
-        };
-
-        setCloudSessions((prev) => {
-          const withoutDuplicate = prev.filter((item) => item.id !== newSession.id);
-          return [cloudSession, ...withoutDuplicate];
-        });
-
-        try {
-          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
-            cloudSession,
-            ...cloudSessions.filter((item) => item.id !== newSession.id)
-          ]));
-        } catch (e) {}
-
         initializeSessionSyncState(newSession, {
           global: savedTime,
           football: role === 'football' ? savedTime : 0,
