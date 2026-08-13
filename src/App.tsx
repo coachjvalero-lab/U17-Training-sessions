@@ -102,6 +102,7 @@ import {
 import { getSessionsDataProvider } from './supabaseSessions';
 import { FITNESS_V2_ENABLED } from './utils/featureFlags';
 import { shouldSurfaceSessionSubscriptionError } from './utils/cloudStatusPolicy';
+import { sanitizeCloudSessions } from './utils/cloudSessionSanitizer';
 import { TeamProvider } from './contexts/TeamContext';
 import { 
   FileText,
@@ -920,10 +921,12 @@ export default function App() {
     setIsLoadingCloud(true);
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
-        console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions');
+        const cleanSessions = sanitizeCloudSessions(sessions);
+        console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions (cleaned:', cleanSessions.length, ')');
 
         setCloudSessions((prevSessions) => {
-          const nextSessions = sessions.length > 0 || prevSessions.length === 0 ? sessions : prevSessions;
+          const hasPrev = prevSessions.length > 0;
+          const nextSessions = cleanSessions.length > 0 || !hasPrev ? cleanSessions : prevSessions;
           if (nextSessions.length > 0) {
             try {
               localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(nextSessions));
@@ -935,22 +938,22 @@ export default function App() {
         hasLoadedRemoteSessionRef.current = true;
         setIsLoadingCloud(false);
 
-        if (sessions.length > 0) {
+        if (cleanSessions.length > 0) {
           // Read URL query parameters to see if a specific session ID was requested
           const urlParams = new URLSearchParams(window.location.search);
           const targetId = urlParams.get('session');
           const isFirstLoad = !hasInitialCloudLoadedRef.current;
           const currentId = currentSessionIdRef.current;
-          const activeSessionStillExists = currentId ? sessions.some(s => s.id === currentId) : false;
+          const activeSessionStillExists = currentId ? cleanSessions.some(s => s.id === currentId) : false;
           const activeSessionSnapshot = currentId
-            ? sessions.find(s => s.id === currentId)
+            ? cleanSessions.find(s => s.id === currentId)
             : undefined;
 
           // If a specific ID is requested in the URL, use it; otherwise fallback to sessions[0]
           // (most recent session by date) ONLY on the very first cold start.
           let sessionToLoad = targetId
-            ? sessions.find(s => s.id === targetId)
-            : (isFirstLoad ? sessions[0] : sessions.find(s => s.id === currentId));
+            ? cleanSessions.find(s => s.id === targetId)
+            : (isFirstLoad ? cleanSessions[0] : cleanSessions.find(s => s.id === currentId));
 
           if (targetId && !sessionToLoad && currentSessionIdRef.current === targetId) {
             // Requested session hasn't reached Firestore yet — keep showing what we have.
@@ -958,8 +961,8 @@ export default function App() {
             return;
           }
 
-          if (!activeSessionStillExists && !sessionToLoad) {
-            sessionToLoad = sessions[0];
+          if (!activeSessionStillExists && !sessionToLoad && cleanSessions.length > 0) {
+            sessionToLoad = cleanSessions[0];
           }
 
           if (sessionToLoad) {

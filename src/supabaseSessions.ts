@@ -71,6 +71,12 @@ function toErrorMessage(error: unknown): string {
   return withMessage.message ? String(withMessage.message) : 'Unknown Supabase error';
 }
 
+function isNoContentSuccess(error: unknown): boolean {
+  const code = toErrorCode(error);
+  const message = toErrorMessage(error).toLowerCase();
+  return code === 'PGRST204' || message.includes('no content');
+}
+
 function toErrorStatus(error: unknown): number | null {
   if (!error || typeof error !== 'object') return null;
   const withStatus = error as { status?: unknown };
@@ -119,11 +125,15 @@ async function writeSessionPatchByRole(
     .select('id')
     .limit(1);
 
-  if (updateError) {
+  if (updateError && !isNoContentSuccess(updateError)) {
     return updateError;
   }
 
   if (Array.isArray(updatedRows) && updatedRows.length > 0) {
+    return null;
+  }
+
+  if (updateError && isNoContentSuccess(updateError)) {
     return null;
   }
 
@@ -137,7 +147,11 @@ async function writeSessionPatchByRole(
       .from(SESSIONS_TABLE)
       .update(patch)
       .eq('id', sessionId);
-    return retryUpdateError || null;
+    return retryUpdateError && !isNoContentSuccess(retryUpdateError) ? retryUpdateError : null;
+  }
+
+  if (insertError && isNoContentSuccess(insertError)) {
+    return null;
   }
 
   return insertError || null;
@@ -338,6 +352,11 @@ export async function subscribeToSessionsSupabase(
     const { data, error } = await query;
 
     if (error) {
+      if (isNoContentSuccess(error)) {
+        callback([]);
+        return;
+      }
+
       const errorSummary = error as unknown as { code?: unknown; message?: unknown; status?: unknown };
       console.log('[SUPABASE SESSIONS] Query Error', {
         provider,
@@ -400,6 +419,9 @@ export async function saveSessionFieldsByRoleSupabase(
   const write = async () => writeSessionPatchByRole(client, sessionId, patch);
 
   let error = await write();
+  if (error && isNoContentSuccess(error)) {
+    error = null;
+  }
 
   // Recover once when the browser session/token expired between login and save.
   if (error && isAuthSessionError(error)) {
