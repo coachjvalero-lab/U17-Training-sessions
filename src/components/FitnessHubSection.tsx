@@ -643,6 +643,10 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
       return;
     }
 
+    setIsCreateSessionModalOpen(false);
+    setCreateSessionValidationError(null);
+    setNewSessionNumberInput('');
+
     const roster = squadPlayers
       .map((player) => (player.position === 'GK' ? `${player.firstName} (GK)` : `${player.firstName} ${player.lastName}`.trim()));
     const attendance: PlayerAttendance[] = roster.map((playerName) => ({ playerName, status: 'Attending' }));
@@ -654,9 +658,10 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
       setIsSaving(true);
       await saveFitnessSession(fresh);
       setSelectedFitnessId(fresh.id);
-      setIsCreateSessionModalOpen(false);
-      setCreateSessionValidationError(null);
-      setNewSessionNumberInput('');
+    } catch (error) {
+      const err = error as { message?: unknown };
+      const message = typeof err?.message === 'string' ? err.message : 'Fitness session save failed.';
+      setSaveValidationError(message);
     } finally {
       setIsSaving(false);
     }
@@ -705,7 +710,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   };
 
   return (
-    <div className="space-y-6 print:hidden">
+    <div className="space-y-6">
       <div className="bg-[#002142] p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 text-white space-y-5 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
           <div>
@@ -854,7 +859,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
 
       {fitnessSubTab === 'sessions' ? (
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-2.5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="bg-white border border-slate-200 rounded-2xl p-2.5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 print:hidden">
             <div className="flex items-center space-x-2">
               <button type="button" onClick={() => setSessionSubNav('cards')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center space-x-2 cursor-pointer ${sessionSubNav === 'cards' ? 'bg-[#002142] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
                 <Layers className="w-4 h-4 text-emerald-400" />
@@ -917,8 +922,8 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               </div>
             ) : null}
 
-          {saveValidationError ? (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-xl">
+            {saveValidationError ? (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-xl print:hidden">
               {saveValidationError}
             </div>
           ) : null}

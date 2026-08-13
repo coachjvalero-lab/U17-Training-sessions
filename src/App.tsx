@@ -1425,6 +1425,26 @@ export default function App() {
 
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
+
+        const cloudSession: CloudTrainingSession = {
+          ...sessionToSave,
+          updatedAt: savedTime,
+          footballUpdatedAt: role === 'football' ? savedTime : undefined,
+          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
+          gkUpdatedAt: role === 'gk' ? savedTime : undefined,
+        };
+
+        setCloudSessions((prev) => {
+          const withoutCurrent = prev.filter((item) => item.id !== sessionToSave.id);
+          return [cloudSession, ...withoutCurrent];
+        });
+
+        try {
+          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
+            cloudSession,
+            ...cloudSessions.filter((item) => item.id !== sessionToSave.id)
+          ]));
+        } catch (e) {}
         
         // Update with the actual server timestamp
         markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));

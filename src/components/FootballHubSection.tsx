@@ -130,10 +130,10 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       .map((sess) => ({
         id: sess.id,
         sessionNumber: Number(sess.sessionNumber || 0) || 0,
-        title: sess.mainObjective || `Session #${sess.sessionNumber || '?'}`,
+        title: `Session #${sess.sessionNumber || '?'}`,
         date: sess.date || new Date().toLocaleDateString('en-CA'),
         category: 'Tactical' as const,
-        description: sess.observations?.trim() || '',
+        description: sess.mainObjective?.trim() || sess.observations?.trim() || 'No objective assigned',
         duration: 'Session',
           intensity: modulePresentation.intensity,
         drillType: 'rondo5v2' as const,

@@ -58,7 +58,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   onApplyMalikaPoints
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
-  const isSharedHeaderReadOnly = moduleId !== 'football';
+  const isHeaderReadOnly = moduleId === 'gk';
+  const isSharedDataReadOnly = moduleId !== 'football';
   const sessionAttendance = Array.isArray(session.attendance) ? session.attendance : [];
   const attendanceOnlyPlayers = sessionAttendance
     .map((entry) => entry.playerName?.trim())
@@ -75,9 +76,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
     microcycleDay: sharedHeader.microcycleDay
   };
 
-  const updateHeaderFields = isSharedHeaderReadOnly ? (() => {}) : onUpdateHeader;
-  const updateAttendance = isSharedHeaderReadOnly ? (() => {}) : onUpdateAttendance;
-  const updateRoster = isSharedHeaderReadOnly ? (() => {}) : onUpdateRoster;
+  const updateHeaderFields = isHeaderReadOnly ? (() => {}) : onUpdateHeader;
+  const updateAttendance = isSharedDataReadOnly ? (() => {}) : onUpdateAttendance;
+  const updateRoster = isSharedDataReadOnly ? (() => {}) : onUpdateRoster;
 
   return (
     <main className="space-y-6 md:space-y-8 print:space-y-1.5">
@@ -88,7 +89,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         onUpdateLogo={onUpdateLogo}
         onSave={onSave}
         isSaving={isSaving}
-        readOnly={isSharedHeaderReadOnly}
+        readOnly={isHeaderReadOnly}
       />
 
       <div className="print:hidden">
@@ -100,7 +101,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           excludedPlayers={excludedPlayers}
           onExcludePlayer={onExcludePlayer}
           onIncludePlayer={onIncludePlayer}
-          readOnly={isSharedHeaderReadOnly}
+          readOnly={isSharedDataReadOnly}
         />
       </div>
 
@@ -111,7 +112,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           attendance={sessionAttendance}
           onChangeGroups={onUpdateGroups}
           onChangeRoster={updateRoster}
-          rosterReadOnly={isSharedHeaderReadOnly}
+          rosterReadOnly={isSharedDataReadOnly}
         />
       </div>
 
@@ -177,7 +178,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           value={session.observations || ''}
           onChange={(e) => onUpdateHeader({ observations: e.target.value })}
           rows={4}
-          readOnly={isSharedHeaderReadOnly}
+          readOnly={isHeaderReadOnly}
           placeholder="Write post-training observations, individual player notes, RPE ratings, injury updates, or tactical feedback for the coaching staff..."
           className="w-full text-xs font-semibold text-slate-800 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 focus:outline-none focus:ring-2 focus:ring-[#002142]/10 focus:border-[#0f5981] focus:bg-white transition-all resize-y"
         />
