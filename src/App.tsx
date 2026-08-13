@@ -101,6 +101,7 @@ import {
 } from './supabaseClient';
 import { getSessionsDataProvider } from './supabaseSessions';
 import { FITNESS_V2_ENABLED } from './utils/featureFlags';
+import { shouldSurfaceSessionSubscriptionError } from './utils/cloudStatusPolicy';
 import { TeamProvider } from './contexts/TeamContext';
 import { 
   FileText,
@@ -699,6 +700,7 @@ export default function App() {
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
+  const hasLoadedRemoteSessionRef = useRef(false);
   // Track timestamps per role to detect conflicts only for the fields each role owns
   const lastLoadedSessionTimeRef = useRef<{
     global: number;
@@ -919,10 +921,18 @@ export default function App() {
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
         console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions');
-        setCloudSessions(sessions);
-        try {
-          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
-        } catch (e) {}
+
+        setCloudSessions((prevSessions) => {
+          const nextSessions = sessions.length > 0 || prevSessions.length === 0 ? sessions : prevSessions;
+          if (nextSessions.length > 0) {
+            try {
+              localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(nextSessions));
+            } catch (e) {}
+          }
+          return nextSessions;
+        });
+
+        hasLoadedRemoteSessionRef.current = true;
         setIsLoadingCloud(false);
 
         if (sessions.length > 0) {
@@ -999,12 +1009,27 @@ export default function App() {
         console.log('[App] Sessions subscription error - falling back to cache');
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
+
         const cachedSessions = readCachedCloudSessions();
-        if (cachedSessions.length > 0) {
+        const currentKnownSessions = cloudSessions.length > 0 ? cloudSessions : cachedSessions;
+
+        if (currentKnownSessions.length > 0) {
+          setCloudSessions(currentKnownSessions);
+        } else if (cachedSessions.length > 0) {
           setCloudSessions(cachedSessions);
         }
-        setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
-        console.warn('Sessions subscription is temporarily unavailable.');
+
+        const shouldShowError = shouldSurfaceSessionSubscriptionError({
+          hasCachedSessions: currentKnownSessions.length > 0 || cachedSessions.length > 0,
+          hasLoadedRemoteSession: hasLoadedRemoteSessionRef.current
+        });
+
+        if (shouldShowError) {
+          setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
+          console.warn('Sessions subscription is temporarily unavailable.');
+        } else {
+          setCloudSyncStatus({ status: 'idle' });
+        }
       }
     );
     return () => unsubscribe();
