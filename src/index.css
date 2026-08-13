@@ -98,6 +98,27 @@ html.dark textarea::placeholder {
     size: A4 portrait;
     margin: 2mm 3mm 2mm 3mm;
   }
+
+  body.print-microcycle-mode * {
+    visibility: hidden !important;
+  }
+
+  body.print-microcycle-mode .microcycle-print-shell,
+  body.print-microcycle-mode .microcycle-print-shell * {
+    visibility: visible !important;
+  }
+
+  body.print-microcycle-mode .microcycle-print-shell {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.print-microcycle-mode .no-print-microcycle {
+    display: none !important;
+  }
   
   html, body {
     background-color: #ffffff !important;

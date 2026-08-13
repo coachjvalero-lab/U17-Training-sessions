@@ -199,6 +199,18 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   const effectiveTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? defaultSingleTeam;
 
   useEffect(() => {
+    const cleanup = () => {
+      document.body.classList.remove('print-microcycle-mode');
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    return () => {
+      window.removeEventListener('afterprint', cleanup);
+      cleanup();
+    };
+  }, []);
+
+  useEffect(() => {
     setCreateInput((prev) => ({
       ...prev,
       teamId: effectiveTeam?.id || prev.teamId || defaultSingleTeam.id,
@@ -585,13 +597,20 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     updateDraft(next);
   };
 
+  const handleExportPdf = () => {
+    document.body.classList.add('print-microcycle-mode');
+    window.requestAnimationFrame(() => {
+      window.print();
+    });
+  };
+
   const selectedSessionById = (sessionId?: string) => {
     if (!sessionId) return null;
     return cloudSessions.find((session) => session.id === sessionId) || null;
   };
 
   return (
-    <div className="space-y-5 pb-10">
+    <div className="microcycle-print-shell space-y-5 pb-10">
       <datalist id="load-list">
         {LOAD_SUGGESTIONS.map((item) => (
           <option key={item} value={item} />
@@ -680,7 +699,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="no-print-microcycle flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsCreateOpen(true)}
@@ -756,6 +775,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   >
                     <Save className="w-3.5 h-3.5" />
                     {isSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportPdf}
+                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-black text-slate-700 inline-flex items-center gap-1"
+                  >
+                    Export PDF
                   </button>
                 </div>
               </div>
@@ -963,7 +989,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
       </section>
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
+        <div className="no-print-microcycle fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
           <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
             <h3 className="text-lg font-black text-slate-900">New Microcycle</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
