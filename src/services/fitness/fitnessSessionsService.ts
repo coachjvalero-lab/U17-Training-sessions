@@ -6,7 +6,6 @@ import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamS
 const FITNESS_SESSIONS_TABLE = 'fitness_sessions';
 const FITNESS_READ_RETRY_DELAY_MS = 1500;
 const FITNESS_MAX_READ_RETRIES = 1;
-const DEFAULT_FITNESS_TEAM_ID = 'u17-women-alula';
 const DEFAULT_FITNESS_TEAM_NAME = 'U17 Women Al Ula';
 
 function createFitnessRealtimeChannelName(): string {
@@ -65,7 +64,6 @@ type FitnessSessionRow = {
   id: string;
   session_uid: string;
   legacy_session_id: string | null;
-  team_id: string | null;
   team_name: string | null;
   date: string | null;
   time: string | null;
@@ -100,19 +98,14 @@ function getClient() {
   return supabase;
 }
 
-function resolveTeamForFitnessWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
-  const explicitTeamId = (session.teamId || '').trim();
-  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
-  const resolvedTeamId = explicitTeamId || selectedTeamId || DEFAULT_FITNESS_TEAM_ID;
-
+// fitness_sessions.team_id does not exist in the current schema; only team_name is persisted.
+function resolveTeamNameForFitnessWrite(session: { teamName?: string | null }): string {
   const explicitName = (session.teamName || '').trim();
-  const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
-  const resolvedTeamName = explicitName || catalogName || DEFAULT_FITNESS_TEAM_NAME;
+  if (explicitName) return explicitName;
 
-  return {
-    teamId: resolvedTeamId,
-    teamName: resolvedTeamName
-  };
+  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
+  const catalogName = selectedTeamId ? (getTeamNameById(selectedTeamId) || '') : '';
+  return catalogName || DEFAULT_FITNESS_TEAM_NAME;
 }
 
 function defaultBlock(id: string, title: string): TrainingBlock {
@@ -129,7 +122,6 @@ function fromRow(row: FitnessSessionRow): FitnessSession {
     id: row.id,
     sessionUid,
     legacySessionId: row.legacy_session_id || undefined,
-    teamId: row.team_id || undefined,
     teamName: row.team_name || '',
     date: row.date || new Date().toISOString().slice(0, 10),
     time: row.time || '18:30 - 20:00',
@@ -150,13 +142,12 @@ function fromRow(row: FitnessSessionRow): FitnessSession {
 }
 
 function toRow(session: FitnessSession, updatedAt: number): FitnessSessionRow {
-  const resolvedTeam = resolveTeamForFitnessWrite(session);
+  const teamName = resolveTeamNameForFitnessWrite(session);
   return {
     id: session.id,
     session_uid: session.sessionUid,
     legacy_session_id: session.legacySessionId || null,
-    team_id: resolvedTeam.teamId,
-    team_name: resolvedTeam.teamName,
+    team_name: teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,

@@ -1,19 +1,13 @@
 import { getSelectedTeamIdSnapshot, getTeamNameById } from '../services/permissions/teamSelectionStore';
 
-export const DEFAULT_SESSION_TEAM_ID = 'u17-women-alula';
 export const DEFAULT_SESSION_TEAM_NAME = 'U17 Women Al Ula';
 
-export function resolveTeamForSessionWrite(session: { teamId?: string; teamName?: string | null }): { teamId: string | null; teamName: string } {
-  const explicitTeamId = (session.teamId || '').trim();
-  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
-  const resolvedTeamId = explicitTeamId || selectedTeamId || DEFAULT_SESSION_TEAM_ID;
-
+// sessions.team_id does not exist in the current schema; only team_name is persisted.
+export function resolveTeamNameForSessionWrite(session: { teamName?: string | null }): string {
   const explicitName = (session.teamName || '').trim();
-  const catalogName = resolvedTeamId ? (getTeamNameById(resolvedTeamId) || '') : '';
-  const resolvedTeamName = explicitName || catalogName || DEFAULT_SESSION_TEAM_NAME;
+  if (explicitName) return explicitName;
 
-  return {
-    teamId: resolvedTeamId,
-    teamName: resolvedTeamName
-  };
+  const selectedTeamId = (getSelectedTeamIdSnapshot() || '').trim();
+  const catalogName = selectedTeamId ? (getTeamNameById(selectedTeamId) || '') : '';
+  return catalogName || DEFAULT_SESSION_TEAM_NAME;
 }

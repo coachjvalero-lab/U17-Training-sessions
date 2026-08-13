@@ -14,7 +14,6 @@ import type {
 
 interface MeetingRow {
   id: string;
-  team_id: string | null;
   title: string;
   date: string;
   start_time: string | null;
@@ -81,7 +80,6 @@ function meetingFromRow(
 ): Meeting {
   return {
     id: row.id,
-    teamId: row.team_id ?? undefined,
     title: row.title,
     date: row.date,
     startTime: row.start_time ?? undefined,

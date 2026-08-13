@@ -18,7 +18,6 @@ function toFitnessSessionRecord(session: TrainingSession): FitnessSession {
     id: `fit-${normalizedSessionUid}`,
     sessionUid: normalizedSessionUid,
     legacySessionId: normalizedSessionUid,
-    teamId: session.teamId,
     teamName: session.teamName,
     date: session.date,
     time: session.time,

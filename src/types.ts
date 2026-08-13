@@ -129,7 +129,6 @@ export interface FitnessSession {
   id: string;
   sessionUid: string;
   legacySessionId?: string;
-  teamId?: string;
   teamName: string;
   date: string;
   time: string;
@@ -183,7 +182,6 @@ export interface MatchFixture {
 
 export interface TrainingSession {
   id: string;
-  teamId?: string;
   teamName: string;
   date: string;
   time: string;
@@ -365,7 +363,6 @@ export interface MeetingActionItem {
 
 export interface Meeting {
   id: string;
-  teamId?: string;
   title: string;
   date: string;              // ISO date
   startTime?: string;        // HH:MM

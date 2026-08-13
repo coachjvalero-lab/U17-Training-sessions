@@ -1,14 +1,13 @@
 import { getEmptySession } from './defaultSession';
 import type { CloudTrainingSession, TrainingSession } from './types';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
-import { resolveTeamForSessionWrite } from './utils/sessionTeam';
+import { resolveTeamNameForSessionWrite } from './utils/sessionTeam';
 import { isNoContentSuccess } from './utils/supabaseNoContent';
 
 type SessionRole = 'football' | 'fitness' | 'gk';
 
 type SessionRow = {
   id: string;
-  team_id: string | null;
   team_name: string | null;
   date: string | null;
   time: string | null;
@@ -150,7 +149,6 @@ function toCloudTrainingSession(row: SessionRow): CloudTrainingSession {
   return {
     ...empty,
     id: row.id,
-    teamId: row.team_id || undefined,
     teamName: row.team_name || empty.teamName,
     date: row.date || empty.date,
     time: row.time || empty.time,
@@ -181,11 +179,10 @@ function toCloudTrainingSession(row: SessionRow): CloudTrainingSession {
 }
 
 function getRolePatch(role: SessionRole, session: TrainingSession, timestamp: number) {
-  const resolvedTeam = resolveTeamForSessionWrite(session);
+  const teamName = resolveTeamNameForSessionWrite(session);
   const shared = {
     id: session.id,
-    team_id: resolvedTeam.teamId,
-    team_name: resolvedTeam.teamName,
+    team_name: teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,
@@ -241,11 +238,10 @@ export function isSupabaseSessionsEnabled(): boolean {
 }
 
 function toSupabaseSessionRow(session: CloudTrainingSession): Record<string, unknown> {
-  const resolvedTeam = resolveTeamForSessionWrite(session);
+  const teamName = resolveTeamNameForSessionWrite(session);
   return {
     id: session.id,
-    team_id: resolvedTeam.teamId,
-    team_name: resolvedTeam.teamName,
+    team_name: teamName,
     date: session.date,
     time: session.time,
     session_number: session.sessionNumber,
