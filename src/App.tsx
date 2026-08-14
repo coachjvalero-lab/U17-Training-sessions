@@ -595,7 +595,7 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Visible feedback for cloud sync activity (Bloque 2, tarea 1): replaces silent console.warn-only failures.
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<{ status: 'idle' | 'saving' | 'retrying' | 'saved' | 'error' | 'reconnecting'; message?: string }>({ status: 'idle' });
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
@@ -699,6 +699,9 @@ export default function App() {
   // Refs to avoid infinite re-save loops between cloud and local state
   const isRemoteUpdateRef = useRef(false);
   const hasInitialCloudLoadedRef = useRef(false);
+  // True once a real Supabase load has ever succeeded — after that, a transient realtime
+  // error must never replace cloudSessions with a (possibly stale) localStorage snapshot.
+  const hasReceivedRealSessionsRef = useRef(false);
   // Track timestamps per role to detect conflicts only for the fields each role owns
   const lastLoadedSessionTimeRef = useRef<{
     global: number;
@@ -919,11 +922,13 @@ export default function App() {
     const unsubscribe = subscribeTrainingSessions(
       (sessions) => {
         console.log('[App] Sessions subscription callback received:', sessions.length, 'sessions');
+        hasReceivedRealSessionsRef.current = true;
         setCloudSessions(sessions);
         try {
           localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
         } catch (e) {}
         setIsLoadingCloud(false);
+        setCloudSyncStatus(prev => (prev.status === 'reconnecting' ? { status: 'idle' } : prev));
 
         if (sessions.length > 0) {
           // Read URL query parameters to see if a specific session ID was requested
@@ -996,15 +1001,19 @@ export default function App() {
         hasInitialCloudLoadedRef.current = true;
       },
       () => {
-        console.log('[App] Sessions subscription error - falling back to cache');
+        console.log('[App] Sessions subscription disrupted - reconnecting');
         setIsLoadingCloud(false);
         hasInitialCloudLoadedRef.current = true;
-        const cachedSessions = readCachedCloudSessions();
-        if (cachedSessions.length > 0) {
-          setCloudSessions(cachedSessions);
+        if (!hasReceivedRealSessionsRef.current) {
+          // No real Supabase load has completed yet — the cache is only used for this initial paint.
+          const cachedSessions = readCachedCloudSessions();
+          if (cachedSessions.length > 0) {
+            setCloudSessions(cachedSessions);
+          }
         }
-        setCloudSyncStatus({ status: 'error', message: 'Session subscription is temporarily unavailable.' });
-        console.warn('Sessions subscription is temporarily unavailable.');
+        // A real load already happened: keep showing exactly what's already visible and let the
+        // channel recover on its own (subscribeToSessionsSupabase re-fetches on reconnect).
+        setCloudSyncStatus({ status: 'reconnecting', message: 'Reconnecting…' });
       }
     );
     return () => unsubscribe();
@@ -1746,6 +1755,7 @@ export default function App() {
     const bannerConfig: Record<string, { text: string; className: string }> = {
       saving: { text: 'Saving to the cloud…', className: 'bg-slate-800 text-white' },
       retrying: { text: 'Cloud save failed, retrying…', className: 'bg-amber-500 text-slate-950' },
+      reconnecting: { text: cloudSyncStatus.message || 'Reconnecting…', className: 'bg-amber-500 text-slate-950' },
       saved: { text: 'Saved to the cloud ✓', className: 'bg-emerald-500 text-slate-950' },
       error: { text: cloudSyncStatus.message || 'Error saving to the cloud', className: 'bg-rose-700 text-white' },
     };

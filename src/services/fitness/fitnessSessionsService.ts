@@ -125,7 +125,7 @@ function fromRow(row: FitnessSessionRow): FitnessSession {
     teamName: row.team_name || '',
     date: row.date || new Date().toISOString().slice(0, 10),
     time: row.time || '18:30 - 20:00',
-    sessionNumber: row.session_number || '001',
+    sessionNumber: row.session_number || '',
     microcycleDay: row.microcycle_day || 'MD-3',
     mainObjective: row.main_objective || '',
     materialsNeeded: row.materials_needed || '',

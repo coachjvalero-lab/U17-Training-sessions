@@ -363,6 +363,9 @@ export async function subscribeToSessionsSupabase(
     if (onError) onError(error);
   }
 
+  // Tracks whether the channel has ever dropped, so a later SUBSCRIBED means "recovered", not "first connect".
+  let hasChannelEverFailed = false;
+
   const channel = client
     .channel(createSessionsRealtimeChannelName())
     .on('postgres_changes', { event: '*', schema: 'public', table: SESSIONS_TABLE }, async () => {
@@ -373,8 +376,22 @@ export async function subscribeToSessionsSupabase(
       }
     })
     .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR' && onError) {
-        onError(new Error('Supabase realtime channel error for sessions'));
+      if (status === 'SUBSCRIBED') {
+        if (hasChannelEverFailed) {
+          hasChannelEverFailed = false;
+          // Reconnected after a drop — force a fresh SELECT rather than waiting for the next write.
+          loadAndEmit().catch((error) => {
+            if (onError) onError(error);
+          });
+        }
+        return;
+      }
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        hasChannelEverFailed = true;
+        if (onError) {
+          onError(new Error(`Supabase realtime channel ${status} for sessions`));
+        }
       }
     });
 
