@@ -15,6 +15,7 @@ import { SquadRosterSection } from './components/SquadRosterSection';
 import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
 import { DEFAULT_MATCHES } from './components/CompetitionSection';
+import { MatchCentreSection } from './components/MatchCentreSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { FitnessHubSection } from './components/FitnessHubSection';
 import { ModuleSessionEditor } from './components/ModuleSessionEditor';
@@ -255,6 +256,7 @@ function buildDefaultAttendanceFromRoster(roster: string[]): PlayerAttendance[] 
 }
 
 export default function App() {
+  const matchDetailRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/matches/');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('u17_theme_mode');
@@ -1822,7 +1824,11 @@ export default function App() {
         />
 
         {/* Main Content Workspace Area */}
-        {activeSection === 'hub' ? (
+        {matchDetailRoute ? (
+          <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
+            <MatchCentreSection />
+          </div>
+        ) : activeSection === 'hub' ? (
           <div className="flex-1 min-w-0">
             <PortalHub
               onSelectSection={setActiveSection}

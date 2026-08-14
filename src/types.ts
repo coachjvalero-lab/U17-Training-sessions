@@ -180,6 +180,132 @@ export interface MatchFixture {
   lineup?: string[];
 }
 
+export type MatchStatus = 'planned' | 'played';
+export type TeamSide = 'our_team' | 'opponent';
+export type MatchEventType =
+  | 'goal'
+  | 'assist'
+  | 'yellow_card'
+  | 'red_card'
+  | 'substitution_in'
+  | 'substitution_out'
+  | 'own_goal'
+  | 'injury'
+  | 'other';
+
+export type OpponentAnalysisTag =
+  | 'short'
+  | 'long'
+  | 'mixed'
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'direct'
+  | 'possession'
+  | 'immediate_pressure'
+  | 'retreat';
+
+export interface Match {
+  id: string;
+  teamId: string;
+  opponentTeamId: string;
+  fixtureId?: string | null;
+  competitionName: string;
+  date: string;
+  time: string;
+  venue?: string | null;
+  location?: string | null;
+  isHome: boolean;
+  status: MatchStatus;
+  ourScore?: number | null;
+  opponentScore?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OpponentAnalysis {
+  id: string;
+  matchId: string;
+  opponentTeamId: string;
+  tags: OpponentAnalysisTag[];
+  slidesUrl?: string | null;
+  videoUrl?: string | null;
+  summary: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MatchLineupEntry {
+  id: string;
+  matchId: string;
+  playerId: string;
+  position: string;
+  starter: boolean;
+  shirtNumber?: number | null;
+  captain: boolean;
+  minuteSubbedIn?: number | null;
+  minuteSubbedOut?: number | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MatchEvent {
+  id: string;
+  matchId: string;
+  playerId?: string | null;
+  teamSide: TeamSide;
+  eventType: MatchEventType;
+  minute: number;
+  relatedPlayerId?: string | null;
+  description: string;
+  createdAt?: string;
+}
+
+export interface PlayerMatchStatistics {
+  id: string;
+  matchId: string;
+  playerId: string;
+  minutesPlayed: number;
+  starts: boolean;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type MatchPlanPhase = 'attack' | 'defence' | 'transitions';
+
+export interface MatchPlanEntry {
+  id: string;
+  matchId: string;
+  phase: MatchPlanPhase;
+  notes: string;
+  videoUrl?: string | null;
+  image1Url?: string | null;
+  image2Url?: string | null;
+  pdfUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MatchSetPieces {
+  id: string;
+  matchId: string;
+  attackingNotes: string;
+  attackingVideoUrl?: string | null;
+  attackingImage1Url?: string | null;
+  attackingImage2Url?: string | null;
+  defensiveNotes: string;
+  defensiveVideoUrl?: string | null;
+  defensiveImage1Url?: string | null;
+  defensiveImage2Url?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface TrainingSession {
   id: string;
   teamName: string;

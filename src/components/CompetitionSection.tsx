@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TrainingSession, MatchFixture } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { MatchCentreSection } from './MatchCentreSection';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 interface CompetitionSectionProps {
@@ -115,10 +116,10 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const contextStorageKey = 'competition_section';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
-    activeTab: 'fixtures' as 'fixtures' | 'standings' | 'callup',
+    activeTab: 'fixtures' as 'fixtures' | 'standings' | 'callup' | 'matches',
     filterStatus: 'ALL' as 'ALL' | 'Scheduled' | 'Played'
   });
-  const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup'>(restoredContext.activeTab);
+  const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup' | 'matches'>(restoredContext.activeTab);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'Scheduled' | 'Played'>(restoredContext.filterStatus);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingFixture, setEditingFixture] = useState<MatchFixture | null>(null);
@@ -308,6 +309,19 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('matches')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-2 cursor-pointer ${
+              activeTab === 'matches'
+                ? 'bg-[#5ea4c5] text-slate-950 shadow-md shadow-[#5ea4c5]/20'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            <Trophy className="w-4 h-4" />
+            <span>Matches</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('standings')}
             className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'standings'
@@ -409,6 +423,12 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       )}
 
       {/* Main Tab 1: Fixtures & Results List */}
+      {activeTab === 'matches' && (
+        <div className="space-y-5">
+          <MatchCentreSection />
+        </div>
+      )}
+
       {activeTab === 'fixtures' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
           {/* Controls Bar */}
