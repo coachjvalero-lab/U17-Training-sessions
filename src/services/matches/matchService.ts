@@ -155,3 +155,151 @@ export async function linkMatchToFixture(matchId: string, fixtureId: string | nu
   if (error) throw error;
   return fromRow(data as MatchRow);
 }
+
+export interface StandingsEntry {
+  rank: number;
+  team: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  gf: number;
+  ga: number;
+  pts: number;
+  form: Array<'W' | 'D' | 'L'>;
+  isUs: boolean;
+}
+
+export async function calculateStandings(teamId: string, competitionName?: string): Promise<StandingsEntry[]> {
+  let query = getClient().from(MATCHES_TABLE).select('*');
+  
+  if (competitionName) {
+    query = query.eq('competition_name', competitionName);
+  }
+  
+  query = query.eq('status', 'played');
+  
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const matches = ((data || []) as MatchRow[]).map(fromRow);
+  
+  const teamsMap = new Map<string, {
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    gf: number;
+    ga: number;
+    matches: Match[];
+  }>();
+
+  matches.forEach(match => {
+    if (match.ourScore === null || match.opponentScore === null) return;
+
+    const ourTeam = match.teamId;
+    const opponent = match.opponentTeamId;
+    
+    if (!teamsMap.has(ourTeam)) {
+      teamsMap.set(ourTeam, { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, matches: [] });
+    }
+    if (!teamsMap.has(opponent)) {
+      teamsMap.set(opponent, { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, matches: [] });
+    }
+
+    const ourStats = teamsMap.get(ourTeam)!;
+    const opponentStats = teamsMap.get(opponent)!;
+
+    ourStats.played++;
+    ourStats.gf += match.ourScore;
+    ourStats.ga += match.opponentScore;
+    ourStats.matches.push(match);
+
+    opponentStats.played++;
+    opponentStats.gf += match.opponentScore;
+    opponentStats.ga += match.ourScore;
+
+    if (match.ourScore > match.opponentScore) {
+      ourStats.won++;
+      opponentStats.lost++;
+    } else if (match.ourScore < match.opponentScore) {
+      ourStats.lost++;
+      opponentStats.won++;
+    } else {
+      ourStats.drawn++;
+      opponentStats.drawn++;
+    }
+  });
+
+  const standings: StandingsEntry[] = Array.from(teamsMap.entries()).map(([team, stats]) => {
+    const recentMatches = stats.matches.slice(-5).reverse();
+    const form = recentMatches.map(m => {
+      if (m.ourScore === null || m.opponentScore === null) return 'D';
+      if (m.teamId === team) {
+        if (m.ourScore > m.opponentScore) return 'W';
+        if (m.ourScore < m.opponentScore) return 'L';
+        return 'D';
+      } else {
+        if (m.opponentScore > m.ourScore) return 'W';
+        if (m.opponentScore < m.ourScore) return 'L';
+        return 'D';
+      }
+    });
+
+    return {
+      rank: 0,
+      team,
+      played: stats.played,
+      won: stats.won,
+      drawn: stats.drawn,
+      lost: stats.lost,
+      gf: stats.gf,
+      ga: stats.ga,
+      pts: stats.won * 3 + stats.drawn,
+      form,
+      isUs: team === teamId
+    };
+  });
+
+  standings.sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    const gdA = a.gf - a.ga;
+    const gdB = b.gf - b.ga;
+    if (gdB !== gdA) return gdB - gdA;
+    return b.gf - a.gf;
+  });
+
+  standings.forEach((entry, index) => {
+    entry.rank = index + 1;
+  });
+
+  return standings;
+}
+
+export interface MatchWithScore {
+  id: string;
+  opponent: string;
+  date: string;
+  time: string;
+  location: 'Home' | 'Away' | 'Neutral';
+  venue?: string;
+  competitionName: string;
+  status: 'Scheduled' | 'Played';
+  ourGoals?: number;
+  opponentGoals?: number;
+}
+
+export function matchToDisplay(match: Match): MatchWithScore {
+  return {
+    id: match.id,
+    opponent: match.opponentTeamId,
+    date: match.date,
+    time: match.time,
+    location: match.isHome ? 'Home' : 'Away',
+    venue: match.venue ?? undefined,
+    competitionName: match.competitionName,
+    status: match.status === 'played' ? 'Played' : 'Scheduled',
+    ourGoals: match.ourScore ?? undefined,
+    opponentGoals: match.opponentScore ?? undefined
+  };
+}

@@ -12,107 +12,39 @@ import {
   X,
   Swords
 } from 'lucide-react';
-import { TrainingSession, MatchFixture } from '../types';
+import { TrainingSession, Match } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { MatchCentreSection } from './MatchCentreSection';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { useTeamContext } from '../contexts/TeamContext';
+import {
+  listMatches,
+  createMatch,
+  updateMatch,
+  deleteMatch,
+  calculateStandings,
+  matchToDisplay,
+  type StandingsEntry,
+  type MatchWithScore
+} from '../services/matches/matchService';
 
 interface CompetitionSectionProps {
   session?: TrainingSession;
   squadRoster?: string[];
-  fixtures?: MatchFixture[];
-  onUpdateFixtures?: (fixtures: MatchFixture[]) => void;
+  fixtures?: Match[];
+  onUpdateFixtures?: (fixtures: Match[]) => void;
 }
-
-export const DEFAULT_MATCHES: MatchFixture[] = [
-  {
-    id: 'match-1',
-    opponent: 'Al Ittihad U17',
-    opponentLogo: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&q=80&w=120',
-    date: '2026-08-08',
-    time: '18:30',
-    location: 'Home',
-    venue: 'Al Ula Sports Complex Stadium',
-    competitionName: 'Saudi U17 Premier League',
-    matchday: 'Matchday 14',
-    status: 'Scheduled',
-    tacticalNotes: 'Focus on high pressing in opponent build-up phase. Exploit wing space with fast transitions.'
-  },
-  {
-    id: 'match-2',
-    opponent: 'Al Ahli U17',
-    opponentLogo: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80&w=120',
-    date: '2026-07-25',
-    time: '19:00',
-    location: 'Away',
-    venue: 'King Abdullah Sports City - Field 2',
-    competitionName: 'Saudi U17 Premier League',
-    matchday: 'Matchday 13',
-    status: 'Played',
-    result: {
-      ourGoals: 3,
-      opponentGoals: 1
-    },
-    tacticalNotes: 'Dominant 2nd half performance. Excellent set-piece execution.'
-  },
-  {
-    id: 'match-3',
-    opponent: 'Al Hilal U17',
-    opponentLogo: 'https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&q=80&w=120',
-    date: '2026-07-18',
-    time: '18:00',
-    location: 'Home',
-    venue: 'Al Ula Sports Complex Stadium',
-    competitionName: 'Saudi U17 Premier League',
-    matchday: 'Matchday 12',
-    status: 'Played',
-    result: {
-      ourGoals: 2,
-      opponentGoals: 2
-    },
-    tacticalNotes: 'Solid defensive compactness after early red card. Counter-attack goals.'
-  },
-  {
-    id: 'match-4',
-    opponent: 'Al Nassr U17',
-    date: '2026-08-15',
-    time: '19:15',
-    location: 'Away',
-    venue: 'Al Nassr Academy Field',
-    competitionName: 'Saudi U17 Premier League',
-    matchday: 'Matchday 15',
-    status: 'Scheduled',
-    tacticalNotes: 'Direct opposition with high physical tempo.'
-  }
-];
-
-const INITIAL_STANDINGS = [
-  { rank: 1, team: 'Al Ula FC U17', played: 13, won: 10, drawn: 2, lost: 1, gf: 32, ga: 10, pts: 32, form: ['W', 'W', 'D', 'W', 'W'], isUs: true },
-  { rank: 2, team: 'Al Hilal U17', played: 13, won: 9, drawn: 3, lost: 1, gf: 29, ga: 12, pts: 30, form: ['W', 'D', 'D', 'W', 'W'], isUs: false },
-  { rank: 3, team: 'Al Ahli U17', played: 13, won: 8, drawn: 2, lost: 3, gf: 26, ga: 15, pts: 26, form: ['L', 'W', 'W', 'L', 'W'], isUs: false },
-  { rank: 4, team: 'Al Ittihad U17', played: 13, won: 7, drawn: 3, lost: 3, gf: 24, ga: 16, pts: 24, form: ['W', 'L', 'W', 'D', 'W'], isUs: false },
-  { rank: 5, team: 'Al Nassr U17', played: 13, won: 6, drawn: 3, lost: 4, gf: 21, ga: 18, pts: 21, form: ['D', 'W', 'L', 'W', 'L'], isUs: false },
-  { rank: 6, team: 'Al Shabab U17', played: 13, won: 5, drawn: 2, lost: 6, gf: 18, ga: 20, pts: 17, form: ['L', 'L', 'W', 'D', 'L'], isUs: false }
-];
 
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   squadRoster = [],
   fixtures: fixturesProp,
   onUpdateFixtures
 }) => {
-  const [localFixtures, setLocalFixtures] = useState<MatchFixture[]>(() => {
-    try {
-      const stored = localStorage.getItem('u17_competition_fixtures');
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      // fallback
-    }
-    return DEFAULT_MATCHES;
-  });
-
-  const fixtures = fixturesProp ?? localFixtures;
+  const { selectedTeamId } = useTeamContext();
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [standings, setStandings] = useState<StandingsEntry[]>([]);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [isLoadingStandings, setIsLoadingStandings] = useState(false);
 
   const contextStorageKey = 'competition_section';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -122,117 +54,143 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const [activeTab, setActiveTab] = useState<'fixtures' | 'standings' | 'callup' | 'matches'>(restoredContext.activeTab);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'Scheduled' | 'Played'>(restoredContext.filterStatus);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingFixture, setEditingFixture] = useState<MatchFixture | null>(null);
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { activeTab, filterStatus });
   }, [activeTab, filterStatus]);
 
+  useEffect(() => {
+    if (!selectedTeamId) return;
+
+    void (async () => {
+      try {
+        setIsLoadingMatches(true);
+        const matchList = await listMatches(selectedTeamId);
+        setMatches(matchList);
+      } catch (error) {
+        console.error('[CompetitionSection] Failed loading matches', error);
+        setMatches([]);
+      } finally {
+        setIsLoadingMatches(false);
+      }
+    })();
+  }, [selectedTeamId]);
+
+  useEffect(() => {
+    if (!selectedTeamId || activeTab !== 'standings') return;
+
+    void (async () => {
+      try {
+        setIsLoadingStandings(true);
+        const standingsList = await calculateStandings(selectedTeamId, 'Saudi U17 Premier League');
+        setStandings(standingsList);
+      } catch (error) {
+        console.error('[CompetitionSection] Failed loading standings', error);
+        setStandings([]);
+      } finally {
+        setIsLoadingStandings(false);
+      }
+    })();
+  }, [selectedTeamId, activeTab, matches]);
+
   // Match Form State
-  const [formData, setFormData] = useState<Partial<MatchFixture>>({
-    opponent: '',
+  const [formData, setFormData] = useState<Partial<Match>>({
+    opponentTeamId: '',
     competitionName: 'Saudi U17 Premier League',
     date: new Date().toISOString().split('T')[0],
     time: '18:30',
-    location: 'Home',
+    isHome: true,
     venue: 'Al Ula Sports Complex Stadium',
-    matchday: `Matchday ${fixtures.length + 1}`,
-    status: 'Scheduled',
-    tacticalNotes: ''
+    status: 'planned'
   });
 
   // Score Modal State
-  const [scoreModalMatch, setScoreModalMatch] = useState<MatchFixture | null>(null);
+  const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
   const [ourScore, setOurScore] = useState<number>(0);
   const [opponentScore, setOpponentScore] = useState<number>(0);
 
   // Squad Callup State
   const [selectedCallup, setSelectedCallup] = useState<string[]>(() => squadRoster.slice(0, 18));
 
-  const saveFixtures = (updated: MatchFixture[]) => {
-    if (onUpdateFixtures) {
-      onUpdateFixtures(updated);
-    } else {
-      setLocalFixtures(updated);
-      try {
-        localStorage.setItem('u17_competition_fixtures', JSON.stringify(updated));
-      } catch (e) {
-        // fallback
-      }
-    }
-  };
-
   const handleOpenAddModal = () => {
-    setEditingFixture(null);
+    setEditingMatch(null);
     setFormData({
-      opponent: '',
+      opponentTeamId: '',
       competitionName: 'Saudi U17 Premier League',
       date: new Date().toISOString().split('T')[0],
       time: '18:30',
-      location: 'Home',
+      isHome: true,
       venue: 'Al Ula Sports Complex Stadium',
-      matchday: `Matchday ${fixtures.length + 1}`,
-      status: 'Scheduled',
-      tacticalNotes: ''
+      status: 'planned'
     });
     setIsAddModalOpen(true);
   };
 
-  const handleOpenEditModal = (fix: MatchFixture) => {
-    setEditingFixture(fix);
-    setFormData(fix);
+  const handleOpenEditModal = (match: Match) => {
+    setEditingMatch(match);
+    setFormData(match);
     setIsAddModalOpen(true);
   };
 
-  const handleSaveFixture = (e: React.FormEvent) => {
+  const handleSaveMatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.opponent?.trim()) return;
+    if (!formData.opponentTeamId?.trim() || !selectedTeamId) return;
 
-    if (editingFixture) {
-      const updated = fixtures.map(f => f.id === editingFixture.id ? { ...f, ...formData } as MatchFixture : f);
-      saveFixtures(updated);
-    } else {
-      const newFix: MatchFixture = {
-        id: `match-${Date.now()}`,
-        opponent: formData.opponent.trim(),
-        competitionName: formData.competitionName || 'U17 League',
-        date: formData.date || new Date().toISOString().split('T')[0],
-        time: formData.time || '18:30',
-        location: formData.location || 'Home',
-        venue: formData.venue || 'Stadium',
-        matchday: formData.matchday || 'Matchday',
-        status: formData.status || 'Scheduled',
-        tacticalNotes: formData.tacticalNotes || ''
-      };
-      saveFixtures([newFix, ...fixtures]);
-    }
-    setIsAddModalOpen(false);
-  };
-
-  const handleDeleteFixture = (id: string) => {
-    if (confirm('Delete this match fixture?')) {
-      saveFixtures(fixtures.filter(f => f.id !== id));
-    }
-  };
-
-  const handleSaveScore = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scoreModalMatch) return;
-    const updated = fixtures.map(f => {
-      if (f.id === scoreModalMatch.id) {
-        return {
-          ...f,
-          status: 'Played' as const,
-          result: {
-            ourGoals: ourScore,
-            opponentGoals: opponentScore
-          }
-        };
+    try {
+      if (editingMatch) {
+        await updateMatch(editingMatch.id, formData);
+      } else {
+        await createMatch({
+          teamId: selectedTeamId,
+          opponentTeamId: formData.opponentTeamId.trim(),
+          competitionName: formData.competitionName || 'U17 League',
+          date: formData.date || new Date().toISOString().split('T')[0],
+          time: formData.time || '18:30',
+          status: formData.status || 'planned',
+          isHome: formData.isHome ?? true,
+          venue: formData.venue || null,
+          location: formData.location || null
+        });
       }
-      return f;
-    });
-    saveFixtures(updated);
-    setScoreModalMatch(null);
+      
+      const updated = await listMatches(selectedTeamId);
+      setMatches(updated);
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error('[CompetitionSection] Failed saving match', error);
+    }
+  };
+
+  const handleDeleteMatch = async (matchId: string) => {
+    if (!confirm('Delete this match?') || !selectedTeamId) return;
+
+    try {
+      await deleteMatch(matchId);
+      const updated = await listMatches(selectedTeamId);
+      setMatches(updated);
+    } catch (error) {
+      console.error('[CompetitionSection] Failed deleting match', error);
+    }
+  };
+
+  const handleSaveScore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scoreModalMatch || !selectedTeamId) return;
+
+    try {
+      await updateMatch(scoreModalMatch.id, {
+        status: 'played',
+        ourScore,
+        opponentScore
+      });
+
+      const updated = await listMatches(selectedTeamId);
+      setMatches(updated);
+      setScoreModalMatch(null);
+    } catch (error) {
+      console.error('[CompetitionSection] Failed saving score', error);
+    }
   };
 
   const toggleCallupPlayer = (playerName: string) => {
@@ -247,12 +205,12 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     }
   };
 
-  const filteredFixtures = fixtures.filter(f => {
+  const filteredMatches = matches.filter(m => {
     if (filterStatus === 'ALL') return true;
-    return f.status === filterStatus;
+    return m.status === (filterStatus === 'Scheduled' ? 'planned' : 'played');
   });
 
-  const nextUpcomingMatch = fixtures.find(f => f.status === 'Scheduled');
+  const nextUpcomingMatch = matches.find(m => m.status === 'planned');
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -304,7 +262,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             }`}
           >
             <Swords className="w-4 h-4" />
-            <span>Fixtures & Results ({fixtures.length})</span>
+            <span>Fixtures & Results ({matches.length})</span>
           </button>
 
           <button
@@ -379,7 +337,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             {/* Match VS Badge / Time */}
             <div className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl px-6 py-3 w-full md:w-auto shrink-0 shadow-inner">
               <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">
-                {nextUpcomingMatch.location} MATCH
+                {nextUpcomingMatch.isHome ? 'Home' : 'Away'} MATCH
               </span>
               <div className="text-xl font-black text-[#002142] my-0.5">
                 {nextUpcomingMatch.time}
@@ -393,10 +351,10 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             {/* Opponent */}
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start">
               <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-700 text-sm shrink-0">
-                {nextUpcomingMatch.opponent.substring(0, 3).toUpperCase()}
+                {nextUpcomingMatch.opponentTeamId.substring(0, 3).toUpperCase()}
               </div>
               <span className="text-base sm:text-lg font-black text-slate-900">
-                {nextUpcomingMatch.opponent}
+                {nextUpcomingMatch.opponentTeamId}
               </span>
             </div>
           </div>
@@ -462,12 +420,13 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
           {/* Fixture Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredFixtures.map((f) => {
-              const isPlayed = f.status === 'Played';
+            {filteredMatches.map((match) => {
+              const isPlayed = match.status === 'played';
+              const m = matchToDisplay(match);
 
               return (
                 <div 
-                  key={f.id}
+                  key={match.id}
                   className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-5 shadow-sm space-y-3 transition-all relative group"
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -477,25 +436,25 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                           ? 'bg-slate-100 text-slate-700 border-slate-300' 
                           : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                       }`}>
-                        {f.status}
+                        {m.status}
                       </span>
-                      <span className="text-xs font-bold text-slate-500">{f.matchday}</span>
+                      <span className="text-xs font-bold text-slate-500">{match.competitionName}</span>
                     </div>
 
                     <div className="flex items-center space-x-1 opacity-80 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
-                        onClick={() => handleOpenEditModal(f)}
+                        onClick={() => handleOpenEditModal(match)}
                         className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                        title="Edit Fixture"
+                        title="Edit Match"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeleteFixture(f.id)}
+                        onClick={() => void handleDeleteMatch(match.id)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="Delete Fixture"
+                        title="Delete Match"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -509,9 +468,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                       <span className="text-sm font-extrabold text-[#002142]">Al Ula FC</span>
                     </div>
 
-                    {isPlayed && f.result ? (
+                    {isPlayed && m.ourGoals !== undefined && m.opponentGoals !== undefined ? (
                       <div className="px-3 py-1 bg-slate-900 text-amber-400 text-base font-black rounded-xl font-mono">
-                        {f.result.ourGoals} - {f.result.opponentGoals}
+                        {m.ourGoals} - {m.opponentGoals}
                       </div>
                     ) : (
                       <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
@@ -520,9 +479,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                     )}
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm font-extrabold text-slate-800">{f.opponent}</span>
+                      <span className="text-sm font-extrabold text-slate-800">{m.opponent}</span>
                       <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center border border-slate-200">
-                        {f.opponent.substring(0, 2).toUpperCase()}
+                        {m.opponent.substring(0, 2).toUpperCase()}
                       </div>
                     </div>
                   </div>
@@ -531,10 +490,10 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 font-medium">
                     <div className="flex items-center space-x-1">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{f.date} • {f.time}</span>
+                      <span>{m.date} • {m.time}</span>
                     </div>
                     <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                      {f.location} ({f.competitionName})
+                      {m.location} ({m.competitionName})
                     </span>
                   </div>
 
@@ -542,7 +501,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setScoreModalMatch(f);
+                        setScoreModalMatch(match);
                         setOurScore(0);
                         setOpponentScore(0);
                       }}
@@ -572,73 +531,83 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
               </p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-              1st Place • Champions Rank
+              {standings.length > 0 && standings[0].isUs ? `${standings[0].rank}st Place • Champions Rank` : 'League Standings'}
             </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-semibold">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-3">#</th>
-                  <th className="py-3 px-3">Club / Team</th>
-                  <th className="py-3 px-2 text-center">P</th>
-                  <th className="py-3 px-2 text-center">W</th>
-                  <th className="py-3 px-2 text-center">D</th>
-                  <th className="py-3 px-2 text-center">L</th>
-                  <th className="py-3 px-2 text-center">GF</th>
-                  <th className="py-3 px-2 text-center">GA</th>
-                  <th className="py-3 px-2 text-center">GD</th>
-                  <th className="py-3 px-3 text-center">PTS</th>
-                  <th className="py-3 px-3 text-center">Form</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {INITIAL_STANDINGS.map((st) => (
-                  <tr 
-                    key={st.team}
-                    className={`transition-colors ${
-                      st.isUs ? 'bg-amber-50/80 font-black text-[#002142]' : 'hover:bg-slate-50/80 text-slate-700'
-                    }`}
-                  >
-                    <td className="py-3 px-3 font-mono font-bold">{st.rank}</td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center space-x-2">
-                        {st.isUs && <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Al Ula" className="w-5 h-5 object-contain" />}
-                        <span className={st.isUs ? 'text-[#002142] font-extrabold' : 'text-slate-800'}>
-                          {st.team}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 text-center font-mono">{st.played}</td>
-                    <td className="py-3 px-2 text-center font-mono text-emerald-700 font-bold">{st.won}</td>
-                    <td className="py-3 px-2 text-center font-mono text-slate-500">{st.drawn}</td>
-                    <td className="py-3 px-2 text-center font-mono text-rose-600">{st.lost}</td>
-                    <td className="py-3 px-2 text-center font-mono">{st.gf}</td>
-                    <td className="py-3 px-2 text-center font-mono">{st.ga}</td>
-                    <td className="py-3 px-2 text-center font-mono">{st.gf - st.ga > 0 ? `+${st.gf - st.ga}` : st.gf - st.ga}</td>
-                    <td className="py-3 px-3 text-center font-mono font-black text-sm text-[#002142]">
-                      {st.pts}
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center justify-center space-x-1">
-                        {st.form.map((f, i) => (
-                          <span
-                            key={i}
-                            className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center text-white ${
-                              f === 'W' ? 'bg-emerald-600' : f === 'D' ? 'bg-slate-400' : 'bg-rose-500'
-                            }`}
-                          >
-                            {f}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
+          {isLoadingStandings ? (
+            <div className="py-12 text-center text-slate-400 text-sm">
+              Loading standings...
+            </div>
+          ) : standings.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 text-sm">
+              No standings data available yet. Play matches to generate standings.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-semibold">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-3">#</th>
+                    <th className="py-3 px-3">Club / Team</th>
+                    <th className="py-3 px-2 text-center">P</th>
+                    <th className="py-3 px-2 text-center">W</th>
+                    <th className="py-3 px-2 text-center">D</th>
+                    <th className="py-3 px-2 text-center">L</th>
+                    <th className="py-3 px-2 text-center">GF</th>
+                    <th className="py-3 px-2 text-center">GA</th>
+                    <th className="py-3 px-2 text-center">GD</th>
+                    <th className="py-3 px-3 text-center">PTS</th>
+                    <th className="py-3 px-3 text-center">Form</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {standings.map((st) => (
+                    <tr 
+                      key={st.team}
+                      className={`transition-colors ${
+                        st.isUs ? 'bg-amber-50/80 font-black text-[#002142]' : 'hover:bg-slate-50/80 text-slate-700'
+                      }`}
+                    >
+                      <td className="py-3 px-3 font-mono font-bold">{st.rank}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center space-x-2">
+                          {st.isUs && <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Al Ula" className="w-5 h-5 object-contain" />}
+                          <span className={st.isUs ? 'text-[#002142] font-extrabold' : 'text-slate-800'}>
+                            {st.team}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-2 text-center font-mono">{st.played}</td>
+                      <td className="py-3 px-2 text-center font-mono text-emerald-700 font-bold">{st.won}</td>
+                      <td className="py-3 px-2 text-center font-mono text-slate-500">{st.drawn}</td>
+                      <td className="py-3 px-2 text-center font-mono text-rose-600">{st.lost}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.gf}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.ga}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.gf - st.ga > 0 ? `+${st.gf - st.ga}` : st.gf - st.ga}</td>
+                      <td className="py-3 px-3 text-center font-mono font-black text-sm text-[#002142]">
+                        {st.pts}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center justify-center space-x-1">
+                          {st.form.map((f, i) => (
+                            <span
+                              key={i}
+                              className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center text-white ${
+                                f === 'W' ? 'bg-emerald-600' : f === 'D' ? 'bg-slate-400' : 'bg-rose-500'
+                              }`}
+                            >
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -696,13 +665,13 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
         </div>
       )}
 
-      {/* Add / Edit Fixture Modal */}
+      {/* Add / Edit Match Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-fadeIn">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-[#002142] font-display">
-                {editingFixture ? 'Edit Fixture Details' : 'Schedule New Match'}
+                {editingMatch ? 'Edit Match Details' : 'Schedule New Match'}
               </h3>
               <button
                 type="button"
@@ -713,7 +682,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveFixture} className="space-y-3.5 text-xs font-medium text-slate-700">
+            <form onSubmit={handleSaveMatch} className="space-y-3.5 text-xs font-medium text-slate-700">
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
                   Opponent Club Name *
@@ -721,8 +690,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 <input
                   type="text"
                   required
-                  value={formData.opponent}
-                  onChange={(e) => setFormData({ ...formData, opponent: e.target.value })}
+                  value={formData.opponentTeamId || ''}
+                  onChange={(e) => setFormData({ ...formData, opponentTeamId: e.target.value })}
                   placeholder="e.g. Al Hilal U17"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
                 />
@@ -735,7 +704,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                   </label>
                   <input
                     type="date"
-                    value={formData.date}
+                    value={formData.date || ''}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
                   />
@@ -746,7 +715,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={formData.time}
+                    value={formData.time || ''}
                     onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                     placeholder="18:30"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
@@ -760,24 +729,23 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                     Location
                   </label>
                   <select
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value as any })}
+                    value={formData.isHome ? 'Home' : 'Away'}
+                    onChange={(e) => setFormData({ ...formData, isHome: e.target.value === 'Home' })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
                   >
                     <option value="Home">Home</option>
                     <option value="Away">Away</option>
-                    <option value="Neutral">Neutral</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
-                    Matchday #
+                    Competition
                   </label>
                   <input
                     type="text"
-                    value={formData.matchday}
-                    onChange={(e) => setFormData({ ...formData, matchday: e.target.value })}
-                    placeholder="Matchday 14"
+                    value={formData.competitionName || ''}
+                    onChange={(e) => setFormData({ ...formData, competitionName: e.target.value })}
+                    placeholder="Saudi U17 Premier League"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
                   />
                 </div>
@@ -789,7 +757,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.venue}
+                  value={formData.venue || ''}
                   onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                   placeholder="Al Ula Sports Complex Stadium"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
@@ -808,7 +776,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                   type="submit"
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-md"
                 >
-                  Save Fixture
+                  Save Match
                 </button>
               </div>
             </form>
@@ -835,7 +803,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
             <form onSubmit={handleSaveScore} className="space-y-4 text-center">
               <div className="text-xs font-bold text-slate-500">
-                Al Ula FC vs. {scoreModalMatch.opponent}
+                Al Ula FC vs. {scoreModalMatch.opponentTeamId}
               </div>
 
               <div className="flex items-center justify-center space-x-4 py-2">
@@ -853,7 +821,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 <span className="text-2xl font-black text-slate-300">-</span>
 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">{scoreModalMatch.opponent}</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{scoreModalMatch.opponentTeamId}</span>
                   <input
                     type="number"
                     min="0"

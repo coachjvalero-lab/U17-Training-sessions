@@ -13,7 +13,7 @@ import {
   BookOpen,
   Trash2
 } from 'lucide-react';
-import { TrainingSession, Exercise, MatchFixture, CloudTrainingSession, SquadPlayer } from '../types';
+import { TrainingSession, Exercise, CloudTrainingSession, SquadPlayer } from '../types';
 import { PlanificationSection } from './PlanificationSection';
 import { CompetitionSection } from './CompetitionSection';
 import { ExercisesLibrary } from './ExercisesLibrary';
@@ -80,8 +80,6 @@ interface FootballHubSectionProps {
   renderActiveSessionEditor: () => React.ReactNode;
   squadPlayers?: SquadPlayer[];
   squadRoster?: string[];
-  fixtures?: MatchFixture[];
-  onUpdateFixtures?: (fixtures: MatchFixture[]) => void;
   onAddExerciseToSession?: (
     blockKey: 'warmUp' | 'mainPart' | 'coolDown', 
     exercise: Exercise,
@@ -100,8 +98,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   renderActiveSessionEditor,
   squadPlayers = [],
   squadRoster = [],
-  fixtures,
-  onUpdateFixtures,
   onAddExerciseToSession,
   onLoadCloudSession,
   onDeleteCloudSession,
@@ -460,8 +456,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         <CompetitionSection
           session={session}
           squadRoster={squadRoster}
-          fixtures={fixtures}
-          onUpdateFixtures={onUpdateFixtures}
         />
       ) : footballSubTab === 'library' ? (
         <ExercisesLibrary

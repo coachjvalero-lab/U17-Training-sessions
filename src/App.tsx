@@ -14,7 +14,6 @@ import { PortalHub } from './components/PortalHub';
 import { SquadRosterSection } from './components/SquadRosterSection';
 import { PhysiotherapySection } from './components/PhysiotherapySection';
 import { VideoAnalysisSection } from './components/VideoAnalysisSection';
-import { DEFAULT_MATCHES } from './components/CompetitionSection';
 import { MatchCentreSection } from './components/MatchCentreSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { FitnessHubSection } from './components/FitnessHubSection';
@@ -29,8 +28,7 @@ import {
   CloudTrainingSession,
   SquadPlayer,
   PhysioRecord,
-  VideoAnalysis,
-  MatchFixture 
+  VideoAnalysis
 } from './types';
 import { 
   logoutUser,
@@ -62,12 +60,7 @@ import {
 } from './services/physio/physioService';
 import {
   deleteCompetitionFixtureFromCloud,
-  saveCompetitionFixtureToCloud,
-  subscribeToCompetitionFixtures
-} from './services/fixtures/fixturesService';
-import {
-  deleteVideoAnalysisFromCloud,
-  saveVideoAnalysisToCloud,
+  saveCodeoAnalysisToCloud,
   subscribeToVideoAnalysis
 } from './services/video/videoAnalysisService';
 import { setAuthorizationUserEmail } from './services/permissions/authorization';
@@ -514,42 +507,6 @@ export default function App() {
         localStorage.setItem('u17_video_sessions', JSON.stringify(list));
       } catch (e) {
         console.warn('Video sessions local cache warning:', e);
-      }
-    }, () => {
-      // Offline or subscription error: keep working with whatever is cached locally
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const initialCompetitionFixturesRef = useRef<MatchFixture[]>([]);
-  const [competitionFixtures, setCompetitionFixtures] = useState<MatchFixture[]>(() => {
-    const computed = (() => {
-      try {
-        const saved = localStorage.getItem('u17_competition_fixtures');
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
-      return DEFAULT_MATCHES;
-    })();
-    initialCompetitionFixturesRef.current = computed;
-    return computed;
-  });
-
-  const hasCompetitionFixturesMigrationSettledRef = useRef(false);
-
-  useEffect(() => {
-    hasCompetitionFixturesMigrationSettledRef.current = true;
-
-    const unsubscribe = subscribeToCompetitionFixtures((cloudFixtures) => {
-      if (cloudFixtures.length === 0 && !hasCompetitionFixturesMigrationSettledRef.current) {
-        return;
-      }
-      const list: MatchFixture[] = cloudFixtures.map(({ updatedAt, ...fixture }) => fixture);
-      setCompetitionFixtures(list);
-      try {
-        localStorage.setItem('u17_competition_fixtures', JSON.stringify(list));
-      } catch (e) {
-        console.warn('Competition fixtures local cache warning:', e);
       }
     }, () => {
       // Offline or subscription error: keep working with whatever is cached locally
@@ -1302,33 +1259,6 @@ export default function App() {
     });
   };
 
-  const handleUpdateCompetitionFixtures = (fixturesList: MatchFixture[]) => {
-    setCompetitionFixtures(prev => {
-      const previous = prev;
-      try {
-        localStorage.setItem('u17_competition_fixtures', JSON.stringify(fixturesList));
-      } catch (e) {}
-
-      const previousById = new Map(previous.map(fixture => [fixture.id, fixture]));
-      const updatedIds = new Set(fixturesList.map(fixture => fixture.id));
-
-      fixturesList.forEach(fixture => {
-        const previousFixture = previousById.get(fixture.id);
-        if (!previousFixture || JSON.stringify(previousFixture) !== JSON.stringify(fixture)) {
-          saveCompetitionFixtureToCloud(fixture).catch(err => console.warn('Cloud save failed for competition fixture:', err));
-        }
-      });
-
-      previous.forEach(fixture => {
-        if (!updatedIds.has(fixture.id)) {
-          deleteCompetitionFixtureFromCloud(fixture.id).catch(err => console.warn('Cloud delete failed for competition fixture:', err));
-        }
-      });
-
-      return fixturesList;
-    });
-  };
-
   const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
     setSession(prev => ({
       ...prev,
@@ -1901,8 +1831,6 @@ export default function App() {
             onNewSession={handleCreateNewCloudSession}
             squadPlayers={squadPlayersWithStats}
             squadRoster={fullSquadRoster}
-            fixtures={competitionFixtures}
-            onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="football"
             moduleDataWarning={footballFitnessLoadError}
             renderActiveSessionEditor={() => (
@@ -1951,8 +1879,6 @@ export default function App() {
               onNewSession={handleCreateNewCloudSession}
               squadPlayers={squadPlayersWithStats}
               squadRoster={fullSquadRoster}
-              fixtures={competitionFixtures}
-              onUpdateFixtures={handleUpdateCompetitionFixtures}
               role="fitness"
               renderActiveSessionEditor={() => (
                 <ModuleSessionEditor
@@ -1991,8 +1917,6 @@ export default function App() {
             onNewSession={handleCreateNewCloudSession}
             squadPlayers={squadPlayersWithStats}
             squadRoster={goalkeeperRoster}
-            fixtures={competitionFixtures}
-            onUpdateFixtures={handleUpdateCompetitionFixtures}
             role="gk"
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
