@@ -1,5 +1,7 @@
 import { supabase } from '../../supabaseClient';
-import type { MatchLineupEntry, PlayerMatchStatistics } from '../../types';
+import type { MatchEvent, MatchLineupEntry, PlayerMatchStatistics } from '../../types';
+import { getMatchEvents } from './matchEventsService';
+import { getMatchLineup } from './matchLineupService';
 
 const PLAYER_MATCH_STATISTICS_TABLE = 'player_match_statistics';
 
@@ -99,4 +101,62 @@ export function calculateMinutesPlayedFromLineupEntries(entries: Array<Pick<Matc
   const matchEntry = entries.find((entry) => entry.playerId === playerId);
   if (!matchEntry) return 0;
   return calculateMinutesPlayedFromLineupEntry(matchEntry, matchDurationMinutes);
+}
+
+export function derivePlayerMatchStatsFromData(
+  playerId: string,
+  lineupEntry: MatchLineupEntry | undefined,
+  matchEvents: MatchEvent[],
+  matchDurationMinutes = 90
+): Pick<PlayerMatchStatistics, 'matchId' | 'playerId' | 'minutesPlayed' | 'starts' | 'goals' | 'assists' | 'yellowCards' | 'redCards'> {
+  const minutesPlayed = lineupEntry
+    ? calculateMinutesPlayedFromLineupEntry(lineupEntry, matchDurationMinutes)
+    : 0;
+
+  const starts = Boolean(lineupEntry?.starter);
+
+  const goals = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'goal' && event.playerId === playerId).length;
+  const assists = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'assist' && event.playerId === playerId).length;
+  const yellowCards = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'yellow_card' && event.playerId === playerId).length;
+  const redCards = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'red_card' && event.playerId === playerId).length;
+
+  return {
+    matchId: '',
+    playerId,
+    minutesPlayed,
+    starts,
+    goals,
+    assists,
+    yellowCards,
+    redCards
+  };
+}
+
+export async function recalculatePlayerMatchStatistics(matchId: string, matchDurationMinutes = 90): Promise<PlayerMatchStatistics[]> {
+  const [lineupEntries, matchEvents] = await Promise.all([
+    getMatchLineup(matchId),
+    getMatchEvents(matchId)
+  ]);
+
+  const playerIds = Array.from(new Set(lineupEntries.map((entry) => entry.playerId)));
+  const results: PlayerMatchStatistics[] = [];
+
+  for (const playerId of playerIds) {
+    const lineupEntry = lineupEntries.find((entry) => entry.playerId === playerId);
+    const derived = derivePlayerMatchStatsFromData(playerId, lineupEntry, matchEvents, matchDurationMinutes);
+    const saved = await upsertPlayerMatchStatistics({
+      ...derived,
+      matchId,
+      playerId,
+      starts: derived.starts,
+      minutesPlayed: derived.minutesPlayed,
+      goals: derived.goals,
+      assists: derived.assists,
+      yellowCards: derived.yellowCards,
+      redCards: derived.redCards
+    });
+    results.push(saved);
+  }
+
+  return results.sort((a, b) => b.minutesPlayed - a.minutesPlayed || a.playerId.localeCompare(b.playerId));
 }

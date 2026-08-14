@@ -11,6 +11,8 @@ import {
   ExternalLink,
   Plus
 } from 'lucide-react';
+import { useTeamContext } from '../contexts/TeamContext';
+import { listMatches } from '../services/matches/matchService';
 import { VideoAnalysis, GameMoment } from '../types';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
@@ -28,14 +30,38 @@ export const VideoAnalysisSection: React.FC<VideoAnalysisSectionProps> = ({
     searchTerm: '',
     gameMomentFilter: 'ALL'
   });
+  const { selectedTeamId } = useTeamContext();
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
   const [gameMomentFilter, setGameMomentFilter] = useState<string>(restoredContext.gameMomentFilter);
+  const [matchOptions, setMatchOptions] = useState<Array<{ id: string; opponentTeamId: string; competitionName: string }>>([]);
+  const [selectedMatchId, setSelectedMatchId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<VideoAnalysis | null>(null);
 
   useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { searchTerm, gameMomentFilter });
   }, [searchTerm, gameMomentFilter]);
+
+  useEffect(() => {
+    if (!selectedTeamId) return;
+
+    void listMatches(selectedTeamId)
+      .then((matches) => {
+        const nextOptions = matches.map((match) => ({
+          id: match.id,
+          opponentTeamId: match.opponentTeamId,
+          competitionName: match.competitionName
+        }));
+        setMatchOptions(nextOptions);
+        if (!selectedMatchId && nextOptions.length > 0) {
+          setSelectedMatchId(nextOptions[0].id);
+        }
+      })
+      .catch((error) => {
+        console.error('[VideoAnalysisSection] Failed loading team matches', error);
+        setMatchOptions([]);
+      });
+  }, [selectedTeamId]);
 
   const [formData, setFormData] = useState<{
     title: string;
@@ -157,6 +183,17 @@ export const VideoAnalysisSection: React.FC<VideoAnalysisSectionProps> = ({
     }
   };
 
+  const handleOpenOpponentAnalysis = () => {
+    const matchId = selectedMatchId || matchOptions[0]?.id;
+    if (!matchId) return;
+
+    const nextUrl = `/matches/${encodeURIComponent(matchId)}`;
+    if (window.history.pushState) {
+      window.history.pushState({}, '', nextUrl);
+    }
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   const filtered = sessions.filter(s => {
     const matchesSearch = s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           s.opponentOrTopic.toLowerCase().includes(searchTerm.toLowerCase());
@@ -204,21 +241,46 @@ export const VideoAnalysisSection: React.FC<VideoAnalysisSectionProps> = ({
           />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-slate-500">Game Moment:</span>
-          <select
-            value={gameMomentFilter}
-            onChange={(e) => setGameMomentFilter(e.target.value)}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
-          >
-            <option value="ALL">All Moments</option>
-            <option value="Attack">Attack</option>
-            <option value="Defense">Defense</option>
-            <option value="Transition A-D">Transition A-D</option>
-            <option value="Transition D-A">Transition D-A</option>
-            <option value="Set Pieces">Set Pieces</option>
-            <option value="Match">Match</option>
-          </select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-slate-500">Game Moment:</span>
+            <select
+              value={gameMomentFilter}
+              onChange={(e) => setGameMomentFilter(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+            >
+              <option value="ALL">All Moments</option>
+              <option value="Attack">Attack</option>
+              <option value="Defense">Defense</option>
+              <option value="Transition A-D">Transition A-D</option>
+              <option value="Transition D-A">Transition D-A</option>
+              <option value="Set Pieces">Set Pieces</option>
+              <option value="Match">Match</option>
+            </select>
+          </div>
+
+          {matchOptions.length > 0 && (
+            <>
+              <select
+                value={selectedMatchId}
+                onChange={(e) => setSelectedMatchId(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+              >
+                {matchOptions.map((match) => (
+                  <option key={match.id} value={match.id}>
+                    {match.competitionName} vs {match.opponentTeamId}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleOpenOpponentAnalysis}
+                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-extrabold rounded-xl transition-colors"
+              >
+                Open Opponent Analysis
+              </button>
+            </>
+          )}
         </div>
       </div>
 

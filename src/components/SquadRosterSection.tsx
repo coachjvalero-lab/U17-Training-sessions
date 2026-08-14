@@ -18,9 +18,11 @@ import {
   Camera,
   ArrowRight,
   Upload,
-  Loader2
+  Loader2,
+  BarChart3,
+  TrendingUp
 } from 'lucide-react';
-import { SquadPlayer, TrainingSession } from '../types';
+import { SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary, Match } from '../types';
 import { CloudTrainingSession } from '../types';
 import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
@@ -29,6 +31,9 @@ import { groupSquadPlayersByPosition } from '../utils/squadGrouping';
 import { normalizeSquadPhotoUrl } from '../utils/squadPhotos';
 import { supabase } from '../supabaseClient';
 import { updateSquadPlayerPhotoPath } from '../services/squad/squadService';
+import { useTeamContext } from '../contexts/TeamContext';
+import { getPlayerMatchStatisticsSummary, getAvailableCompetitions } from '../modules/squadStatisticsService';
+import { listMatches } from '../services/matches/matchService';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -43,7 +48,7 @@ interface SquadRosterSectionProps {
   onIncludePlayer?: (name: string) => void;
 }
 
-type SquadSubTab = 'roster' | 'attendance' | 'malika';
+type SquadSubTab = 'roster' | 'attendance' | 'malika' | 'statistics';
 
 const GRAY_AVATAR_PLACEHOLDER =
   "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Crect width='240' height='240' rx='48' fill='%23e2e8f0'/%3E%3Ccircle cx='120' cy='92' r='42' fill='%23cbd5e1'/%3E%3Cpath d='M48 202c12-34 38-52 72-52s60 18 72 52' fill='%23cbd5e1'/%3E%3C/svg%3E";
@@ -70,15 +75,62 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     statusFilter: 'ALL',
     viewMode: 'grid' as const
   });
+  const { selectedTeamId } = useTeamContext();
   const [activeSubTab, setActiveSubTab] = useState<SquadSubTab>(restoredContext.activeSubTab as SquadSubTab);
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
   const [positionFilter, setPositionFilter] = useState<string>(restoredContext.positionFilter);
   const [statusFilter, setStatusFilter] = useState<string>(restoredContext.statusFilter);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(restoredContext.viewMode);
+  const [matchStatistics, setMatchStatistics] = useState<PlayerMatchStatisticsSummary[]>([]);
+  const [availableCompetitions, setAvailableCompetitions] = useState<string[]>([]);
+  const [availableMatches, setAvailableMatches] = useState<Match[]>([]);
+  const [selectedCompetition, setSelectedCompetition] = useState<string>('ALL');
+  const [selectedMatch, setSelectedMatch] = useState<string>('ALL');
+  const [statsSearchTerm, setStatsSearchTerm] = useState('');
+  const [statsSortBy, setStatsSortBy] = useState<'minutes' | 'goals' | 'assists' | 'apps'>('minutes');
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   useEffect(() => {
     setActiveSubTab(initialSubTab);
   }, [initialSubTab]);
+
+  useEffect(() => {
+    if (activeSubTab === 'statistics') {
+      void (async () => {
+        try {
+          const [competitions, matches] = await Promise.all([
+            getAvailableCompetitions(selectedTeamId),
+            listMatches(selectedTeamId)
+          ]);
+          setAvailableCompetitions(competitions);
+          setAvailableMatches(matches);
+        } catch (error) {
+          console.error('[SquadRosterSection] Failed loading match metadata', error);
+        }
+      })();
+    }
+  }, [activeSubTab, selectedTeamId]);
+
+  useEffect(() => {
+    if (activeSubTab !== 'statistics') return;
+
+    void (async () => {
+      try {
+        setIsLoadingStats(true);
+        const stats = await getPlayerMatchStatisticsSummary({
+          teamId: selectedTeamId,
+          competitionName: selectedCompetition === 'ALL' ? null : selectedCompetition,
+          matchId: selectedMatch === 'ALL' ? null : selectedMatch
+        });
+        setMatchStatistics(stats);
+      } catch (error) {
+        console.error('[SquadRosterSection] Failed loading match statistics', error);
+        setMatchStatistics([]);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    })();
+  }, [activeSubTab, selectedTeamId, selectedCompetition, selectedMatch]);
   
   // Modal State for Adding/Editing player
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -516,7 +568,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         </div>
 
         {/* TOP 2 MODULE NAVIGATION CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Card 1: Squad Roster & Profiles */}
           <button
@@ -692,10 +744,225 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
             </div>
           </button>
 
+          {/* Card 4: Match Statistics */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('statistics')}
+            className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
+              activeSubTab === 'statistics'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
+                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+            }`}
+          >
+            <div className={`absolute top-0 inset-x-0 h-1 transition-colors ${
+              activeSubTab === 'statistics' ? 'bg-sky-500' : 'bg-slate-800 group-hover:bg-sky-600'
+            }`} />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  MATCH PERFORMANCE
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  activeSubTab === 'statistics'
+                    ? 'bg-sky-500 text-slate-950 border-sky-400 font-black'
+                    : 'bg-sky-950/60 text-sky-400 border-sky-800/60'
+                }`}>
+                  Match Stats
+                </span>
+              </div>
+
+              <div className="flex items-start space-x-3">
+                <div className={`p-3 rounded-xl border shrink-0 transition-transform ${
+                  activeSubTab === 'statistics'
+                    ? 'bg-sky-500/20 text-sky-400 border-sky-500/40 scale-105'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 group-hover:text-sky-400'
+                }`}>
+                  <BarChart3 className="w-5 h-5 text-sky-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-sky-300 transition-colors">
+                    Match Statistics
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
+                    Player match performance aggregated from canonical match data.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span className="text-[11px] font-mono text-slate-400">
+                Apps, Goals, Assists
+              </span>
+              <div className="flex items-center space-x-1 text-sky-400 font-bold group-hover:translate-x-1 transition-transform">
+                <span>View Stats</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </button>
+
         </div>
       </div>
 
-      {activeSubTab === 'attendance' && session ? (
+      {activeSubTab === 'statistics' ? (
+        <div className="space-y-6">
+          <div className="bg-[#001d3a] border border-[#5ea4c5]/20 text-white rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden print:bg-white print:text-slate-900 print:border-slate-300 print:p-4">
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-3 bg-[#002b54] text-sky-300 rounded-2xl border border-sky-300/30 shadow-inner">
+                  <TrendingUp className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-sky-300">
+                      Squad Match Performance
+                    </span>
+                    <span className="bg-sky-500/20 text-sky-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-sky-500/30">
+                      Match Statistics
+                    </span>
+                  </div>
+                  <h1 className="text-xl md:text-2xl font-display font-black tracking-tight uppercase text-white mt-0.5">
+                    Player Match Statistics
+                  </h1>
+                  <p className="text-xs text-sky-200/70 font-semibold max-w-xl mt-1">
+                    Aggregated from canonical match data: apps, starts, minutes, goals, assists, cards.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-slate-500">Competition:</span>
+                <select
+                  value={selectedCompetition}
+                  onChange={(e) => setSelectedCompetition(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="ALL">All Competitions</option>
+                  {availableCompetitions.map((comp) => (
+                    <option key={comp} value={comp}>{comp}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-slate-500">Match:</span>
+                <select
+                  value={selectedMatch}
+                  onChange={(e) => setSelectedMatch(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="ALL">All Matches</option>
+                  {availableMatches.map((match) => (
+                    <option key={match.id} value={match.id}>
+                      vs {match.opponentTeamId} ({match.date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-slate-500">Sort By:</span>
+                <select
+                  value={statsSortBy}
+                  onChange={(e) => setStatsSortBy(e.target.value as 'minutes' | 'goals' | 'assists' | 'apps')}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="minutes">Minutes</option>
+                  <option value="goals">Goals</option>
+                  <option value="assists">Assists</option>
+                  <option value="apps">Apps</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={statsSearchTerm}
+                onChange={(e) => setStatsSearchTerm(e.target.value)}
+                placeholder="Search player by name..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+
+          {/* Statistics Table */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-md overflow-hidden">
+            {isLoadingStats ? (
+              <div className="p-12 text-center text-slate-400 flex flex-col items-center space-y-3">
+                <Loader2 className="w-6 h-6 animate-spin text-sky-600" />
+                <span className="text-xs font-medium">Loading match statistics...</span>
+              </div>
+            ) : (() => {
+              const filteredStats = matchStatistics
+                .filter((stat) => 
+                  stat.playerName.toLowerCase().includes(statsSearchTerm.toLowerCase())
+                )
+                .sort((a, b) => {
+                  if (statsSortBy === 'minutes') return b.minutes - a.minutes;
+                  if (statsSortBy === 'goals') return b.goals - a.goals;
+                  if (statsSortBy === 'assists') return b.assists - a.assists;
+                  if (statsSortBy === 'apps') return b.apps - a.apps;
+                  return 0;
+                });
+
+              if (filteredStats.length === 0) {
+                return (
+                  <div className="p-12 text-center text-slate-400">
+                    <p className="text-sm font-medium">
+                      {matchStatistics.length === 0 
+                        ? (availableMatches.length === 0 
+                            ? 'No matches available.' 
+                            : 'No match statistics available yet.')
+                        : 'No players match the selected filters.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-50/80">
+                        <th className="py-3 px-4">Player</th>
+                        <th className="py-3 px-4 text-center">Apps</th>
+                        <th className="py-3 px-4 text-center">Starts</th>
+                        <th className="py-3 px-4 text-center">Minutes</th>
+                        <th className="py-3 px-4 text-center">Goals</th>
+                        <th className="py-3 px-4 text-center">Assists</th>
+                        <th className="py-3 px-4 text-center">Yellow Cards</th>
+                        <th className="py-3 px-4 text-center">Red Cards</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                      {filteredStats.map((stat) => (
+                        <tr key={stat.playerId} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-900">{stat.playerName}</td>
+                          <td className="py-3 px-4 text-center text-slate-700">{stat.apps}</td>
+                          <td className="py-3 px-4 text-center text-slate-700">{stat.starts}</td>
+                          <td className="py-3 px-4 text-center text-slate-700">{stat.minutes}</td>
+                          <td className="py-3 px-4 text-center font-bold text-emerald-700">{stat.goals}</td>
+                          <td className="py-3 px-4 text-center font-bold text-sky-700">{stat.assists}</td>
+                          <td className="py-3 px-4 text-center text-amber-700">{stat.yellowCards}</td>
+                          <td className="py-3 px-4 text-center text-rose-700">{stat.redCards}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : activeSubTab === 'attendance' && session ? (
         <AttendanceSection
           session={session}
           cloudSessions={cloudSessions}

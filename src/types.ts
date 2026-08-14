@@ -276,6 +276,18 @@ export interface PlayerMatchStatistics {
   updatedAt?: string;
 }
 
+export interface PlayerMatchStatisticsSummary {
+  playerId: string;
+  playerName: string;
+  apps: number;
+  starts: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+}
+
 export type MatchPlanPhase = 'attack' | 'defence' | 'transitions';
 
 export interface MatchPlanEntry {
