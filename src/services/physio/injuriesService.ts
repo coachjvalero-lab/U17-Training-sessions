@@ -70,6 +70,19 @@ export async function updateInjury(id: string, patch: Partial<Injury>): Promise<
   if (error) throw error;
   return injuryFromRow(data);
 }
+export async function deleteInjury(id: string, teamId: string): Promise<void> {
+  const { data, error } = await client()
+    .from(INJURIES_TABLE)
+    .delete()
+    .eq('id', id)
+    .eq('team_id', teamId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw { code: '42501', message: 'The injury was not deleted. It may not exist or you may not have clinical delete permission for its team.' };
+  }
+}
 export function subscribeToInjuries(teamId: string, callback: (items: Injury[]) => void, onError?: (error: unknown) => void): () => void {
   let active = true; let channel: RealtimeChannel | null = null;
   const load = () => void listInjuries(teamId).then(items => { if (active) callback(items); }).catch(error => active && onError?.(error));

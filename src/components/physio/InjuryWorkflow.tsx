@@ -19,6 +19,7 @@ type InjuryWorkflowProps = {
   sessions: PhysioTrainingContext[];
   matches: PhysioMatchContext[];
   previousInjuries: Injury[];
+  injury?: Injury;
   onCancel: () => void;
   onSave: (injury: InjuryInput) => Promise<void>;
 };
@@ -27,7 +28,11 @@ const STEPS = ['Event', 'Body area', 'Diagnosis', 'Mechanism', 'Context detail',
 const today = () => new Date().toISOString().slice(0, 10);
 const label = (value: string) => value.replaceAll('_', ' ');
 
-function initialDraft(teamId: string, playerId: string): InjuryInput {
+function initialDraft(teamId: string, playerId: string, injury?: Injury): InjuryInput {
+  if (injury) {
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = injury;
+    return input;
+  }
   return {
     teamId,
     playerId,
@@ -79,14 +84,20 @@ function initialDraft(teamId: string, playerId: string): InjuryInput {
   };
 }
 
+function regionFromLocation(location?: string): BodyRegionKey | null {
+  const region = location?.split(':')[0] as BodyRegionKey | undefined;
+  return region && region in BODY_REGION_LABELS ? region : null;
+}
+
 const fieldClass = 'mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
 const labelClass = 'block text-xs font-bold uppercase text-slate-600';
 
-export function InjuryWorkflow({ teamId, players, sessions, matches, previousInjuries, onCancel, onSave }: InjuryWorkflowProps) {
+export function InjuryWorkflow({ teamId, players, sessions, matches, previousInjuries, injury, onCancel, onSave }: InjuryWorkflowProps) {
+  const editing = Boolean(injury);
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<InjuryInput>(() => initialDraft(teamId, players[0]?.playerId || ''));
-  const [region, setRegion] = useState<BodyRegionKey | null>(null);
-  const [subLocation, setSubLocation] = useState('');
+  const [draft, setDraft] = useState<InjuryInput>(() => initialDraft(teamId, players[0]?.playerId || '', injury));
+  const [region, setRegion] = useState<BodyRegionKey | null>(() => regionFromLocation(injury?.location));
+  const [subLocation, setSubLocation] = useState(() => injury?.location.split(':')[1] || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -142,8 +153,8 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase text-emerald-700">New clinical record</p>
-            <h1 className="truncate text-xl font-black text-[#08233d]">Record injury</h1>
+            <p className="text-xs font-bold uppercase text-emerald-700">{editing ? 'Update clinical record' : 'New clinical record'}</p>
+            <h1 className="truncate text-xl font-black text-[#08233d]">{editing ? 'Edit injury' : 'Record injury'}</h1>
           </div>
           <span className="text-sm font-bold text-slate-500">{step + 1} / {STEPS.length}</span>
         </div>
@@ -252,7 +263,7 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
 
           <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-5">
             <button type="button" onClick={() => step === 0 ? onCancel() : setStep((current) => current - 1)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /> {step === 0 ? 'Cancel' : 'Back'}</button>
-            {step < STEPS.length - 1 ? <button type="button" onClick={next} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#08233d] px-5 text-sm font-bold text-white hover:bg-[#123b5d]">Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" disabled={saving} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-700 px-5 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{saving ? 'Creating…' : 'Create injury'}</button>}
+            {step < STEPS.length - 1 ? <button type="button" onClick={next} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#08233d] px-5 text-sm font-bold text-white hover:bg-[#123b5d]">Continue <ArrowRight className="h-4 w-4" /></button> : <button type="button" disabled={saving} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-700 px-5 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{saving ? 'Saving…' : editing ? 'Save changes' : 'Create injury'}</button>}
           </div>
         </div>
       </div>

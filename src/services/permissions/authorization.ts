@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PortalSection } from '../../types';
 import { supabase } from '../../supabaseClient';
 
-export type AuthorizationAction = 'read';
+export type AuthorizationAction = 'read' | 'create' | 'update' | 'delete';
 
 let activeAuthorizationEmail: string | null = null;
 
@@ -103,6 +103,49 @@ export function can(
   section: PortalSection
 ): boolean {
   return canFromContext(cachedContext, section);
+}
+
+export function useSectionActionAuthorization(
+  section: PortalSection,
+  action: AuthorizationAction,
+  teamId?: string | null
+) {
+  const [allowed, setAllowed] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!teamId || !supabase) {
+      setAllowed(false);
+      return;
+    }
+
+    setAllowed(false);
+    setLoading(true);
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('can', {
+          section_name: section,
+          action_name: action,
+          team_key: teamId
+        });
+        if (error) throw error;
+        if (active) setAllowed(data === true);
+      } catch (error) {
+        console.error(`[Authorization] failed checking ${section}:${action}`, error);
+        if (active) setAllowed(false);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [action, section, teamId]);
+
+  return { allowed, loading };
 }
 
 export function useAuthorization(userEmail?: string | null) {

@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarCheck, CheckCircle2, Clock3, LoaderCircle, Plus } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, CheckCircle2, Clock3, LoaderCircle, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import type { ClinicalInjuryStatus, Injury, InjuryFollowUp, PhysioPlayerContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
@@ -13,9 +13,12 @@ type InjuryDetailProps = {
   followUps: InjuryFollowUp[];
   loadingFollowUps: boolean;
   canWrite: boolean;
+  canDelete: boolean;
   onBack: () => void;
+  onEdit: () => void;
   onAddFollowUp: (input: FollowUpInput) => Promise<void>;
   onCloseInjury: () => Promise<void>;
+  onDeleteInjury: () => Promise<void>;
 };
 
 const statuses: ClinicalInjuryStatus[] = ['open', 'under_treatment', 'rehab', 'return_to_training', 'return_to_play', 'closed'];
@@ -23,8 +26,10 @@ const label = (value: string) => value.replaceAll('_', ' ');
 const today = () => new Date().toISOString().slice(0, 10);
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
 
-export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canWrite, onBack, onAddFollowUp, onCloseInjury }: InjuryDetailProps) {
+export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canWrite, canDelete, onBack, onEdit, onAddFollowUp, onCloseInjury, onDeleteInjury }: InjuryDetailProps) {
   const [showFollowUp, setShowFollowUp] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,12 +46,29 @@ export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canW
     }
   };
 
+  const deleteCase = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await onDeleteInjury();
+    } catch (deleteError) {
+      const databaseError = deleteError as { code?: string; message?: string; details?: string };
+      const isRelatedRecordConstraint = databaseError.code === '23503';
+      setError(isRelatedRecordConstraint
+        ? 'This injury cannot be deleted because it has related clinical records.'
+        : databaseError.message || classifySupabaseError(deleteError).userMessage);
+      setShowDeleteConfirmation(false);
+      setDeleting(false);
+    }
+  };
+
   return <div className="space-y-7">
     <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-slate-600 hover:text-[#08233d]"><ArrowLeft className="h-4 w-4" /> Back to injuries</button>
     <header className="border-l-4 border-rose-500 bg-white px-5 py-6 shadow-sm sm:px-7">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
         <div><p className="text-xs font-bold uppercase text-rose-700">Clinical case · Day {getInjuryDays(injury)}</p><h1 className="mt-1 text-2xl font-black text-[#08233d]">{injury.finalDiagnosis || injury.clinicalDiagnosis || label(injury.injuryType)}</h1><p className="mt-2 text-sm text-slate-600">{player?.playerName || 'Player'} · {formatBodyLocation(injury.location)} · {label(injury.affectedSide)}</p></div>
-        <span className="w-fit rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold capitalize text-rose-800">{label(injury.currentStatus)}</span>
+        <div className="flex flex-wrap items-center gap-2"><span className="w-fit rounded-full bg-rose-50 px-3 py-1.5 text-xs font-bold capitalize text-rose-800">{label(injury.currentStatus)}</span>{canWrite && <button type="button" onClick={onEdit} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><Pencil className="h-4 w-4" /> Edit injury</button>}</div>
       </div>
     </header>
 
@@ -64,7 +86,9 @@ export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canW
     </section>
 
     {error && <div role="alert" className="border-l-4 border-rose-500 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{error}</div>}
-    {canWrite && injury.currentStatus !== 'closed' && <section className="border-t border-slate-300 pt-6"><button type="button" disabled={working} onClick={() => void closeCase()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-700 px-4 text-sm font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50">{working ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Close injury as returned</button></section>}
+    {(canWrite || canDelete) && <section className="flex flex-wrap gap-3 border-t border-slate-300 pt-6">{canWrite && injury.currentStatus !== 'closed' && <button type="button" disabled={working} onClick={() => void closeCase()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-700 px-4 text-sm font-bold text-emerald-800 hover:bg-emerald-50 disabled:opacity-50">{working ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Close injury as returned</button>}{canDelete && <button type="button" onClick={() => { setError(''); setShowDeleteConfirmation(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-rose-700 px-4 text-sm font-bold text-rose-800 hover:bg-rose-50"><Trash2 className="h-4 w-4" /> Delete injury</button>}</section>}
+
+    {showDeleteConfirmation && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4" role="presentation"><div role="alertdialog" aria-modal="true" aria-labelledby="delete-injury-title" aria-describedby="delete-injury-description" className="w-full max-w-md border border-slate-200 bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="delete-injury-title" className="text-xl font-black text-[#08233d]">Delete injury?</h2><p id="delete-injury-description" className="mt-3 text-sm leading-6 text-slate-600">This will permanently remove this injury record and its follow-up history. This action cannot be undone.</p></div><button type="button" disabled={deleting} onClick={() => setShowDeleteConfirmation(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Cancel deletion"><X className="h-5 w-5" /></button></div><div className="mt-6 flex justify-end gap-3"><button type="button" disabled={deleting} onClick={() => setShowDeleteConfirmation(false)} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 disabled:opacity-50">Cancel</button><button type="button" disabled={deleting} onClick={() => void deleteCase()} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-rose-700 px-4 text-sm font-bold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60">{deleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{deleting ? 'Deleting…' : 'Delete injury'}</button></div></div></div>}
   </div>;
 }
 
