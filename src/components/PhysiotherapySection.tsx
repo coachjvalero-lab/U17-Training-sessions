@@ -1,40 +1,142 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertCircle, CalendarClock, HeartPulse, Plus, X } from 'lucide-react';
-import type { ClinicalInjuryStatus, Injury, PhysioComplaint } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import { ClipboardList, HeartPulse, History, LayoutDashboard, LoaderCircle, Plus, Shield } from 'lucide-react';
+import type { Injury, InjuryFollowUp, PhysioComplaint } from '../types';
+import { useTeamContext } from '../contexts/TeamContext';
+import { useAuthorization } from '../services/permissions/authorization';
+import { classifySupabaseError } from '../services/supabaseError';
 import { addInjuryFollowUp, createInjury, getPhysioContext, listInjuryFollowUps, subscribeToInjuries, updateInjury } from '../services/physio/injuriesService';
 import { createPhysioComplaint, listPhysioComplaints } from '../services/physio/physioComplaintsService';
-import { getInjuryDays, isActiveInjury } from '../services/physio/physioMetricsService';
-import { classifySupabaseError } from '../services/supabaseError';
-import { useTeamContext } from '../contexts/TeamContext';
+import { ComplaintForm } from './physio/ComplaintForm';
+import { ComplaintList } from './physio/ComplaintList';
+import { InjuryDetail } from './physio/InjuryDetail';
+import { InjuryList } from './physio/InjuryList';
+import { InjuryWorkflow } from './physio/InjuryWorkflow';
+import { PhysioOverview } from './physio/PhysioOverview';
+import { PlayerClinicalTimeline } from './physio/PlayerClinicalTimeline';
 
+type PhysioView = 'overview' | 'injuries' | 'new-injury' | 'injury-detail' | 'complaints' | 'new-complaint' | 'history';
+type PhysioContextData = Awaited<ReturnType<typeof getPhysioContext>>;
+type PhysiotherapySectionProps = { userEmail?: string | null };
+
+const EMPTY_CONTEXT: PhysioContextData = { players: [], sessions: [], matches: [] };
 const today = () => new Date().toISOString().slice(0, 10);
-const statuses: ClinicalInjuryStatus[] = ['open', 'under_treatment', 'rehab', 'return_to_training', 'return_to_play', 'closed'];
-const label = (value: string) => value.replaceAll('_', ' ');
-type Tab = 'overview' | 'injuries' | 'complaints' | 'history';
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex justify-between"><h2 className="font-black">{title}</h2><button type="button" onClick={onClose}><X /></button></div>{children}</div></div>;
-}
-
-export const PhysiotherapySection: React.FC = () => {
+export function PhysiotherapySection({ userEmail }: PhysiotherapySectionProps) {
   const { selectedTeamId } = useTeamContext();
-  const [tab, setTab] = useState<Tab>('overview'); const [injuries, setInjuries] = useState<Injury[]>([]); const [complaints, setComplaints] = useState<PhysioComplaint[]>([]);
-  const [context, setContext] = useState<Awaited<ReturnType<typeof getPhysioContext>>>({ players: [], sessions: [], matches: [] });
-  const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [newInjury, setNewInjury] = useState(false); const [newComplaint, setNewComplaint] = useState(false); const [selected, setSelected] = useState<Injury | null>(null); const [followUps, setFollowUps] = useState<any[]>([]); const [historyPlayer, setHistoryPlayer] = useState('');
-  const refresh = async () => { if (!selectedTeamId) return; try { const [c, x] = await Promise.all([listPhysioComplaints(selectedTeamId), getPhysioContext(selectedTeamId)]); setComplaints(c); setContext(x); } catch (e) { setError(classifySupabaseError(e).userMessage); } };
-  useEffect(() => { if (!selectedTeamId) return; setLoading(true); const stop = subscribeToInjuries(selectedTeamId, rows => { setInjuries(rows); setLoading(false); }, e => { setError(classifySupabaseError(e).userMessage); setLoading(false); }); void refresh().finally(() => setLoading(false)); return stop; }, [selectedTeamId]);
-  useEffect(() => { if (selected) void listInjuryFollowUps(selected.id).then(setFollowUps).catch(e => setError(classifySupabaseError(e).userMessage)); }, [selected]);
-  const player = useMemo(() => new Map(context.players.map(item => [item.playerId, item])), [context.players]); const active = injuries.filter(isActiveInjury); const unavailable = new Set(active.filter(i => !['return_to_training', 'return_to_play'].includes(i.currentStatus)).map(i => i.playerId)).size;
-  const close = async () => { if (!selected) return; try { await updateInjury(selected.id, { currentStatus: 'closed', actualReturnDate: today(), closedAt: new Date().toISOString() }); setSelected(null); } catch (e) { setError(classifySupabaseError(e).userMessage); } };
-  if (!selectedTeamId) return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-900">Select a team to access Physiotherapy.</div>;
-  return <div className="space-y-6"><header className="rounded-3xl border border-slate-800 bg-[#002142] p-6 text-white"><div className="flex flex-wrap justify-between gap-4"><div><div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-rose-300"><HeartPulse className="h-4 w-4" /> Physiotherapy</div><h1 className="mt-1 text-2xl font-black">Clinical availability & recovery</h1><p className="mt-1 text-xs text-slate-300">Team-scoped injuries, complaints and follow-ups.</p></div><button onClick={() => setNewInjury(true)} className="flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2 text-xs font-black"><Plus className="h-4 w-4" /> New injury</button></div><div className="mt-5 flex flex-wrap gap-2">{(['overview','injuries','complaints','history'] as Tab[]).map(item => <button key={item} onClick={() => setTab(item)} className={`rounded-xl px-3 py-2 text-xs font-black capitalize ${tab === item ? 'bg-white text-[#002142]' : 'bg-white/10'}`}>{item === 'history' ? 'Player history' : item}</button>)}</div></header>{error && <div className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800">{error}</div>}{loading ? <div className="rounded-2xl bg-white p-10 text-center text-sm">Loading clinical workspace…</div> : <>
-    {tab === 'overview' && <div className="space-y-5"><div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[['Active injuries', active.length, AlertCircle],['Unavailable players', unavailable, Activity],['Open complaints', complaints.filter(c => c.outcome === 'ongoing').length, AlertCircle],['Returning to training', active.filter(i => i.currentStatus === 'return_to_training').length, CalendarClock]].map(([name, value, Icon]: any) => <div key={name} className="rounded-2xl border bg-white p-4"><Icon className="h-5 w-5 text-rose-600"/><div className="mt-2 text-2xl font-black">{value}</div><div className="text-[10px] font-black uppercase text-slate-400">{name}</div></div>)}</div><div className="rounded-2xl border bg-white p-5"><h2 className="font-black">Current cases</h2>{active.length ? active.map(i => <button key={i.id} onClick={() => setSelected(i)} className="flex w-full justify-between border-b py-3 text-left text-xs"><b>{player.get(i.playerId)?.playerName || 'Player'} · {i.location || label(i.injuryType)}</b><span>{label(i.currentStatus)}</span></button>) : <p className="mt-3 text-sm text-slate-500">No active injuries.</p>}</div></div>}
-    {tab === 'injuries' && <div className="overflow-x-auto rounded-2xl border bg-white"><table className="min-w-full text-left text-xs"><thead className="bg-slate-50 uppercase text-slate-500"><tr><th className="p-3">Player</th><th>Injury</th><th>Location</th><th>Date</th><th>Days</th><th>Status</th><th>Context</th></tr></thead><tbody>{injuries.map(i => <tr key={i.id} onClick={() => setSelected(i)} className="cursor-pointer border-t hover:bg-rose-50"><td className="p-3 font-bold">{player.get(i.playerId)?.playerName || 'Player'}</td><td>{i.finalDiagnosis || i.clinicalDiagnosis || label(i.injuryType)}</td><td>{i.location || '—'}</td><td>{i.injuryDate}</td><td>{getInjuryDays(i)}</td><td>{label(i.currentStatus)}</td><td>{i.context}</td></tr>)}</tbody></table>{!injuries.length && <p className="p-8 text-center text-sm text-slate-500">No injuries logged.</p>}<p className="p-3 text-[10px] text-slate-400">Training-load and missed-session metrics: Not available.</p></div>}
-    {tab === 'complaints' && <div className="space-y-3"><div className="flex justify-between rounded-2xl border bg-white p-5"><div><h2 className="font-black">Complaints / events</h2><p className="text-xs text-slate-500">Events remain recorded when linked to a resulting injury.</p></div><button onClick={() => setNewComplaint(true)} className="rounded-xl bg-[#002142] px-3 py-2 text-xs font-black text-white">New complaint</button></div>{complaints.map(c => <div key={c.id} className="rounded-xl border bg-white p-4 text-xs"><b>{player.get(c.playerId)?.playerName || 'Player'} · {label(c.complaintType)}</b><span className="float-right">{label(c.outcome)}</span><p className="mt-1 text-slate-500">{c.occurrenceDate} · {c.location || 'No location'} · {label(c.durationBand)}</p></div>)}</div>}
-    {tab === 'history' && <div className="rounded-2xl border bg-white p-5"><label className="text-xs font-black uppercase text-slate-500">Player<select className="ml-3 rounded-lg border p-2 text-sm" value={historyPlayer} onChange={e => setHistoryPlayer(e.target.value)}><option value="">Select player</option>{context.players.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}</select></label>{historyPlayer && <div className="mt-5 grid gap-5 md:grid-cols-2"><div><h3 className="font-black">Injuries</h3>{injuries.filter(i => i.playerId === historyPlayer).map(i => <button key={i.id} onClick={() => setSelected(i)} className="mt-2 block w-full rounded-xl bg-slate-50 p-3 text-left text-xs"><b>{i.injuryDate} · {i.location || label(i.injuryType)}</b><br/>{label(i.currentStatus)}</button>)}</div><div><h3 className="font-black">Complaints</h3>{complaints.filter(c => c.playerId === historyPlayer).map(c => <div key={c.id} className="mt-2 rounded-xl bg-slate-50 p-3 text-xs"><b>{c.occurrenceDate} · {label(c.complaintType)}</b><br/>{label(c.outcome)}</div>)}</div></div>}</div>}
-  </>}{newInjury && <InjuryModal teamId={selectedTeamId} players={context.players} sessions={context.sessions} matches={context.matches} onClose={() => setNewInjury(false)} onSave={async item => { await createInjury(item); setNewInjury(false); }}/>} {newComplaint && <ComplaintModal teamId={selectedTeamId} players={context.players} sessions={context.sessions} matches={context.matches} injuries={injuries} onClose={() => setNewComplaint(false)} onSave={async item => { await createPhysioComplaint(item); setNewComplaint(false); await refresh(); }}/>} {selected && <Modal title="Injury detail" onClose={() => setSelected(null)}><div className="space-y-4 text-sm"><div className="rounded-xl bg-slate-50 p-3"><b>{player.get(selected.playerId)?.playerName}</b><p className="text-xs">{selected.injuryDate} · {selected.location || label(selected.injuryType)} · {label(selected.currentStatus)}</p></div><h3 className="font-black">Follow-ups</h3>{followUps.map(f => <div key={f.id} className="rounded-xl border p-3 text-xs"><b>{f.followUpDate} · {label(f.status)}</b><p>{f.treatmentPerformed}</p></div>)}<FollowUpForm injury={selected} onSave={async f => { await addInjuryFollowUp(f); await updateInjury(selected.id, { currentStatus: f.status }); setFollowUps(await listInjuryFollowUps(selected.id)); }}/>{selected.currentStatus !== 'closed' && <button onClick={() => void close()} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">Close injury</button>}</div></Modal>}</div>;
-};
+  const { isAdmin, isLoadingAuthorization } = useAuthorization(userEmail);
+  const [view, setView] = useState<PhysioView>('overview');
+  const [injuries, setInjuries] = useState<Injury[]>([]);
+  const [complaints, setComplaints] = useState<PhysioComplaint[]>([]);
+  const [context, setContext] = useState<PhysioContextData>(EMPTY_CONTEXT);
+  const [selectedInjury, setSelectedInjury] = useState<Injury | null>(null);
+  const [followUps, setFollowUps] = useState<InjuryFollowUp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingFollowUps, setLoadingFollowUps] = useState(false);
+  const [historyPlayerId, setHistoryPlayerId] = useState('');
+  const [error, setError] = useState('');
+  const canWrite = isAdmin;
 
-function InjuryModal({ teamId, players, sessions, matches, onClose, onSave }: any) { const [draft, setDraft] = useState<any>({ teamId, playerId: players[0]?.playerId || '', injuryDate: today(), context: 'unknown', trainingSessionId: null, matchId: null, location: '', affectedSide: 'unknown', injuryType: 'other', clinicalDiagnosis: null, diagnosisStatus: 'not_established', previousSimilarInjury: false, occurrenceType: 'first_occurrence', contactWith: 'not_applicable', activities: [], painScore: null, popSensation: false, swelling: false, instability: false, lossOfStrength: false, reducedRangeOfMotion: false, currentStatus: 'open', estimatedReturnDate: null, actualReturnDate: null, closedAt: null }); const patch = (x: any) => setDraft({ ...draft, ...x }); return <Modal title="New injury" onClose={onClose}><form onSubmit={async e => { e.preventDefault(); try { await onSave(draft); } catch (err) { alert(classifySupabaseError(err).userMessage); } }} className="grid gap-3 md:grid-cols-2"><label>Player<select required value={draft.playerId} onChange={e => patch({playerId:e.target.value})}>{players.map((p:any) => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}</select></label><label>Injury date<input type="date" required value={draft.injuryDate} onChange={e => patch({injuryDate:e.target.value})}/></label><label>Context<select value={draft.context} onChange={e => patch({context:e.target.value,trainingSessionId:null,matchId:null})}>{['unknown','training','match','external'].map(x => <option key={x}>{x}</option>)}</select></label>{draft.context === 'training' && <label>Training<select required value={draft.trainingSessionId || ''} onChange={e => patch({trainingSessionId:e.target.value})}><option value="">Select session</option>{sessions.map((s:any) => <option key={s.sessionId} value={s.sessionId}>{s.sessionDate} · #{s.sessionNumber}</option>)}</select></label>}{draft.context === 'match' && <label>Match<select required value={draft.matchId || ''} onChange={e => patch({matchId:e.target.value})}><option value="">Select match</option>{matches.map((m:any) => <option key={m.matchId} value={m.matchId}>{m.matchDate} · {m.opponentName}</option>)}</select></label>}<label>Location<input value={draft.location} onChange={e => patch({location:e.target.value})}/></label><label>Injury type<select value={draft.injuryType} onChange={e => patch({injuryType:e.target.value})}>{['bone','joint_non_bone','ligament','tendon','muscle','skin','pain_non_specific','other'].map(x => <option key={x}>{label(x)}</option>)}</select></label><label>Side<select value={draft.affectedSide} onChange={e => patch({affectedSide:e.target.value})}>{['unknown','right','left','bilateral','not_applicable'].map(x => <option key={x}>{label(x)}</option>)}</select></label><label>Status<select value={draft.currentStatus} onChange={e => patch({currentStatus:e.target.value})}>{statuses.map(x => <option key={x}>{label(x)}</option>)}</select></label><label>Clinical diagnosis<input value={draft.clinicalDiagnosis || ''} onChange={e => patch({clinicalDiagnosis:e.target.value || null,diagnosisStatus:e.target.value?'clinical':'not_established'})}/></label><label>Pain (0–10)<input type="number" min="0" max="10" value={draft.painScore ?? ''} onChange={e => patch({painScore:e.target.value?Number(e.target.value):null})}/></label><label>Estimated return<input type="date" value={draft.estimatedReturnDate || ''} onChange={e => patch({estimatedReturnDate:e.target.value || null})}/></label><label>Activities<input placeholder="running, landing" onChange={e => patch({activities:e.target.value.split(',').map(x=>x.trim()).filter(Boolean)})}/></label>{draft.context === 'training' && <><label>Training minute<input type="number" min="0" onChange={e => patch({trainingMinute:e.target.value?Number(e.target.value):null})}/></label><label>Training phase<select onChange={e => patch({trainingPhase:e.target.value || null})}><option value="">Unknown</option><option value="warm_up">Warm-up</option><option value="main_part">Main part</option><option value="end_of_training">End</option></select></label></>} {draft.context === 'match' && <><label>Match minute<input type="number" min="0" onChange={e => patch({matchMinute:e.target.value?Number(e.target.value):null})}/></label><label>Match phase<select onChange={e => patch({matchPhase:e.target.value || null})}><option value="">Unknown</option><option value="warm_up">Warm-up</option><option value="first_half">1st half</option><option value="half_time">Half-time</option><option value="second_half">2nd half</option></select></label></>}<div className="md:col-span-2 flex justify-end gap-2"><button type="button" onClick={onClose}>Cancel</button><button className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white">Save injury</button></div></form></Modal>; }
-function ComplaintModal({ teamId, players, sessions, matches, injuries, onClose, onSave }: any) { const [item, setItem] = useState<any>({teamId,playerId:players[0]?.playerId||'',occurrenceDate:today(),context:'unknown',trainingSessionId:null,matchId:null,complaintType:'pain',location:'',affectedSide:'unknown',leftActivity:false,durationBand:'less_than_24h',outcome:'ongoing',resultingInjuryId:null,notes:''}); const p=(x:any)=>setItem({...item,...x}); return <Modal title="New complaint" onClose={onClose}><form onSubmit={async e=>{e.preventDefault();try{await onSave(item);}catch(err){alert(classifySupabaseError(err).userMessage)}}} className="grid gap-3 md:grid-cols-2"><label>Player<select value={item.playerId} onChange={e=>p({playerId:e.target.value})}>{players.map((x:any)=><option key={x.playerId} value={x.playerId}>{x.playerName}</option>)}</select></label><label>Date<input type="date" value={item.occurrenceDate} onChange={e=>p({occurrenceDate:e.target.value})}/></label><label>Type<select value={item.complaintType} onChange={e=>p({complaintType:e.target.value})}>{['pain','fatigue','muscle_soreness','cramp','stiffness','feeling_of_weakness','feeling_of_instability','dizziness','feeling_unwell','other'].map(x=><option key={x}>{label(x)}</option>)}</select></label><label>Location<input value={item.location} onChange={e=>p({location:e.target.value})}/></label><label>Duration<select value={item.durationBand} onChange={e=>p({durationBand:e.target.value})}>{['less_than_24h','1_to_3_days','4_to_7_days','more_than_7_days'].map(x=><option key={x}>{label(x)}</option>)}</select></label><label>Outcome<select value={item.outcome} onChange={e=>p({outcome:e.target.value,resultingInjuryId:e.target.value==='became_injury'?item.resultingInjuryId:null})}>{['ongoing','resolved','became_injury'].map(x=><option key={x}>{label(x)}</option>)}</select></label>{item.outcome==='became_injury'&&<label>Resulting injury<select required value={item.resultingInjuryId||''} onChange={e=>p({resultingInjuryId:e.target.value})}><option value="">Select injury</option>{injuries.filter((x:any)=>x.playerId===item.playerId).map((x:any)=><option key={x.id} value={x.id}>{x.injuryDate} · {x.location||x.injuryType}</option>)}</select></label>}<label className="md:col-span-2">Notes<textarea value={item.notes} onChange={e=>p({notes:e.target.value})}/></label><div className="md:col-span-2 flex justify-end gap-2"><button type="button" onClick={onClose}>Cancel</button><button className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white">Save complaint</button></div></form></Modal>; }
-function FollowUpForm({ injury, onSave }: any) { return <form onSubmit={async e=>{e.preventDefault();const d=new FormData(e.currentTarget);try{await onSave({injuryId:injury.id,followUpDate:String(d.get('date')),treatmentPhase:String(d.get('phase')||''),treatmentPerformed:String(d.get('treatment')||''),responseToTreatment:String(d.get('response')||''),injuryProgression:null,status:String(d.get('status')) as ClinicalInjuryStatus,nextReviewDate:String(d.get('next')||'')||null});e.currentTarget.reset()}catch(err){alert(classifySupabaseError(err).userMessage)}}} className="grid gap-2 rounded-xl border p-3 md:grid-cols-2"><input name="date" type="date" defaultValue={today()}/><input name="phase" placeholder="Treatment phase" required/><input name="treatment" placeholder="Treatment performed" required/><select name="status" defaultValue={injury.currentStatus}>{statuses.map(x=><option key={x} value={x}>{label(x)}</option>)}</select><input name="next" type="date"/><textarea name="response" placeholder="Response / progression"/><button className="w-fit rounded-xl bg-[#002142] px-3 py-2 text-xs font-black text-white">Add follow-up</button></form>; }
+  useEffect(() => {
+    if (!selectedTeamId) {
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError('');
+    const stop = subscribeToInjuries(
+      selectedTeamId,
+      (items) => {
+        if (!active) return;
+        setInjuries(items);
+        setSelectedInjury((selected) => selected ? items.find((item) => item.id === selected.id) || selected : null);
+        setLoading(false);
+      },
+      (loadError) => {
+        if (!active) return;
+        setError(classifySupabaseError(loadError).userMessage);
+        setLoading(false);
+      }
+    );
+    void Promise.all([listPhysioComplaints(selectedTeamId), getPhysioContext(selectedTeamId)])
+      .then(([nextComplaints, nextContext]) => {
+        if (!active) return;
+        setComplaints(nextComplaints);
+        setContext(nextContext);
+      })
+      .catch((loadError) => active && setError(classifySupabaseError(loadError).userMessage))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+      stop();
+    };
+  }, [selectedTeamId]);
+
+  useEffect(() => {
+    if (!selectedInjury) {
+      setFollowUps([]);
+      return;
+    }
+    let active = true;
+    setLoadingFollowUps(true);
+    void listInjuryFollowUps(selectedInjury.id)
+      .then((items) => active && setFollowUps(items))
+      .catch((loadError) => active && setError(classifySupabaseError(loadError).userMessage))
+      .finally(() => active && setLoadingFollowUps(false));
+    return () => { active = false; };
+  }, [selectedInjury?.id]);
+
+  const playerMap = useMemo(() => new Map(context.players.map((player) => [player.playerId, player])), [context.players]);
+  const openInjury = (injury: Injury) => {
+    setSelectedInjury(injury);
+    setView('injury-detail');
+  };
+  const refreshComplaints = async () => {
+    if (selectedTeamId) setComplaints(await listPhysioComplaints(selectedTeamId));
+  };
+
+  if (!selectedTeamId) return <div className="border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-900">Select a team to access Physiotherapy.</div>;
+  if (loading || isLoadingAuthorization) return <div className="grid min-h-[60vh] place-items-center bg-white"><div className="text-center"><LoaderCircle className="mx-auto h-7 w-7 animate-spin text-emerald-700" /><p className="mt-3 text-sm font-semibold text-slate-500">Loading clinical workspace…</p></div></div>;
+
+  if (view === 'new-injury') return <InjuryWorkflow teamId={selectedTeamId} players={context.players} sessions={context.sessions} matches={context.matches} previousInjuries={injuries} onCancel={() => setView('injuries')} onSave={async (input) => { await createInjury(input); setView('injuries'); }} />;
+  if (view === 'new-complaint') return <ComplaintForm teamId={selectedTeamId} players={context.players} sessions={context.sessions} matches={context.matches} injuries={injuries} onCancel={() => setView('complaints')} onSave={async (input) => { await createPhysioComplaint(input); await refreshComplaints(); setView('complaints'); }} />;
+  if (view === 'injury-detail' && selectedInjury) return <InjuryDetail
+    injury={selectedInjury}
+    player={playerMap.get(selectedInjury.playerId)}
+    followUps={followUps}
+    loadingFollowUps={loadingFollowUps}
+    canWrite={canWrite}
+    onBack={() => setView('injuries')}
+    onAddFollowUp={async (input) => {
+      await addInjuryFollowUp(input);
+      if (input.status !== selectedInjury.currentStatus) setSelectedInjury(await updateInjury(selectedInjury.id, { currentStatus: input.status }));
+      setFollowUps(await listInjuryFollowUps(selectedInjury.id));
+    }}
+    onCloseInjury={async () => setSelectedInjury(await updateInjury(selectedInjury.id, { currentStatus: 'closed', actualReturnDate: today(), closedAt: new Date().toISOString() }))}
+  />;
+
+  const tabs: { id: PhysioView; label: string; icon: typeof LayoutDashboard }[] = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'injuries', label: 'Injuries', icon: ClipboardList },
+    { id: 'complaints', label: 'Complaints', icon: HeartPulse },
+    { id: 'history', label: 'Player history', icon: History }
+  ];
+
+  return <div className="min-h-[70vh] bg-[#f5f7f8]">
+    <header className="border-b border-slate-800 bg-[#08233d] px-4 py-6 text-white sm:px-6">
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+        <div><div className="flex items-center gap-2 text-xs font-bold uppercase text-emerald-300"><HeartPulse className="h-4 w-4" /> Physiotherapy</div><h1 className="mt-1 text-2xl font-black">Clinical workspace</h1><p className="mt-1 text-sm text-slate-300">Availability, treatment and longitudinal player records.</p></div>
+        {canWrite ? <button type="button" onClick={() => setView('new-injury')} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-rose-500 px-4 text-sm font-bold text-white hover:bg-rose-600"><Plus className="h-4 w-4" /> Record injury</button> : <div className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-semibold text-slate-200"><Shield className="h-4 w-4" /> Read-only clinical access</div>}
+      </div>
+      <nav className="mt-6 flex gap-1 overflow-x-auto" aria-label="Physiotherapy sections">{tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setView(id)} className={`inline-flex min-h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-bold ${view === id ? 'border-emerald-400 text-white' : 'border-transparent text-slate-300 hover:text-white'}`}><Icon className="h-4 w-4" /> {label}</button>)}</nav>
+    </header>
+    <main className="px-4 py-7 sm:px-6">
+      {error && <div role="alert" className="mb-5 border-l-4 border-rose-500 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{error}</div>}
+      {!canWrite && <div className="mb-5 border-l-4 border-sky-500 bg-sky-50 p-4 text-sm text-sky-900">You can review clinical records. Creating or updating records requires confirmed clinical write access.</div>}
+      {view === 'overview' && <PhysioOverview injuries={injuries} complaints={complaints} players={context.players} canWrite={canWrite} onNewInjury={() => setView('new-injury')} onOpenInjury={openInjury} onOpenInjuries={() => setView('injuries')} onOpenComplaints={() => setView('complaints')} />}
+      {view === 'injuries' && <InjuryList injuries={injuries} players={context.players} onOpen={openInjury} />}
+      {view === 'complaints' && <ComplaintList complaints={complaints} players={context.players} canWrite={canWrite} onNew={() => setView('new-complaint')} />}
+      {view === 'history' && <PlayerClinicalTimeline players={context.players} injuries={injuries} complaints={complaints} selectedPlayerId={historyPlayerId} onSelectPlayer={setHistoryPlayerId} onOpenInjury={openInjury} />}
+    </main>
+  </div>;
+}

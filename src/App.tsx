@@ -1701,7 +1701,7 @@ export default function App() {
             onIncludePlayer={handleIncludePlayer}
           />
         ) : activeSection === 'physio' ? (
-          <PhysiotherapySection />
+          <PhysiotherapySection userEmail={currentUser?.email} />
         ) : activeSection === 'video' ? (
           <VideoAnalysisSection
             sessions={videoSessions}
