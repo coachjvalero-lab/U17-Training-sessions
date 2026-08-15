@@ -306,7 +306,7 @@ export function subscribeToSquadPlayers(
   void loadAndEmit();
 
   channel = client
-    .channel('u17-squad-players-realtime')
+    .channel(`u17-squad-players-realtime-${crypto.randomUUID()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: SQUAD_TABLE }, (payload) => {
       handleRealtimeChange(payload as RealtimePostgresChangesPayload<Record<string, unknown>>);
     })
