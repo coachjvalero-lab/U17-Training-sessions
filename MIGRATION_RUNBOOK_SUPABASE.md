@@ -81,7 +81,6 @@ Or run one by one:
 - npm run migrate:session-cards
 - npm run migrate:fixtures
 - npm run migrate:video
-- npm run migrate:physio
 
 ## 4) Validate app build
 

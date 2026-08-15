@@ -54,18 +54,119 @@ export interface SquadPlayer {
   malikaHistory?: MalikaHistoryEntry[];
 }
 
-export interface PhysioRecord {
+export type PhysioContext = 'training' | 'match' | 'external' | 'unknown';
+export type ClinicalInjuryStatus = 'open' | 'under_treatment' | 'rehab' | 'return_to_training' | 'return_to_play' | 'closed';
+export type AffectedSide = 'right' | 'left' | 'bilateral' | 'not_applicable' | 'unknown';
+export type InjuryType = 'bone' | 'joint_non_bone' | 'ligament' | 'tendon' | 'muscle' | 'skin' | 'pain_non_specific' | 'other';
+
+export interface Injury {
   id: string;
+  teamId: string;
+  playerId: string;
+  injuryDate: string;
+  context: PhysioContext;
+  trainingSessionId?: string | null;
+  matchId?: string | null;
+  location: string;
+  affectedSide: AffectedSide;
+  injuryType: InjuryType;
+  clinicalDiagnosis?: string | null;
+  medicalDiagnosis?: string | null;
+  imagingDiagnosis?: string | null;
+  finalDiagnosis?: string | null;
+  diagnosisStatus: 'not_established' | 'clinical' | 'medical' | 'imaging' | 'final';
+  injuryGrade?: string | null;
+  previousSimilarInjury: boolean;
+  occurrenceType: 'first_occurrence' | 'recurrent';
+  previousInjuryId?: string | null;
+  previousInjuryDate?: string | null;
+  sameLocation?: boolean | null;
+  sameDiagnosis?: boolean | null;
+  playingSurface?: string | null;
+  contactType?: 'contact' | 'non_contact' | null;
+  contactWith: 'opponent' | 'teammate' | 'other' | 'not_applicable';
+  activities: string[];
+  painScore?: number | null;
+  onset?: 'sudden' | 'gradual' | null;
+  popSensation: boolean;
+  swelling: boolean;
+  instability: boolean;
+  lossOfStrength: boolean;
+  reducedRangeOfMotion: boolean;
+  otherSymptoms?: string | null;
+  trainingDurationMinutes?: number | null;
+  trainingMinute?: number | null;
+  trainingPhase?: 'warm_up' | 'main_part' | 'end_of_training' | null;
+  playerContinued?: boolean | null;
+  continuedWithLimitations?: boolean | null;
+  leftTraining?: boolean | null;
+  playingTimeMinutes?: number | null;
+  matchMinute?: number | null;
+  matchPhase?: 'warm_up' | 'first_half' | 'half_time' | 'second_half' | null;
+  leftMatch?: boolean | null;
+  currentStatus: ClinicalInjuryStatus;
+  estimatedReturnDate?: string | null;
+  actualReturnDate?: string | null;
+  closedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InjuryFollowUp {
+  id: string;
+  injuryId: string;
+  followUpDate: string;
+  treatmentPhase: string;
+  treatmentPerformed: string;
+  responseToTreatment?: string | null;
+  injuryProgression?: string | null;
+  status: ClinicalInjuryStatus;
+  nextReviewDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhysioComplaint {
+  id: string;
+  teamId: string;
+  playerId: string;
+  occurrenceDate: string;
+  context: PhysioContext;
+  trainingSessionId?: string | null;
+  matchId?: string | null;
+  complaintType: 'pain' | 'fatigue' | 'muscle_soreness' | 'cramp' | 'stiffness' | 'feeling_of_weakness' | 'feeling_of_instability' | 'dizziness' | 'feeling_unwell' | 'other';
+  location: string;
+  affectedSide: AffectedSide;
+  leftActivity: boolean;
+  durationBand: 'less_than_24h' | '1_to_3_days' | '4_to_7_days' | 'more_than_7_days';
+  outcome: 'resolved' | 'ongoing' | 'became_injury';
+  resultingInjuryId?: string | null;
+  notes: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PhysioPlayerContext {
   playerId: string;
   playerName: string;
-  injuryDate: string;
-  injuryType: string;
-  severity: 'Mild' | 'Moderate' | 'Severe';
-  status: 'Active Treatment' | 'Rehab / Field Work' | 'Cleared for Training' | 'Closed';
-  treatmentNotes: string;
-  estimatedReturnDate?: string;
-  physioName?: string;
-  updatedAt: string;
+  shirtNumber?: string | null;
+  position: string;
+  currentStatus: SquadPlayer['status'];
+}
+
+export interface PhysioTrainingContext {
+  sessionId: string;
+  sessionDate: string;
+  sessionTime: string;
+  sessionNumber: string;
+  durationMinutes?: number | null;
+}
+
+export interface PhysioMatchContext {
+  matchId: string;
+  matchDate: string;
+  opponentName: string;
+  matchStatus: MatchStatus;
 }
 
 export interface VideoAnalysis {

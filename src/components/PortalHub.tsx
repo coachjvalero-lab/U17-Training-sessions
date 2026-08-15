@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Layers, 
   Activity, 
@@ -20,13 +20,15 @@ import {
   Lock,
   MessageSquare
 } from 'lucide-react';
-import { PortalSection, SquadPlayer, PhysioRecord, VideoAnalysis } from '../types';
+import { PortalSection, SquadPlayer, VideoAnalysis } from '../types';
 import { AppUser } from '../services/auth/authService';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
 import { useAuthorization } from '../services/permissions/authorization';
 import { useTeamContext } from '../contexts/TeamContext';
 import { AdminPermissionsModal } from './AdminPermissionsModal';
+import { listInjuries } from '../services/physio/injuriesService';
+import { isActiveInjury } from '../services/physio/physioMetricsService';
 
 interface PortalHubProps {
   onSelectSection: (section: PortalSection) => void;
@@ -34,7 +36,6 @@ interface PortalHubProps {
   activeSessionDate?: string;
   totalExercisesCount?: number;
   squadPlayers?: SquadPlayer[];
-  physioRecords?: PhysioRecord[];
   videoSessions?: VideoAnalysis[];
   currentUser?: AppUser | null;
   onLogout?: () => void;
@@ -48,7 +49,6 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   activeSessionDate = new Date().toISOString().split('T')[0],
   totalExercisesCount = 18,
   squadPlayers = [],
-  physioRecords = [],
   videoSessions = [],
   currentUser,
   onLogout,
@@ -65,9 +65,18 @@ export const PortalHub: React.FC<PortalHubProps> = ({
   const { allowedSections, isAdmin: userIsAdmin } = useAuthorization(currentUser?.email);
   const { availableTeams, selectedTeamId, setSelectedTeamId, isLoadingTeams } = useTeamContext();
 
-  const activeInjuriesCount = physioRecords.filter(r => r.status !== 'Closed').length;
+  const [activeInjuriesCount, setActiveInjuriesCount] = useState(0);
   const activePlayersCount = squadPlayers.length || squadCount;
   const videoCount = videoSessions.length;
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedTeamId) { setActiveInjuriesCount(0); return; }
+    void listInjuries(selectedTeamId)
+      .then((items) => { if (active) setActiveInjuriesCount(items.filter(isActiveInjury).length); })
+      .catch(() => { if (active) setActiveInjuriesCount(0); });
+    return () => { active = false; };
+  }, [selectedTeamId]);
 
   const handleApplyLogo = (newLogo: string) => {
     onUpdateLogo?.(newLogo);

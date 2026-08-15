@@ -27,7 +27,6 @@ import {
   PortalSection,
   CloudTrainingSession,
   SquadPlayer,
-  PhysioRecord,
   VideoAnalysis
 } from './types';
 import { 
@@ -53,11 +52,6 @@ import {
   subscribeToTeamLogo
 } from './services/team/teamLogoService';
 import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
-import {
-  deletePhysioRecordFromCloud,
-  savePhysioRecordToCloud,
-  subscribeToPhysioRecords
-} from './services/physio/physioService';
 import {
   deleteCompetitionFixtureFromCloud,
   saveCodeoAnalysisToCloud,
@@ -317,62 +311,6 @@ export default function App() {
     }, (error) => {
       console.log('[Squad SYNC ERROR]', error);
       // Keep current in-memory state on read/realtime errors.
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Physiotherapy Records — initial value is only a local cache for instant paint/offline;
-  // Firestore is the source of truth (see subscription effect below).
-  const initialPhysioRecordsRef = useRef<PhysioRecord[]>([]);
-  const [physioRecords, setPhysioRecords] = useState<PhysioRecord[]>(() => {
-    const computed = (() => {
-      try {
-        const saved = localStorage.getItem('u17_physio_records');
-        if (saved) return JSON.parse(saved);
-      } catch (e) {}
-      return [
-        {
-          id: 'physio-demo-1',
-          playerId: 'p9',
-          playerName: 'Lateen Al-Sulami',
-          injuryDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-          injuryType: 'Ankle Sprain Grade II',
-          severity: 'Moderate',
-          status: 'Rehab / Field Work',
-          treatmentNotes: 'Completed ice protocol and light straight-line running. Progressing to ball work.',
-          estimatedReturnDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
-          physioName: 'Dr. Sarah (Physio)',
-          updatedAt: new Date().toISOString().split('T')[0]
-        }
-      ];
-    })();
-    initialPhysioRecordsRef.current = computed;
-    return computed;
-  });
-
-  // Track whether the one-time physio records migration attempt has settled, so an empty
-  // cloud collection while it's still in flight doesn't briefly flash an empty log.
-  const hasPhysioMigrationSettledRef = useRef(false);
-
-  // Subscribe to the shared cloud physio records in real time so every coach/physio sees the same log.
-  // Automatic cloud migration is disabled; migration must be triggered explicitly.
-  useEffect(() => {
-    hasPhysioMigrationSettledRef.current = true;
-
-    const unsubscribe = subscribeToPhysioRecords((cloudRecords) => {
-      if (cloudRecords.length === 0 && !hasPhysioMigrationSettledRef.current) {
-        return;
-      }
-      const list: PhysioRecord[] = cloudRecords.map(({ cloudUpdatedAt, ...r }) => r);
-      setPhysioRecords(list);
-      try {
-        localStorage.setItem('u17_physio_records', JSON.stringify(list));
-      } catch (e) {
-        console.warn('Physio records local cache warning:', e);
-      }
-    }, () => {
-      // Offline or subscription error: keep working with whatever is cached locally
     });
 
     return () => unsubscribe();
@@ -1206,39 +1144,6 @@ export default function App() {
     });
   };
 
-  const handleUpdatePhysioRecords = (records: PhysioRecord[]) => {
-    const previous = physioRecords;
-    setPhysioRecords(records);
-    try {
-      localStorage.setItem('u17_physio_records', JSON.stringify(records));
-    } catch (e) {}
-
-    // Sync only what changed to Firestore (per-record docs), so simultaneous edits by different
-    // staff members never overwrite each other's changes to a different record.
-    const previousById = new Map(previous.map(r => [r.id, r]));
-    const updatedIds = new Set(records.map(r => r.id));
-
-    records.forEach(record => {
-      const prevRecord = previousById.get(record.id);
-      if (!prevRecord || JSON.stringify(prevRecord) !== JSON.stringify(record)) {
-        savePhysioRecordToCloud(record).catch(err => console.warn('Cloud save failed for physio record:', err));
-      }
-    });
-
-    previous.forEach(record => {
-      if (!updatedIds.has(record.id)) {
-        deletePhysioRecordFromCloud(record.id).catch(err => console.warn('Cloud delete failed for physio record:', err));
-      }
-    });
-  };
-
-  const handleUpdateSquadStatusFromPhysio = (playerId: string, newStatus: SquadPlayer['status']) => {
-    const updated = squadPlayers.map(p => p.id === playerId ? { ...p, status: newStatus } : p);
-    void handleUpdateSquadPlayers(updated).catch((err) => {
-      console.warn('Cloud save failed for squad player:', err);
-    });
-  };
-
   const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
     setVideoSessions(prev => {
       const previous = prev;
@@ -1773,7 +1678,6 @@ export default function App() {
               activeSessionDate={session.date}
               totalExercisesCount={libraryCount}
               squadPlayers={squadPlayersWithStats}
-              physioRecords={physioRecords}
               videoSessions={videoSessions}
               currentUser={currentUser}
               onLogout={handleLogout}
@@ -1797,12 +1701,7 @@ export default function App() {
             onIncludePlayer={handleIncludePlayer}
           />
         ) : activeSection === 'physio' ? (
-          <PhysiotherapySection
-            records={physioRecords}
-            squadPlayers={squadPlayers}
-            onUpdateRecords={handleUpdatePhysioRecords}
-            onUpdateSquadPlayerStatus={handleUpdateSquadStatusFromPhysio}
-          />
+          <PhysiotherapySection />
         ) : activeSection === 'video' ? (
           <VideoAnalysisSection
             sessions={videoSessions}

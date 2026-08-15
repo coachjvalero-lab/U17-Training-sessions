@@ -348,27 +348,6 @@ async function migrateVideo(): Promise<void> {
   });
 }
 
-async function migratePhysio(): Promise<void> {
-  await migrateCollectionDomain({
-    sourceCollection: 'physioRecords',
-    targetTable: 'physio_records',
-    map: ({ id, data }) => ({
-      id,
-      player_id: toSafeText(data.playerId),
-      player_name: toSafeText(data.playerName),
-      injury_date: toSafeText(data.injuryDate),
-      injury_type: toSafeText(data.injuryType),
-      severity: toSafeText(data.severity),
-      status: toSafeText(data.status),
-      treatment_notes: toSafeText(data.treatmentNotes),
-      estimated_return_date: data.estimatedReturnDate || null,
-      physio_name: data.physioName || null,
-      updated_at: toSafeText(data.updatedAt),
-      cloud_updated_at: toSafeInteger(data.cloudUpdatedAt, Date.now())
-    })
-  });
-}
-
 async function migrateSessionCards(): Promise<void> {
   await migrateCollectionDomain({
     sourceCollection: 'sessionCards',
@@ -596,7 +575,6 @@ async function run(): Promise<void> {
   if (domain === 'exercise-deleted-ids') return migrateExerciseDeletedIds();
   if (domain === 'fixtures') return migrateFixtures();
   if (domain === 'video') return migrateVideo();
-  if (domain === 'physio') return migratePhysio();
   if (domain === 'team-logo') return migrateTeamLogo();
   if (domain === 'session-cards') return migrateSessionCards();
   if (domain === 'permissions') return migratePermissions();

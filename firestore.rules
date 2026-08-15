@@ -81,18 +81,6 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // Physiotherapy / medical records — sensitive data, limited readers.
-    // ------------------------------------------------------------------
-    match /physioRecords/{recordId} {
-      allow read: if isAdmin() || hasSection('physio') || hasSection('football') || hasSection('fitness') || hasSection('gk');
-      allow write: if isAdmin() || hasSection('physio');
-    }
-    match /physioMeta/{docId} {
-      allow read: if isAdmin() || hasSection('physio') || hasSection('football') || hasSection('fitness') || hasSection('gk');
-      allow write: if isAdmin() || hasSection('physio');
-    }
-
-    // ------------------------------------------------------------------
     // Attendance
     // ------------------------------------------------------------------
     match /attendanceMeta/{docId} {
