@@ -21,16 +21,22 @@ type MatchRow = {
   updated_at: string | null;
 };
 
+type MatchRowWithOpponent = MatchRow & {
+  opponent_name?: string;
+};
+
 function getClient() {
   if (!supabase) throw new Error('Supabase client is not configured');
   return supabase;
 }
 
-function fromRow(row: MatchRow): Match {
+function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
+  const withOpponent = row as MatchRowWithOpponent;
   return {
     id: row.id,
     teamId: row.team_id,
     opponentTeamId: row.opponent_team_id,
+    opponentName: withOpponent.opponent_name ?? undefined,
     fixtureId: row.fixture_id ?? null,
     competitionName: row.competition_name ?? '',
     date: row.date,
@@ -66,7 +72,14 @@ function toRow(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' |
 }
 
 export async function listMatches(teamId?: string | null): Promise<Match[]> {
-  let query = getClient().from(MATCHES_TABLE).select('*');
+  // Join with auth_teams to get opponent name
+  let query = getClient()
+    .from(MATCHES_TABLE)
+    .select(`
+      *,
+      opponent_team:auth_teams!matches_opponent_team_id_fkey(name)
+    `);
+  
   if (teamId) {
     query = query.eq('team_id', teamId);
   }
@@ -74,7 +87,14 @@ export async function listMatches(teamId?: string | null): Promise<Match[]> {
   const { data, error } = await query.order('date', { ascending: false });
   if (error) throw error;
 
-  return ((data || []) as MatchRow[]).map(fromRow);
+  // Transform the joined data
+  return ((data || []) as any[]).map((row) => {
+    const opponent = row.opponent_team as { name?: string } | null;
+    return fromRow({
+      ...row,
+      opponent_name: opponent?.name
+    } as MatchRowWithOpponent);
+  });
 }
 
 export async function getMatchById(matchId: string): Promise<Match | null> {
@@ -88,9 +108,83 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
   return data ? fromRow(data as MatchRow) : null;
 }
 
+/**
+ * Ensures an opponent team exists in auth_teams.
+ * If the team doesn't exist, creates it with a slug-based ID.
+ * Returns the team ID.
+ */
+async function ensureOpponentTeam(opponentName: string): Promise<string> {
+  if (!opponentName || !opponentName.trim()) {
+    throw new Error('Opponent name is required');
+  }
+
+  const trimmedName = opponentName.trim();
+
+  // Generate slug: "Al Hilal U17" -> "al-hilal-u17"
+  const slug = trimmedName
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+
+  // Check if team already exists by name or slug
+  const { data: existingByName } = await getClient()
+    .from('auth_teams')
+    .select('id')
+    .ilike('name', trimmedName)
+    .maybeSingle();
+
+  if (existingByName) {
+    return existingByName.id;
+  }
+
+  const { data: existingBySlug } = await getClient()
+    .from('auth_teams')
+    .select('id')
+    .eq('id', slug)
+    .maybeSingle();
+
+  if (existingBySlug) {
+    return existingBySlug.id;
+  }
+
+  // Create new team
+  const { data: newTeam, error } = await getClient()
+    .from('auth_teams')
+    .insert({
+      id: slug,
+      name: trimmedName,
+      is_active: true
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    // Handle conflict if team was created concurrently
+    if (error.code === '23505') {
+      return slug;
+    }
+    throw error;
+  }
+
+  return newTeam.id;
+}
+
 export async function createMatch(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' | 'competitionName' | 'date' | 'time' | 'status'>): Promise<Match> {
   const matchId = input.id || crypto.randomUUID();
-  const payload = toRow({ ...input, id: matchId, teamId: input.teamId, opponentTeamId: input.opponentTeamId, competitionName: input.competitionName, date: input.date, time: input.time, status: input.status });
+  
+  // Ensure opponent team exists in auth_teams
+  const opponentTeamId = await ensureOpponentTeam(input.opponentTeamId);
+  
+  const payload = toRow({ 
+    ...input, 
+    id: matchId, 
+    teamId: input.teamId, 
+    opponentTeamId, 
+    competitionName: input.competitionName, 
+    date: input.date, 
+    time: input.time, 
+    status: input.status 
+  });
 
   const { data, error } = await getClient()
     .from(MATCHES_TABLE)
@@ -292,7 +386,7 @@ export interface MatchWithScore {
 export function matchToDisplay(match: Match): MatchWithScore {
   return {
     id: match.id,
-    opponent: match.opponentTeamId,
+    opponent: match.opponentName || match.opponentTeamId, // Use human-readable name if available
     date: match.date,
     time: match.time,
     location: match.isHome ? 'Home' : 'Away',

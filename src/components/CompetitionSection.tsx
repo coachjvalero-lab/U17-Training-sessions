@@ -104,6 +104,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     venue: 'Al Ula Sports Complex Stadium',
     status: 'planned'
   });
+  const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [matchSaveError, setMatchSaveError] = useState<string | null>(null);
 
   // Score Modal State
   const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
@@ -115,6 +117,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingMatch(null);
+    setMatchSaveError(null);
     setFormData({
       opponentTeamId: '',
       competitionName: 'Saudi U17 Premier League',
@@ -129,6 +132,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const handleOpenEditModal = (match: Match) => {
     setEditingMatch(match);
+    setMatchSaveError(null);
     setFormData(match);
     setIsAddModalOpen(true);
   };
@@ -136,6 +140,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const handleSaveMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.opponentTeamId?.trim() || !selectedTeamId) return;
+
+    setIsSavingMatch(true);
+    setMatchSaveError(null);
 
     try {
       if (editingMatch) {
@@ -157,8 +164,13 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       const updated = await listMatches(selectedTeamId);
       setMatches(updated);
       setIsAddModalOpen(false);
+      setMatchSaveError(null);
     } catch (error) {
       console.error('[CompetitionSection] Failed saving match', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save match. Please try again.';
+      setMatchSaveError(errorMessage);
+    } finally {
+      setIsSavingMatch(false);
     }
   };
 
@@ -351,10 +363,10 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             {/* Opponent */}
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start">
               <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-700 text-sm shrink-0">
-                {nextUpcomingMatch.opponentTeamId.substring(0, 3).toUpperCase()}
+                {(nextUpcomingMatch.opponentName || nextUpcomingMatch.opponentTeamId).substring(0, 3).toUpperCase()}
               </div>
               <span className="text-base sm:text-lg font-black text-slate-900">
-                {nextUpcomingMatch.opponentTeamId}
+                {nextUpcomingMatch.opponentName || nextUpcomingMatch.opponentTeamId}
               </span>
             </div>
           </div>
@@ -764,19 +776,30 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 />
               </div>
 
+              {matchSaveError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 text-xs font-medium">
+                  {matchSaveError}
+                </div>
+              )}
+
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+                  disabled={isSavingMatch}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-bold rounded-xl text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-md"
+                  disabled={isSavingMatch}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center space-x-2"
                 >
-                  Save Match
+                  {isSavingMatch && (
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  <span>{isSavingMatch ? 'Saving...' : 'Save Match'}</span>
                 </button>
               </div>
             </form>
@@ -803,7 +826,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
             <form onSubmit={handleSaveScore} className="space-y-4 text-center">
               <div className="text-xs font-bold text-slate-500">
-                Al Ula FC vs. {scoreModalMatch.opponentTeamId}
+                Al Ula FC vs. {scoreModalMatch.opponentName || scoreModalMatch.opponentTeamId}
               </div>
 
               <div className="flex items-center justify-center space-x-4 py-2">
@@ -821,7 +844,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 <span className="text-2xl font-black text-slate-300">-</span>
 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">{scoreModalMatch.opponentTeamId}</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{scoreModalMatch.opponentName || scoreModalMatch.opponentTeamId}</span>
                   <input
                     type="number"
                     min="0"

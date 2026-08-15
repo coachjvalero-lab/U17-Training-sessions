@@ -190,6 +190,7 @@ export interface Match {
   id: string;
   teamId: string;
   opponentTeamId: string;
+  opponentName?: string; // Human-readable opponent name from auth_teams
   fixtureId?: string | null;
   competitionName: string;
   date: string;
