@@ -23,6 +23,7 @@ type MatchRow = {
 
 type MatchRowWithOpponent = MatchRow & {
   opponent_name?: string;
+  opponent_logo_url?: string | null;
 };
 
 function getClient() {
@@ -37,6 +38,7 @@ function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
     teamId: row.team_id,
     opponentTeamId: row.opponent_team_id,
     opponentName: withOpponent.opponent_name ?? undefined,
+    opponentLogoUrl: withOpponent.opponent_logo_url ?? null,
     fixtureId: row.fixture_id ?? null,
     competitionName: row.competition_name ?? '',
     date: row.date,
@@ -77,22 +79,23 @@ export async function listMatches(teamId?: string | null): Promise<Match[]> {
     .from(MATCHES_TABLE)
     .select(`
       *,
-      opponent_team:auth_teams!matches_opponent_team_id_fkey(name)
+      opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
     `);
   
   if (teamId) {
     query = query.eq('team_id', teamId);
   }
 
-  const { data, error } = await query.order('date', { ascending: false });
+  const { data, error } = await query.order('date', { ascending: true });
   if (error) throw error;
 
   // Transform the joined data
   return ((data || []) as any[]).map((row) => {
-    const opponent = row.opponent_team as { name?: string } | null;
+    const opponent = row.opponent_team as { name?: string; logo_url?: string | null } | null;
     return fromRow({
       ...row,
-      opponent_name: opponent?.name
+      opponent_name: opponent?.name,
+      opponent_logo_url: opponent?.logo_url
     } as MatchRowWithOpponent);
   });
 }
@@ -100,12 +103,22 @@ export async function listMatches(teamId?: string | null): Promise<Match[]> {
 export async function getMatchById(matchId: string): Promise<Match | null> {
   const { data, error } = await getClient()
     .from(MATCHES_TABLE)
-    .select('*')
+    .select(`
+      *,
+      opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
+    `)
     .eq('id', matchId)
     .maybeSingle();
 
   if (error) throw error;
-  return data ? fromRow(data as MatchRow) : null;
+  if (!data) return null;
+
+  const row = data as MatchRow & { opponent_team?: { name?: string; logo_url?: string | null } | null };
+  return fromRow({
+    ...row,
+    opponent_name: row.opponent_team?.name,
+    opponent_logo_url: row.opponent_team?.logo_url
+  } as MatchRowWithOpponent);
 }
 
 /**

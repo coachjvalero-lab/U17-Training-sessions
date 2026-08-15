@@ -15,6 +15,7 @@ import {
 import { TrainingSession, Match } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { MatchCentreSection } from './MatchCentreSection';
+import { TeamCrest } from './TeamCrest';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
@@ -35,6 +36,14 @@ interface CompetitionSectionProps {
   onUpdateFixtures?: (fixtures: Match[]) => void;
 }
 
+function formatMatchDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  const day = parsed.getDate();
+  const month = parsed.toLocaleDateString('en-US', { month: 'short' });
+  return `${day} ${month} ${parsed.getFullYear()}`;
+}
+
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   squadRoster = [],
   fixtures: fixturesProp,
@@ -44,6 +53,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const [matches, setMatches] = useState<Match[]>([]);
   const [standings, setStandings] = useState<StandingsEntry[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [matchLoadError, setMatchLoadError] = useState<string | null>(null);
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
 
   const contextStorageKey = 'competition_section';
@@ -63,18 +73,26 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   useEffect(() => {
     if (!selectedTeamId) return;
 
+    let active = true;
     void (async () => {
       try {
         setIsLoadingMatches(true);
+        setMatchLoadError(null);
         const matchList = await listMatches(selectedTeamId);
-        setMatches(matchList);
+        if (active) setMatches(matchList);
       } catch (error) {
         console.error('[CompetitionSection] Failed loading matches', error);
-        setMatches([]);
+        if (active) {
+          setMatchLoadError(error instanceof Error ? error.message : 'Unable to load matches from Supabase.');
+        }
       } finally {
-        setIsLoadingMatches(false);
+        if (active) setIsLoadingMatches(false);
       }
     })();
+
+    return () => {
+      active = false;
+    };
   }, [selectedTeamId]);
 
   useEffect(() => {
@@ -222,7 +240,26 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     return m.status === (filterStatus === 'Scheduled' ? 'planned' : 'played');
   });
 
-  const nextUpcomingMatch = matches.find(m => m.status === 'planned');
+  const competitionName = matches.find((match) => match.competitionName.trim())?.competitionName || 'Competition';
+  const seasonLabel = (() => {
+    const years = matches
+      .map((match) => Number(match.date.slice(0, 4)))
+      .filter((year) => Number.isInteger(year))
+      .sort((a, b) => a - b);
+    const referenceDate = matches[0]?.date ? new Date(`${matches[0].date}T00:00:00`) : new Date();
+    const startYear = years[0] ?? (referenceDate.getMonth() >= 6 ? referenceDate.getFullYear() : referenceDate.getFullYear() - 1);
+    const endYear = years.at(-1) && years.at(-1)! > startYear ? years.at(-1)! : startYear + 1;
+    return `${startYear}/${endYear}`;
+  })();
+  const today = new Date().toISOString().slice(0, 10);
+  const nextUpcomingMatch = matches.find((match) => match.status === 'planned' && match.date >= today);
+  const nextOpponentName = nextUpcomingMatch?.opponentName || 'Opponent';
+  const nextHomeTeam = nextUpcomingMatch?.isHome
+    ? { name: 'AlUla U17 Women', isAlula: true, logoUrl: null }
+    : { name: nextOpponentName, isAlula: false, logoUrl: nextUpcomingMatch?.opponentLogoUrl };
+  const nextAwayTeam = nextUpcomingMatch?.isHome
+    ? { name: nextOpponentName, isAlula: false, logoUrl: nextUpcomingMatch?.opponentLogoUrl }
+    : { name: 'AlUla U17 Women', isAlula: true, logoUrl: null };
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -239,9 +276,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <span className="bg-amber-400/20 text-amber-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-amber-400/30">
-                  Saudi U17 Premier League
+                  {competitionName}
                 </span>
-                <span className="text-slate-400 text-xs font-semibold">2025/2026 Season</span>
+                <span className="text-slate-400 text-xs font-semibold">{seasonLabel} Season</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white font-display mt-1">
                 Competition & Matches Hub
@@ -287,7 +324,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             }`}
           >
             <Trophy className="w-4 h-4" />
-            <span>Matches</span>
+            <span>Matches ({matches.length})</span>
           </button>
 
           <button
@@ -329,21 +366,14 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
               </h2>
             </div>
             <span className="text-[11px] font-extrabold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
-              {nextUpcomingMatch.matchday || 'Next Match'}
+              Next Match
             </span>
           </div>
 
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 py-2">
-            {/* Our Team */}
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start md:justify-end">
-              <span className="text-base sm:text-lg font-black text-[#002142] text-right">
-                Al Ula FC U17
-              </span>
-              <img 
-                src={OFFICIAL_ALULA_LOGO_DATA_URL} 
-                alt="Al Ula" 
-                className="w-12 h-12 object-contain rounded-xl p-1 bg-slate-50 border border-slate-200 shadow-sm shrink-0" 
-              />
+              <span className="text-base sm:text-lg font-black text-[#002142] text-right">{nextHomeTeam.name}</span>
+              <TeamCrest name={nextHomeTeam.name} logoUrl={nextHomeTeam.logoUrl} isAlula={nextHomeTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
             </div>
 
             {/* Match VS Badge / Time */}
@@ -356,18 +386,13 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
               </div>
               <div className="flex items-center space-x-1.5 text-[11px] text-slate-500 font-bold">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>{nextUpcomingMatch.date}</span>
+                <span>{formatMatchDate(nextUpcomingMatch.date)}</span>
               </div>
             </div>
 
-            {/* Opponent */}
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start">
-              <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-700 text-sm shrink-0">
-                {(nextUpcomingMatch.opponentName || nextUpcomingMatch.opponentTeamId).substring(0, 3).toUpperCase()}
-              </div>
-              <span className="text-base sm:text-lg font-black text-slate-900">
-                {nextUpcomingMatch.opponentName || nextUpcomingMatch.opponentTeamId}
-              </span>
+              <TeamCrest name={nextAwayTeam.name} logoUrl={nextAwayTeam.logoUrl} isAlula={nextAwayTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
+              <span className="text-base sm:text-lg font-black text-slate-900">{nextAwayTeam.name}</span>
             </div>
           </div>
 
@@ -395,7 +420,11 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       {/* Main Tab 1: Fixtures & Results List */}
       {activeTab === 'matches' && (
         <div className="space-y-5">
-          <MatchCentreSection />
+          <MatchCentreSection
+            matches={matches}
+            isLoadingMatches={isLoadingMatches}
+            matchLoadError={matchLoadError}
+          />
         </div>
       )}
 

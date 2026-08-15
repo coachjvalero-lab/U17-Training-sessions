@@ -249,7 +249,8 @@ function buildDefaultAttendanceFromRoster(roster: string[]): PlayerAttendance[] 
 }
 
 export default function App() {
-  const matchDetailRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/matches/');
+  const [currentPathname, setCurrentPathname] = useState(() => typeof window !== 'undefined' ? window.location.pathname : '/');
+  const matchDetailRoute = currentPathname.startsWith('/matches/');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('u17_theme_mode');
@@ -265,6 +266,12 @@ export default function App() {
 
   useEffect(() => {
     registerSupabaseAuthDiagnosticsHelper();
+  }, []);
+
+  useEffect(() => {
+    const handleRouteChange = () => setCurrentPathname(window.location.pathname);
+    window.addEventListener('popstate', handleRouteChange);
+    return () => window.removeEventListener('popstate', handleRouteChange);
   }, []);
 
   useEffect(() => {

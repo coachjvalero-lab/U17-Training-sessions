@@ -23,6 +23,7 @@ export type AuthorizationTeam = {
   id: string;
   name: string;
   isActive: boolean;
+  logoUrl?: string | null;
 };
 
 function normalizeEmail(email: string): string {
@@ -97,14 +98,15 @@ export async function listAuthorizationTeams(): Promise<AuthorizationTeam[]> {
   const client = getClient();
   const { data, error } = await client
     .from('auth_teams')
-    .select('id, name, is_active')
+    .select('id, name, is_active, logo_url')
     .eq('is_active', true)
     .order('name', { ascending: true });
   if (error) throw error;
   return (data || []).map((row: any) => ({
     id: row.id,
     name: row.name,
-    isActive: Boolean(row.is_active)
+    isActive: Boolean(row.is_active),
+    logoUrl: row.logo_url || null
   }));
 }
 

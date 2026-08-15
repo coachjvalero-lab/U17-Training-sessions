@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CalendarDays, ChevronLeft, Eye, MapPin, PlayCircle, Plus, Save, Shield, Swords, Trophy, Video, X } from 'lucide-react';
-import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
+import { TeamCrest } from './TeamCrest';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
   createMatchEvent,
@@ -59,13 +59,11 @@ function getPathMatchId(): string | null {
 
 function formatDate(date: string): string {
   if (!date) return 'Date TBD';
-  const parsed = new Date(date);
+  const parsed = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
+  const day = parsed.getDate();
+  const month = parsed.toLocaleDateString('en-US', { month: 'short' });
+  return `${day} ${month} ${parsed.getFullYear()}`;
 }
 
 function formatMatchStatusLabel(status: Match['status']): string {
@@ -112,16 +110,6 @@ function toSlideEmbedUrl(input: string | null | undefined): string | null {
   }
 }
 
-function getNeutralLogoLabel(value: string): string {
-  const initials = value
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('');
-  return initials || 'OP';
-}
-
 function getEventLabel(eventType: MatchEventType): string {
   const map: Record<MatchEventType, string> = {
     goal: 'Goal',
@@ -137,9 +125,20 @@ function getEventLabel(eventType: MatchEventType): string {
   return map[eventType] || 'Event';
 }
 
-export const MatchCentreSection: React.FC = () => {
+interface MatchCentreSectionProps {
+  matches?: Match[];
+  isLoadingMatches?: boolean;
+  matchLoadError?: string | null;
+}
+
+export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
+  matches: providedMatches,
+  isLoadingMatches,
+  matchLoadError
+}) => {
   const { selectedTeamId, availableTeams } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(() => getPathMatchId());
   const [activeTab, setActiveTab] = useState<MatchTab>('opponent-analysis');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -202,19 +201,26 @@ export const MatchCentreSection: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (providedMatches) return;
+
     void (async () => {
       try {
         setIsLoading(true);
+        setMatchesError(null);
         const nextMatches = await listMatches(selectedTeamId || null);
         setMatches(nextMatches);
       } catch (error) {
         console.error('[MatchCentreSection] Failed loading matches', error);
-        setMatches([]);
+        setMatchesError(error instanceof Error ? error.message : 'Unable to load matches from Supabase.');
       } finally {
         setIsLoading(false);
       }
     })();
-  }, [selectedTeamId]);
+  }, [selectedTeamId, providedMatches]);
+
+  const visibleMatches = providedMatches ?? matches;
+  const visibleLoading = providedMatches ? Boolean(isLoadingMatches) : isLoading;
+  const visibleError = providedMatches ? matchLoadError : matchesError;
 
   useEffect(() => {
     if (!selectedMatchId) {
@@ -339,9 +345,8 @@ export const MatchCentreSection: React.FC = () => {
   const closeDetail = () => {
     setSelectedMatchId(null);
     setSelectedMatch(null);
-    const nextUrl = '/';
     if (window.history.pushState) {
-      window.history.pushState({}, '', nextUrl);
+      window.history.pushState({}, '', '/');
     }
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
@@ -478,8 +483,13 @@ export const MatchCentreSection: React.FC = () => {
       <div className="space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-black text-slate-900">Opponent Analysis</h3>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{selectedMatch.opponentTeamId}</span>
+            <div className="flex items-center gap-3">
+              <TeamCrest name={selectedMatch.opponentName || 'Opponent'} logoUrl={selectedMatch.opponentLogoUrl} className="h-11 w-11 rounded-xl border border-slate-200 bg-white p-1" />
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Opponent Analysis</h3>
+                <span className="text-[11px] font-bold uppercase text-slate-500">{selectedMatch.opponentName || 'Opponent'}</span>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-5">
@@ -900,6 +910,10 @@ export const MatchCentreSection: React.FC = () => {
   };
 
   if (selectedMatchId && selectedMatch) {
+    const opponentName = selectedMatch.opponentName || 'Opponent';
+    const homeTeamName = selectedMatch.isHome ? teamName : opponentName;
+    const awayTeamName = selectedMatch.isHome ? opponentName : teamName;
+
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -911,20 +925,19 @@ export const MatchCentreSection: React.FC = () => {
                 </button>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-200">{selectedMatch.competitionName}</div>
-                  <h2 className="mt-1 text-2xl font-black">{teamName} vs {selectedMatch.opponentTeamId}</h2>
+                  <h2 className="mt-1 text-2xl font-black">{homeTeamName} vs {awayTeamName}</h2>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 rounded-2xl bg-white/10 p-2">
-                  <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Our team" className="h-10 w-10 rounded-full border border-white/20 bg-white/10 p-1" />
+                  <TeamCrest name={teamName} isAlula className="h-10 w-10 rounded-full border border-white/20 bg-white/10 p-1" />
                   <span className="font-black">{teamName}</span>
                 </div>
+                <span className="text-xs font-black text-sky-200">VS</span>
                 <div className="flex items-center gap-2 rounded-2xl bg-white/10 p-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xs font-black">
-                    {getNeutralLogoLabel(selectedMatch.opponentTeamId)}
-                  </div>
-                  <span className="font-black">{selectedMatch.opponentTeamId}</span>
+                  <TeamCrest name={opponentName} logoUrl={selectedMatch.opponentLogoUrl} className="h-10 w-10 rounded-full border border-white/20 bg-white/10 p-1" />
+                  <span className="font-black">{opponentName}</span>
                 </div>
               </div>
             </div>
@@ -971,7 +984,7 @@ export const MatchCentreSection: React.FC = () => {
     );
   }
 
-  if (isLoading) {
+  if (visibleLoading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
         Loading matches…
@@ -979,7 +992,16 @@ export const MatchCentreSection: React.FC = () => {
     );
   }
 
-  if (matches.length === 0) {
+  if (visibleError) {
+    return (
+      <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800 shadow-sm">
+        <p className="font-black">Unable to load matches.</p>
+        <p className="mt-1 text-xs font-medium">{visibleError}</p>
+      </div>
+    );
+  }
+
+  if (visibleMatches.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
         No matches available yet.
@@ -987,55 +1009,105 @@ export const MatchCentreSection: React.FC = () => {
     );
   }
 
+  const opponentClubs = Array.from(
+    new Map(visibleMatches.map((match) => [
+      match.opponentTeamId,
+      {
+        id: match.opponentTeamId,
+        name: match.opponentName || 'Opponent',
+        logoUrl: match.opponentLogoUrl
+      }
+    ])).values()
+  ).sort((first, second) => first.name.localeCompare(second.name));
+
   return (
-    <div className="space-y-4">
-      {matches.map((match) => (
-        <div key={match.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex items-center gap-4">
-              <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Our team" className="h-12 w-12 rounded-2xl border border-slate-200 bg-slate-50 p-1" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{match.competitionName}</div>
-                <div className="mt-1 text-xl font-black text-slate-900">{teamName} vs {match.opponentTeamId}</div>
+    <div className="space-y-7">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {visibleMatches.map((match) => {
+        const opponentName = match.opponentName || 'Opponent';
+        const homeTeam = match.isHome
+          ? { name: teamName, isAlula: true, logoUrl: null }
+          : { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl };
+        const awayTeam = match.isHome
+          ? { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl }
+          : { name: teamName, isAlula: true, logoUrl: null };
+        const hasScore = match.ourScore !== null && match.ourScore !== undefined
+          && match.opponentScore !== null && match.opponentScore !== undefined;
+        const homeScore = match.isHome ? match.ourScore : match.opponentScore;
+        const awayScore = match.isHome ? match.opponentScore : match.ourScore;
+
+        const renderTeam = (team: { name: string; isAlula: boolean; logoUrl?: string | null }, side: 'Home' | 'Away') => (
+          <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+            <TeamCrest name={team.name} logoUrl={team.logoUrl} isAlula={team.isAlula} />
+            <span className="mt-3 text-[10px] font-black uppercase text-slate-400">{side}</span>
+            <span className="mt-1 min-h-10 text-sm font-black leading-5 text-slate-900">{team.name}</span>
+          </div>
+        );
+
+        return (
+          <article key={match.id} className="flex min-h-[390px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md">
+            <div className="border-b border-slate-100 bg-[#002142] px-5 py-3 text-center text-[10px] font-black uppercase text-white">
+              {match.competitionName}
+            </div>
+
+            <div className="flex flex-1 flex-col p-5">
+              <div className="flex items-start justify-between gap-3">
+                {renderTeam(homeTeam, 'Home')}
+                <div className="flex min-w-12 flex-col items-center pt-5">
+                  {hasScore ? (
+                    <span className="rounded-xl bg-slate-900 px-3 py-2 text-lg font-black text-white">{homeScore} - {awayScore}</span>
+                  ) : (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800">VS</span>
+                  )}
+                </div>
+                {renderTeam(awayTeam, 'Away')}
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3 border-y border-slate-100 py-4 text-center">
+                <div>
+                  <div className="text-[10px] font-black uppercase text-slate-400">Date</div>
+                  <div className="mt-1 text-sm font-black text-slate-800">{formatDate(match.date)}</div>
+                </div>
+                <div className="border-l border-slate-100">
+                  <div className="text-[10px] font-black uppercase text-slate-400">Kick-off</div>
+                  <div className="mt-1 text-sm font-black text-slate-800">{match.time || 'TBD'}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                <span>{match.venue || match.location || 'Venue TBD'}</span>
+              </div>
+
+              <div className="mt-auto flex items-center justify-between gap-3 pt-5">
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase ${match.status === 'played' ? 'border-slate-200 bg-slate-100 text-slate-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                  {formatMatchStatusLabel(match.status)}
+                </span>
+                <button type="button" onClick={() => openMatch(match.id)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-3 py-2 text-[10px] font-black uppercase text-white transition hover:bg-[#0b3a64]">
+                  <Eye className="h-3.5 w-3.5" />
+                  View details
+                </button>
               </div>
             </div>
+          </article>
+        );
+        })}
+      </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1.5 font-bold"><CalendarDays className="w-3.5 h-3.5" />{formatDate(match.date)}</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1.5 font-bold"><MapPin className="w-3.5 h-3.5" />{match.isHome ? 'Home' : 'Away'}</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1.5 font-bold"><Trophy className="w-3.5 h-3.5" />{formatMatchStatusLabel(match.status)}</span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm font-black text-slate-700">
-                {getNeutralLogoLabel(match.opponentTeamId)}
-              </div>
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Opponent</div>
-                <div className="text-sm font-bold text-slate-900">{match.opponentTeamId}</div>
-              </div>
-            </div>
-
-            <div className="text-sm font-semibold text-slate-600">
-              {match.venue || match.location || 'Venue TBD'}
-            </div>
-          </div>
-
-          {(match.ourScore !== null && match.ourScore !== undefined && match.opponentScore !== null && match.opponentScore !== undefined) && (
-            <div className="mt-4 rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm font-black text-emerald-900">
-              Final score: {match.ourScore} - {match.opponentScore}
-            </div>
-          )}
-
-          <div className="mt-4 flex justify-end">
-            <button type="button" onClick={() => openMatch(match.id)} className="rounded-xl bg-[#002142] px-4 py-2 text-xs font-black uppercase tracking-wider text-white">
-              View details
-            </button>
-          </div>
+      <div className="border-t border-slate-200 pt-6">
+        <div className="mb-4">
+          <h2 className="text-base font-black text-[#002142]">Clubs / Teams</h2>
+          <p className="mt-1 text-xs font-medium text-slate-500">Official opponents in the current competition calendar.</p>
         </div>
-      ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          {opponentClubs.map((club) => (
+            <div key={club.id} className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+              <TeamCrest name={club.name} logoUrl={club.logoUrl} className="h-14 w-14" />
+              <span className="mt-3 text-xs font-black leading-4 text-slate-800">{club.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
