@@ -209,7 +209,6 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
     setErrorMsg('');
     try {
       await saveUserPermissions(users);
-      await adminSyncIdentityProfilesForEmails(users.map((user) => user.email));
       setSuccessMsg('User permissions saved successfully.');
       onPermissionsUpdated?.();
       setTimeout(() => {
@@ -218,6 +217,11 @@ export const AdminPermissionsModal: React.FC<AdminPermissionsModalProps> = ({
       }, 1000);
     } catch (error: any) {
       const classified = classifySupabaseError(error);
+      console.error('[AdminPermissionsModal] failed to save permissions', {
+        code: classified.code,
+        message: classified.message,
+        kind: classified.kind
+      });
       setErrorMsg(classified.userMessage);
     }
   };

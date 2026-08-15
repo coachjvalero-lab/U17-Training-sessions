@@ -129,6 +129,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
   const [ourScore, setOurScore] = useState<number>(0);
   const [opponentScore, setOpponentScore] = useState<number>(0);
+  const [isSavingScore, setIsSavingScore] = useState(false);
+  const [scoreSaveError, setScoreSaveError] = useState<string | null>(null);
 
   // Squad Callup State
   const [selectedCallup, setSelectedCallup] = useState<string[]>(() => squadRoster.slice(0, 18));
@@ -209,6 +211,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     if (!scoreModalMatch || !selectedTeamId) return;
 
     try {
+      setIsSavingScore(true);
+      setScoreSaveError(null);
       await updateMatch(scoreModalMatch.id, {
         status: 'played',
         ourScore,
@@ -220,6 +224,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       setScoreModalMatch(null);
     } catch (error) {
       console.error('[CompetitionSection] Failed saving score', error);
+      setScoreSaveError(error instanceof Error ? error.message : 'Failed to save match result. Please try again.');
+    } finally {
+      setIsSavingScore(false);
     }
   };
 
@@ -406,8 +413,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
               type="button"
               onClick={() => {
                 setScoreModalMatch(nextUpcomingMatch);
-                setOurScore(0);
-                setOpponentScore(0);
+                setOurScore(nextUpcomingMatch.ourScore ?? 0);
+                setOpponentScore(nextUpcomingMatch.opponentScore ?? 0);
+                setScoreSaveError(null);
               }}
               className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer self-end sm:self-auto shadow-sm"
             >
@@ -521,9 +529,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
                     <div className="flex items-center space-x-2">
                       <span className="text-sm font-extrabold text-slate-800">{m.opponent}</span>
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center border border-slate-200">
-                        {m.opponent.substring(0, 2).toUpperCase()}
-                      </div>
+                      <TeamCrest name={m.opponent} logoUrl={m.opponentLogoUrl} className="h-8 w-8 rounded-lg border border-slate-200 bg-slate-50 p-0.5" />
                     </div>
                   </div>
 
@@ -538,20 +544,19 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                     </span>
                   </div>
 
-                  {!isPlayed && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScoreModalMatch(match);
-                        setOurScore(0);
-                        setOpponentScore(0);
-                      }}
-                      className="w-full mt-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center justify-center space-x-1 cursor-pointer"
-                    >
-                      <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Log Match Result</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScoreModalMatch(match);
+                      setOurScore(match.ourScore ?? 0);
+                      setOpponentScore(match.opponentScore ?? 0);
+                      setScoreSaveError(null);
+                    }}
+                    className="w-full mt-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{isPlayed ? 'Edit Match Result' : 'Log Match Result'}</span>
+                  </button>
                 </div>
               );
             })}
@@ -884,11 +889,18 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                 </div>
               </div>
 
+              {scoreSaveError && (
+                <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-left text-xs font-medium text-rose-700">
+                  {scoreSaveError}
+                </div>
+              )}
+
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md"
+                disabled={isSavingScore}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md"
               >
-                Save Final Result
+                {isSavingScore ? 'Saving...' : 'Save Match Result'}
               </button>
             </form>
           </div>

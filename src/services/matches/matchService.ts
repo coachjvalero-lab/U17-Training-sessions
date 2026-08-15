@@ -211,7 +211,6 @@ export async function createMatch(input: Partial<Match> & Pick<Match, 'teamId' |
 
 export async function updateMatch(matchId: string, patch: Partial<Match>): Promise<Match> {
   const payload: Record<string, unknown> = {
-    ...patch,
     updated_at: new Date().toISOString()
   };
 
@@ -386,6 +385,7 @@ export async function calculateStandings(teamId: string, competitionName?: strin
 export interface MatchWithScore {
   id: string;
   opponent: string;
+  opponentLogoUrl?: string | null;
   date: string;
   time: string;
   location: 'Home' | 'Away' | 'Neutral';
@@ -400,6 +400,7 @@ export function matchToDisplay(match: Match): MatchWithScore {
   return {
     id: match.id,
     opponent: match.opponentName || match.opponentTeamId, // Use human-readable name if available
+    opponentLogoUrl: match.opponentLogoUrl ?? null,
     date: match.date,
     time: match.time,
     location: match.isHome ? 'Home' : 'Away',

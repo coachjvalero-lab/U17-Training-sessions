@@ -97,17 +97,19 @@ async function listUserPermissions(): Promise<UserPermission[]> {
 export async function listAuthorizationTeams(): Promise<AuthorizationTeam[]> {
   const client = getClient();
   const { data, error } = await client
-    .from('auth_teams')
-    .select('id, name, is_active, logo_url')
-    .eq('is_active', true)
-    .order('name', { ascending: true });
+    .from('user_team_memberships')
+    .select('team:auth_teams!user_team_memberships_team_id_fkey(id, name, is_active, logo_url)');
   if (error) throw error;
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    name: row.name,
-    isActive: Boolean(row.is_active),
-    logoUrl: row.logo_url || null
-  }));
+  return (data || [])
+    .map((row: any) => row.team)
+    .filter((team: any) => Boolean(team?.id) && Boolean(team?.is_active))
+    .map((team: any) => ({
+      id: team.id,
+      name: team.name,
+      isActive: true,
+      logoUrl: team.logo_url || null
+    }))
+    .sort((first, second) => first.name.localeCompare(second.name));
 }
 
 export function subscribeToUserPermissions(
