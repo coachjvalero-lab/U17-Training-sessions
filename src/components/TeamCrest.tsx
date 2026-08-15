@@ -24,7 +24,7 @@ export const TeamCrest: React.FC<TeamCrestProps> = ({
   className = 'h-16 w-16'
 }) => {
   const [hasFailed, setHasFailed] = useState(false);
-  const source = isAlula ? OFFICIAL_ALULA_LOGO_DATA_URL : logoUrl;
+  const source = logoUrl || (isAlula ? OFFICIAL_ALULA_LOGO_DATA_URL : null);
 
   useEffect(() => {
     setHasFailed(false);

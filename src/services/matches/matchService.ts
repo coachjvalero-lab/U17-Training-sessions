@@ -17,6 +17,7 @@ type MatchRow = {
   status: Match['status'];
   our_score: number | null;
   opponent_score: number | null;
+  video_url: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -49,6 +50,7 @@ function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
     status: row.status,
     ourScore: row.our_score ?? null,
     opponentScore: row.opponent_score ?? null,
+    videoUrl: row.video_url ?? null,
     createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at ?? undefined
   };
@@ -69,6 +71,7 @@ function toRow(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' |
     status: input.status,
     our_score: input.ourScore ?? null,
     opponent_score: input.opponentScore ?? null,
+    video_url: input.videoUrl ?? null,
     updated_at: new Date().toISOString()
   };
 }
@@ -226,16 +229,19 @@ export async function updateMatch(matchId: string, patch: Partial<Match>): Promi
   if (patch.status !== undefined) payload.status = patch.status;
   if (patch.ourScore !== undefined) payload.our_score = patch.ourScore ?? null;
   if (patch.opponentScore !== undefined) payload.opponent_score = patch.opponentScore ?? null;
+  if (patch.videoUrl !== undefined) payload.video_url = patch.videoUrl ?? null;
 
-  const { data, error } = await getClient()
+  const { error } = await getClient()
     .from(MATCHES_TABLE)
     .update(payload)
     .eq('id', matchId)
-    .select('*')
+    .select('id')
     .single();
 
   if (error) throw error;
-  return fromRow(data as MatchRow);
+  const updated = await getMatchById(matchId);
+  if (!updated) throw new Error('Updated match could not be reloaded');
+  return updated;
 }
 
 export async function deleteMatch(matchId: string): Promise<void> {
@@ -301,7 +307,7 @@ export async function calculateStandings(teamId: string, competitionName?: strin
   }>();
 
   matches.forEach(match => {
-    if (match.ourScore === null || match.opponentScore === null) return;
+    if (match.ourScore == null || match.opponentScore == null) return;
 
     const ourTeam = match.teamId;
     const opponent = match.opponentTeamId;
@@ -340,7 +346,7 @@ export async function calculateStandings(teamId: string, competitionName?: strin
   const standings: StandingsEntry[] = Array.from(teamsMap.entries()).map(([team, stats]) => {
     const recentMatches = stats.matches.slice(-5).reverse();
     const form = recentMatches.map(m => {
-      if (m.ourScore === null || m.opponentScore === null) return 'D';
+      if (m.ourScore == null || m.opponentScore == null) return 'D';
       if (m.teamId === team) {
         if (m.ourScore > m.opponentScore) return 'W';
         if (m.ourScore < m.opponentScore) return 'L';

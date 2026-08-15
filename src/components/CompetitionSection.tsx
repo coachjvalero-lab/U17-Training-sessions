@@ -13,7 +13,6 @@ import {
   Swords
 } from 'lucide-react';
 import { TrainingSession, Match } from '../types';
-import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { MatchCentreSection } from './MatchCentreSection';
 import { TeamCrest } from './TeamCrest';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
@@ -34,6 +33,7 @@ interface CompetitionSectionProps {
   squadRoster?: string[];
   fixtures?: Match[];
   onUpdateFixtures?: (fixtures: Match[]) => void;
+  currentLogo?: string | null;
 }
 
 function formatMatchDate(date: string): string {
@@ -47,7 +47,8 @@ function formatMatchDate(date: string): string {
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   squadRoster = [],
   fixtures: fixturesProp,
-  onUpdateFixtures
+  onUpdateFixtures,
+  currentLogo
 }) => {
   const { selectedTeamId } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
@@ -380,7 +381,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 py-2">
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start md:justify-end">
               <span className="text-base sm:text-lg font-black text-[#002142] text-right">{nextHomeTeam.name}</span>
-              <TeamCrest name={nextHomeTeam.name} logoUrl={nextHomeTeam.logoUrl} isAlula={nextHomeTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
+              <TeamCrest name={nextHomeTeam.name} logoUrl={nextHomeTeam.isAlula ? currentLogo : nextHomeTeam.logoUrl} isAlula={nextHomeTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
             </div>
 
             {/* Match VS Badge / Time */}
@@ -398,7 +399,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             </div>
 
             <div className="flex items-center space-x-4 w-full md:w-1/3 justify-start">
-              <TeamCrest name={nextAwayTeam.name} logoUrl={nextAwayTeam.logoUrl} isAlula={nextAwayTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
+              <TeamCrest name={nextAwayTeam.name} logoUrl={nextAwayTeam.isAlula ? currentLogo : nextAwayTeam.logoUrl} isAlula={nextAwayTeam.isAlula} className="h-12 w-12 rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm" />
               <span className="text-base sm:text-lg font-black text-slate-900">{nextAwayTeam.name}</span>
             </div>
           </div>
@@ -432,6 +433,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             matches={matches}
             isLoadingMatches={isLoadingMatches}
             matchLoadError={matchLoadError}
+            currentLogo={currentLogo}
           />
         </div>
       )}
@@ -513,7 +515,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                   {/* Match Teams Row */}
                   <div className="flex items-center justify-between py-1">
                     <div className="flex items-center space-x-2">
-                      <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Al Ula" className="w-8 h-8 object-contain" />
+                      <TeamCrest name="Al Ula FC" logoUrl={currentLogo} isAlula className="h-8 w-8" />
                       <span className="text-sm font-extrabold text-[#002142]">Al Ula FC</span>
                     </div>
 
@@ -618,7 +620,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                       <td className="py-3 px-3 font-mono font-bold">{st.rank}</td>
                       <td className="py-3 px-3">
                         <div className="flex items-center space-x-2">
-                          {st.isUs && <img src={OFFICIAL_ALULA_LOGO_DATA_URL} alt="Al Ula" className="w-5 h-5 object-contain" />}
+                          {st.isUs && <TeamCrest name="Al Ula FC" logoUrl={currentLogo} isAlula className="h-5 w-5" />}
                           <span className={st.isUs ? 'text-[#002142] font-extrabold' : 'text-slate-800'}>
                             {st.team}
                           </span>

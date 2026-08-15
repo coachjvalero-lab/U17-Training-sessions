@@ -10,6 +10,7 @@ type MatchEventRow = {
   team_side: TeamSide;
   event_type: MatchEventType;
   minute: number | null;
+  video_timestamp_seconds: number | null;
   related_player_id: string | null;
   description: string | null;
   created_at: string | null;
@@ -28,6 +29,7 @@ function fromRow(row: MatchEventRow): MatchEvent {
     teamSide: row.team_side,
     eventType: row.event_type,
     minute: row.minute ?? 0,
+    videoTimestampSeconds: row.video_timestamp_seconds ?? 0,
     relatedPlayerId: row.related_player_id ?? null,
     description: row.description ?? '',
     createdAt: row.created_at ?? undefined
@@ -39,7 +41,7 @@ export async function getMatchEvents(matchId: string): Promise<MatchEvent[]> {
     .from(MATCH_EVENTS_TABLE)
     .select('*')
     .eq('match_id', matchId)
-    .order('minute', { ascending: true });
+    .order('video_timestamp_seconds', { ascending: true });
 
   if (error) throw error;
   return ((data || []) as MatchEventRow[]).map(fromRow);
@@ -55,6 +57,7 @@ export async function createMatchEvent(input: Omit<MatchEvent, 'id' | 'createdAt
       team_side: input.teamSide,
       event_type: input.eventType,
       minute: input.minute,
+      video_timestamp_seconds: input.videoTimestampSeconds,
       related_player_id: input.relatedPlayerId ?? null,
       description: input.description ?? ''
     })
@@ -72,6 +75,7 @@ export async function updateMatchEvent(eventId: string, patch: Partial<MatchEven
   if (patch.teamSide !== undefined) payload.team_side = patch.teamSide;
   if (patch.eventType !== undefined) payload.event_type = patch.eventType;
   if (patch.minute !== undefined) payload.minute = patch.minute;
+  if (patch.videoTimestampSeconds !== undefined) payload.video_timestamp_seconds = patch.videoTimestampSeconds;
   if (patch.relatedPlayerId !== undefined) payload.related_player_id = patch.relatedPlayerId ?? null;
   if (patch.description !== undefined) payload.description = patch.description;
 

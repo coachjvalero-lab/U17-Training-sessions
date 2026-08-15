@@ -1763,7 +1763,7 @@ export default function App() {
         {/* Main Content Workspace Area */}
         {matchDetailRoute ? (
           <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
-            <MatchCentreSection />
+            <MatchCentreSection currentLogo={teamLogo} />
           </div>
         ) : activeSection === 'hub' ? (
           <div className="flex-1 min-w-0">
@@ -1840,6 +1840,7 @@ export default function App() {
             squadRoster={fullSquadRoster}
             role="football"
             moduleDataWarning={footballFitnessLoadError}
+            currentLogo={teamLogo}
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="football"
@@ -1887,6 +1888,7 @@ export default function App() {
               squadPlayers={squadPlayersWithStats}
               squadRoster={fullSquadRoster}
               role="fitness"
+              currentLogo={teamLogo}
               renderActiveSessionEditor={() => (
                 <ModuleSessionEditor
                   moduleId="fitness"
@@ -1925,6 +1927,7 @@ export default function App() {
             squadPlayers={squadPlayersWithStats}
             squadRoster={goalkeeperRoster}
             role="gk"
+            currentLogo={teamLogo}
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="gk"

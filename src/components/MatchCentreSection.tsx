@@ -1,16 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, CalendarDays, Check, ChevronLeft, Eye, MapPin, PlayCircle, Plus, Save, Shield, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactPlayer from 'react-player';
+import { Activity, CalendarDays, Check, ChevronLeft, Edit3, Eye, MapPin, PlayCircle, Plus, Save, Shield, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
 import { TeamCrest } from './TeamCrest';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
   createMatchEvent,
   deleteMatchEvent,
-  getMatchEvents
+  getMatchEvents,
+  updateMatchEvent
 } from '../services/matches/matchEventsService';
-import { getMatchById, listMatches } from '../services/matches/matchService';
+import { getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
 import {
   createOrUpdateOpponentAnalysis,
-  getOpponentAnalysisByMatchId
+  getOpponentAnalysisByOpponentTeamId
 } from '../services/matches/opponentAnalysisService';
 import { getMatchLineup, removeMatchLineupEntry, upsertMatchLineupEntry } from '../services/matches/matchLineupService';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
@@ -18,6 +20,7 @@ import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/mat
 import { getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
 import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squad/squadService';
 import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics } from '../types';
+import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -72,45 +75,6 @@ function formatMatchStatusLabel(status: Match['status']): string {
   return 'Planned';
 }
 
-function toVideoEmbedUrl(input: string | null | undefined): string | null {
-  if (!input) return null;
-  const value = input.trim();
-  if (!value) return null;
-
-  try {
-    const url = new URL(value);
-
-    if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
-      const videoId = url.searchParams.get('v') || url.pathname.split('/').filter(Boolean).at(-1) || '';
-      if (!videoId) return null;
-      return `https://www.youtube.com/embed/${videoId}`;
-    }
-
-    if (url.hostname.includes('vimeo.com')) {
-      const videoId = url.pathname.split('/').filter(Boolean).at(-1) || '';
-      if (!videoId) return null;
-      return `https://player.vimeo.com/video/${videoId}`;
-    }
-
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-function toSlideEmbedUrl(input: string | null | undefined): string | null {
-  if (!input) return null;
-  const value = input.trim();
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.protocol.startsWith('http')) return null;
-    return value;
-  } catch {
-    return null;
-  }
-}
-
 function getEventLabel(eventType: MatchEventType): string {
   const map: Record<MatchEventType, string> = {
     goal: 'Goal',
@@ -130,12 +94,14 @@ interface MatchCentreSectionProps {
   matches?: Match[];
   isLoadingMatches?: boolean;
   matchLoadError?: string | null;
+  currentLogo?: string | null;
 }
 
 export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   matches: providedMatches,
   isLoadingMatches,
-  matchLoadError
+  matchLoadError,
+  currentLogo
 }) => {
   const { selectedTeamId, availableTeams } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
@@ -176,11 +142,15 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [saveStates, setSaveStates] = useState<Record<string, { state: SaveState; message?: string }>>({});
-  const [newEventMinute, setNewEventMinute] = useState('45');
+  const [newEventMinute, setNewEventMinute] = useState('0');
   const [newEventType, setNewEventType] = useState<MatchEventType>('goal');
   const [newEventPlayerId, setNewEventPlayerId] = useState('');
   const [newEventRelatedPlayerId, setNewEventRelatedPlayerId] = useState('');
   const [newEventDescription, setNewEventDescription] = useState('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [matchVideoUrl, setMatchVideoUrl] = useState('');
+  const [currentVideoSeconds, setCurrentVideoSeconds] = useState(0);
+  const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
   const [lineupForm, setLineupForm] = useState({
     playerId: '',
     position: '',
@@ -270,7 +240,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         setIsLoadingWorkspace(true);
         setWorkspaceLoadError(null);
         const [analysis, lineup, eventList, statsList, planList, setPieces] = await Promise.all([
-          getOpponentAnalysisByMatchId(selectedMatch.id),
+          getOpponentAnalysisByOpponentTeamId(selectedMatch.opponentTeamId),
           getMatchLineup(selectedMatch.id),
           getMatchEvents(selectedMatch.id),
           getPlayerMatchStatistics(selectedMatch.id),
@@ -317,6 +287,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         setNewVideoUrl(analysis?.videoUrl ?? '');
         setAnalysisSummary(analysis?.summary ?? '');
         setAnalysisTags(analysis?.tags ?? []);
+        setMatchVideoUrl(selectedMatch.videoUrl ?? '');
       } catch (error) {
         console.error('[MatchCentreSection] Failed loading match details', error);
         setWorkspaceLoadError(error instanceof Error ? error.message : 'Unable to load match workspace.');
@@ -393,7 +364,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       setSaveState('analysis', 'saving');
       const updated = await createOrUpdateOpponentAnalysis({
         id: opponentAnalysis?.id,
-        matchId: selectedMatch.id,
         opponentTeamId: selectedMatch.opponentTeamId,
         summary: analysisSummary,
         tags: analysisTags,
@@ -415,19 +385,27 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
     try {
       setSaveState('events', 'saving');
-      const created = await createMatchEvent({
+      const eventInput = {
         matchId: selectedMatch.id,
         playerId: newEventPlayerId || null,
-        teamSide: 'our_team',
+        teamSide: 'our_team' as const,
         eventType: newEventType,
         minute: Number(newEventMinute) || 0,
+        videoTimestampSeconds: Math.max(0, Math.floor(currentVideoSeconds)),
         relatedPlayerId: newEventRelatedPlayerId || null,
         description: newEventDescription || ''
-      });
+      };
+      const saved = editingEventId
+        ? await updateMatchEvent(editingEventId, eventInput)
+        : await createMatchEvent(eventInput);
 
-      const nextEvents = [...events, created].sort((a, b) => a.minute - b.minute);
+      const nextEvents = editingEventId
+        ? events.map((event) => event.id === editingEventId ? saved : event)
+        : [...events, saved];
+      nextEvents.sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds);
       setEvents(nextEvents);
-      setNewEventMinute('45');
+      setEditingEventId(null);
+      setNewEventMinute('0');
       setNewEventType('goal');
       setNewEventPlayerId('');
       setNewEventRelatedPlayerId('');
@@ -440,6 +418,45 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       console.error('[MatchCentreSection] Failed creating match event', error);
       setSaveState('events', 'error', error instanceof Error ? error.message : 'Unable to save event.');
     }
+  };
+
+  const handleSaveMatchVideo = async () => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('match-video', 'saving');
+      const updated = await updateMatch(selectedMatch.id, { videoUrl: matchVideoUrl || null });
+      setSelectedMatch(updated);
+      setMatchVideoUrl(updated.videoUrl ?? '');
+      setSaveState('match-video', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed saving match video', error);
+      setSaveState('match-video', 'error', error instanceof Error ? error.message : 'Unable to save video.');
+    }
+  };
+
+  const seekVideo = (seconds: number) => {
+    const nextSeconds = Math.max(0, seconds);
+    if (videoPlayerRef.current) videoPlayerRef.current.currentTime = nextSeconds;
+    setCurrentVideoSeconds(nextSeconds);
+  };
+
+  const handleEditEvent = (event: MatchEventModel) => {
+    setEditingEventId(event.id);
+    setNewEventMinute(String(event.minute));
+    setNewEventType(event.eventType);
+    setNewEventPlayerId(event.playerId ?? '');
+    setNewEventRelatedPlayerId(event.relatedPlayerId ?? '');
+    setNewEventDescription(event.description);
+    seekVideo(event.videoTimestampSeconds);
+  };
+
+  const cancelEventEdit = () => {
+    setEditingEventId(null);
+    setNewEventMinute('0');
+    setNewEventType('goal');
+    setNewEventPlayerId('');
+    setNewEventRelatedPlayerId('');
+    setNewEventDescription('');
   };
 
   const handleDeleteEvent = async (eventId: string) => {
@@ -562,9 +579,9 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
         <aside className="space-y-5">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center gap-2"><PlayCircle className="h-4 w-4 text-sky-700" /><h3 className="text-sm font-black text-slate-900">Match video</h3></div>
+            <div className="mb-3 flex items-center gap-2"><PlayCircle className="h-4 w-4 text-sky-700" /><h3 className="text-sm font-black text-slate-900">Opponent Analysis Video</h3></div>
             <input value={newVideoUrl} onChange={(event) => { setNewVideoUrl(event.target.value); setSaveState('analysis', 'idle'); }} placeholder="YouTube or Vimeo URL" className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-sky-600" />
-            {toVideoEmbedUrl(newVideoUrl) ? <iframe title="Match video preview" src={toVideoEmbedUrl(newVideoUrl) ?? ''} className="mt-3 aspect-video w-full rounded-md border border-slate-200 bg-slate-950" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="mt-3 flex aspect-video items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-slate-400">No video linked</div>}
+            {toVideoEmbedUrl(newVideoUrl) ? <iframe title="Opponent Analysis Video" src={toVideoEmbedUrl(newVideoUrl) ?? ''} className="mt-3 aspect-video w-full rounded-md border border-slate-200 bg-slate-950" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="mt-3 flex aspect-video items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-slate-400">No video linked</div>}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -798,51 +815,38 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       return player ? `${player.firstName} ${player.lastName}` : playerId || 'Team event';
     };
 
-    return (
-      <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Live log</p><h3 className="text-lg font-black text-slate-950">Record event</h3></div>{renderSaveStatus('events')}
-          </div>
+    return <div className="space-y-5">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+        <div className="aspect-video w-full bg-black">
+          {matchVideoUrl ? <ReactPlayer ref={videoPlayerRef} src={matchVideoUrl} controls width="100%" height="100%" onTimeUpdate={() => setCurrentVideoSeconds(videoPlayerRef.current?.currentTime ?? 0)} /> : <div className="flex h-full items-center justify-center text-sm font-bold text-slate-500">Add match footage to start tagging events.</div>}
+        </div>
+        <div className="flex flex-col gap-3 border-t border-slate-800 p-4 sm:flex-row sm:items-center">
+          <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Match video URL<input value={matchVideoUrl} onChange={(event) => setMatchVideoUrl(event.target.value)} placeholder="YouTube, Vimeo or direct video URL" className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium normal-case text-white" /></label>
+          <div className="flex items-center gap-3"><span className="font-mono text-sm font-black text-cyan-300">{formatVideoTimestamp(currentVideoSeconds)}</span>{renderSaveStatus('match-video')}<button type="button" onClick={() => void handleSaveMatchVideo()} className="inline-flex items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><Save className="h-4 w-4" />Save video</button></div>
+        </div>
+      </section>
 
+      <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Video logger</p><h3 className="text-lg font-black text-slate-950">{editingEventId ? 'Edit event' : 'Tag current moment'}</h3></div>{renderSaveStatus('events')}</div>
+          <div className="mb-4 grid grid-cols-3 gap-2">{EVENT_TYPE_OPTIONS.slice(0, 6).map((option) => <button key={option.value} type="button" onClick={() => setNewEventType(option.value)} className={`min-h-10 rounded-md border px-2 text-[10px] font-black ${newEventType === option.value ? 'border-sky-700 bg-sky-700 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>{option.label}</button>)}</div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <label className="text-[10px] font-black uppercase text-slate-500">Minute<input type="number" min="0" max="130" value={newEventMinute} onChange={(event) => setNewEventMinute(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case" /></label>
-            <label className="text-[10px] font-black uppercase text-slate-500">Event type<select value={newEventType} onChange={(event) => setNewEventType(event.target.value as MatchEventType)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case">
-              {EVENT_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select></label>
+            <label className="text-[10px] font-black uppercase text-slate-500">Video timestamp<input readOnly value={formatVideoTimestamp(currentVideoSeconds)} className="mt-1 w-full rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 font-mono text-xs normal-case text-cyan-900" /></label>
+            <label className="text-[10px] font-black uppercase text-slate-500">Match minute<input type="number" min="0" max="130" value={newEventMinute} onChange={(event) => setNewEventMinute(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case" /></label>
+            <label className="text-[10px] font-black uppercase text-slate-500">Event type<select value={newEventType} onChange={(event) => setNewEventType(event.target.value as MatchEventType)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case">{EVENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="text-[10px] font-black uppercase text-slate-500">Player<select value={newEventPlayerId} onChange={(event) => setNewEventPlayerId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"><option value="">Team / no player</option>{squadPlayers.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName}</option>)}</select></label>
             <label className="text-[10px] font-black uppercase text-slate-500">Related player<select value={newEventRelatedPlayerId} onChange={(event) => setNewEventRelatedPlayerId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"><option value="">None</option>{squadPlayers.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName}</option>)}</select></label>
           </div>
+          <textarea value={newEventDescription} onChange={(event) => setNewEventDescription(event.target.value)} placeholder="Describe the action, trigger or coaching point" className="mt-3 min-h-[90px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />
+          <div className="mt-3 flex gap-2">{editingEventId && <button type="button" onClick={cancelEventEdit} className="rounded-md border border-slate-300 px-3 py-2.5 text-xs font-black text-slate-700">Cancel</button>}<button type="button" disabled={saveStates.events?.state === 'saving'} onClick={() => void handleAddEvent()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#002142] px-3 py-2.5 text-xs font-black text-white disabled:opacity-60">{editingEventId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{editingEventId ? 'Save event' : 'Add at current time'}</button></div>
+        </section>
 
-          <textarea
-            value={newEventDescription}
-            onChange={(event) => setNewEventDescription(event.target.value)}
-            placeholder="Description"
-            className="mt-3 min-h-[90px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs"
-          />
-          <button type="button" disabled={saveStates.events?.state === 'saving'} onClick={() => void handleAddEvent()} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#002142] px-3 py-2.5 text-xs font-black text-white disabled:opacity-60"><Plus className="h-4 w-4" />Add to timeline</button>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="mb-5 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Chronology</p><h3 className="text-lg font-black text-slate-950">Match timeline</h3></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{events.length} events</span></div>
-          <div className="space-y-0">
-            {events.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs font-medium text-slate-500">
-                No events recorded yet.
-              </div>
-            ) : (
-              events.slice().sort((a, b) => a.minute - b.minute).map((event) => (
-                <div key={event.id} className="group grid grid-cols-[48px_16px_minmax(0,1fr)_32px] gap-2">
-                  <span className="pt-4 text-right text-sm font-black text-slate-950">{event.minute}'</span><div className="relative flex justify-center"><span className="absolute bottom-0 top-0 w-px bg-slate-200" /><span className={`relative mt-5 h-3 w-3 rounded-full border-2 border-white ${event.eventType === 'goal' ? 'bg-emerald-500' : event.eventType.includes('card') ? 'bg-amber-400' : 'bg-sky-500'}`} /></div><div className="border-b border-slate-100 py-4"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-sky-700">{getEventLabel(event.eventType)}</span><div className="text-sm font-black text-slate-900">{playerName(event.playerId)}</div>{event.relatedPlayerId && <div className="text-xs text-slate-500">Related: {playerName(event.relatedPlayerId)}</div>}{event.description && <div className="mt-1 text-xs leading-5 text-slate-600">{event.description}</div>}</div><button type="button" onClick={() => void handleDeleteEvent(event.id)} title="Delete event" className="my-auto p-2 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="mb-5 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Video chronology</p><h3 className="text-lg font-black text-slate-950">Tagged moments</h3></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{events.length} events</span></div>
+          {events.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs font-medium text-slate-500">No events recorded yet.</div> : <div className="divide-y divide-slate-100">{events.slice().sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds).map((event) => <div key={event.id} className="group grid grid-cols-[68px_minmax(0,1fr)_72px] gap-3 py-4"><button type="button" onClick={() => seekVideo(event.videoTimestampSeconds)} title="Seek video" className="self-start rounded-md bg-slate-950 px-2 py-1.5 font-mono text-xs font-black text-cyan-300">{formatVideoTimestamp(event.videoTimestampSeconds)}</button><button type="button" onClick={() => seekVideo(event.videoTimestampSeconds)} className="min-w-0 text-left"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-sky-700">{getEventLabel(event.eventType)} · {event.minute}'</span><div className="text-sm font-black text-slate-900">{playerName(event.playerId)}</div>{event.relatedPlayerId && <div className="text-xs text-slate-500">Related: {playerName(event.relatedPlayerId)}</div>}{event.description && <div className="mt-1 text-xs leading-5 text-slate-600">{event.description}</div>}</button><div className="flex items-start justify-end gap-1"><button type="button" onClick={() => handleEditEvent(event)} title="Edit event" className="p-2 text-slate-400 hover:text-sky-700"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => void handleDeleteEvent(event.id)} title="Delete event" className="p-2 text-slate-400 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>}
+        </section>
       </div>
-    );
+    </div>;
   };
 
   const renderStatisticsTab = () => {
@@ -898,8 +902,8 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     const opponentName = selectedMatch.opponentName || 'Opponent';
     const homeTeamName = selectedMatch.isHome ? teamName : opponentName;
     const awayTeamName = selectedMatch.isHome ? opponentName : teamName;
-    const homeTeam = selectedMatch.isHome ? { name: teamName, isAlula: true, logoUrl: null as string | null } : { name: opponentName, isAlula: false, logoUrl: selectedMatch.opponentLogoUrl ?? null };
-    const awayTeam = selectedMatch.isHome ? { name: opponentName, isAlula: false, logoUrl: selectedMatch.opponentLogoUrl ?? null } : { name: teamName, isAlula: true, logoUrl: null as string | null };
+    const homeTeam = selectedMatch.isHome ? { name: teamName, isAlula: true, logoUrl: currentLogo ?? null } : { name: opponentName, isAlula: false, logoUrl: selectedMatch.opponentLogoUrl ?? null };
+    const awayTeam = selectedMatch.isHome ? { name: opponentName, isAlula: false, logoUrl: selectedMatch.opponentLogoUrl ?? null } : { name: teamName, isAlula: true, logoUrl: currentLogo ?? null };
     const hasScore = selectedMatch.ourScore !== null && selectedMatch.ourScore !== undefined && selectedMatch.opponentScore !== null && selectedMatch.opponentScore !== undefined;
     const homeScore = selectedMatch.isHome ? selectedMatch.ourScore : selectedMatch.opponentScore;
     const awayScore = selectedMatch.isHome ? selectedMatch.opponentScore : selectedMatch.ourScore;
@@ -997,11 +1001,11 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         {visibleMatches.map((match) => {
         const opponentName = match.opponentName || 'Opponent';
         const homeTeam = match.isHome
-          ? { name: teamName, isAlula: true, logoUrl: null }
+          ? { name: teamName, isAlula: true, logoUrl: currentLogo ?? null }
           : { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl };
         const awayTeam = match.isHome
           ? { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl }
-          : { name: teamName, isAlula: true, logoUrl: null };
+          : { name: teamName, isAlula: true, logoUrl: currentLogo ?? null };
         const hasScore = match.ourScore !== null && match.ourScore !== undefined
           && match.opponentScore !== null && match.opponentScore !== undefined;
         const homeScore = match.isHome ? match.ourScore : match.opponentScore;

@@ -202,13 +202,13 @@ export interface Match {
   status: MatchStatus;
   ourScore?: number | null;
   opponentScore?: number | null;
+  videoUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface OpponentAnalysis {
   id: string;
-  matchId: string;
   opponentTeamId: string;
   tags: OpponentAnalysisTag[];
   slidesUrl?: string | null;
@@ -240,6 +240,7 @@ export interface MatchEvent {
   teamSide: TeamSide;
   eventType: MatchEventType;
   minute: number;
+  videoTimestampSeconds: number;
   relatedPlayerId?: string | null;
   description: string;
   createdAt?: string;
