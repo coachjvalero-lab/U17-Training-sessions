@@ -466,16 +466,16 @@ export default function App() {
 
   // Listen to Supabase Auth state
   useEffect(() => {
-    const unsubscribe = subscribeToAuth((user) => {
+    const unsubscribe = subscribeToAuth((event, user) => {
+      const nextEmail = user?.email ?? null;
+      const shouldResetAuthorization = event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_DELETED' || !user;
+
+      setAuthorizationUserEmail(nextEmail, { forceReset: shouldResetAuthorization });
       setCurrentUser(user);
       setIsAuthInitializing(false);
     });
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    setAuthorizationUserEmail(currentUser?.email ?? null);
-  }, [currentUser?.email]);
 
   // Load and merge into a single unified session.
   // Firestore is now the source of truth for the shared sessions list; localStorage

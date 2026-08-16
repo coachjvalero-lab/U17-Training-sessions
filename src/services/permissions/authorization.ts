@@ -79,12 +79,16 @@ function canFromContext(
   return context.sections.includes(section);
 }
 
-export function setAuthorizationUserEmail(email?: string | null): void {
+export function setAuthorizationUserEmail(email?: string | null, options?: { forceReset?: boolean }): void {
   const next = normalizeEmail(email);
-  if (activeAuthorizationEmail !== next) {
+  const shouldReset = options?.forceReset === true || activeAuthorizationEmail !== next;
+
+  if (shouldReset) {
     cachedContext = EMPTY_CONTEXT;
     cachedForEmail = null;
+    pendingLoads.clear();
   }
+
   activeAuthorizationEmail = next;
 }
 

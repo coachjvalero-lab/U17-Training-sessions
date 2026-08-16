@@ -92,7 +92,7 @@ export async function logoutUser(): Promise<void> {
   if (error) throw error;
 }
 
-export function subscribeToAuth(callback: (user: AppUser | null) => void): () => void {
+export function subscribeToAuth(callback: (event: string, user: AppUser | null) => void): () => void {
   const client = getSupabaseOrThrow();
 
   client.auth.getSession()
@@ -100,15 +100,15 @@ export function subscribeToAuth(callback: (user: AppUser | null) => void): () =>
       if (error) {
         console.error('[subscribeToAuth] initial session read failed', error);
       }
-      callback(toAppUser(data.session?.user || null));
+      callback('INITIAL_SESSION', toAppUser(data.session?.user || null));
     })
     .catch((error) => {
       console.error('[subscribeToAuth] initial session read failed', error);
-      callback(null);
+      callback('INITIAL_SESSION', null);
     });
 
-  const { data } = client.auth.onAuthStateChange((_event, session) => {
-    callback(toAppUser(session?.user || null));
+  const { data } = client.auth.onAuthStateChange((event, session) => {
+    callback(event, toAppUser(session?.user || null));
   });
 
   return () => {
