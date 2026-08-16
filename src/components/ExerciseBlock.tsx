@@ -16,6 +16,7 @@ interface ExerciseBlockProps {
   toggleExpand: (id: string) => void;
   sessionGroups?: PlayerGroup[];
   gameMoments?: GameMoment[];
+  allowSecondGameMoment?: boolean;
   sessionId?: string;
   squadPlayers?: SquadPlayer[];
   onApplyMalikaPoints?: (payload: {
@@ -135,6 +136,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
   toggleExpand,
   sessionGroups,
   gameMoments,
+  allowSecondGameMoment = false,
   sessionId,
   squadPlayers = [],
   onApplyMalikaPoints
@@ -345,6 +347,15 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
     onChange(
       block.exercises.map(ex => (ex.id === id ? { ...ex, ...fields } : ex))
     );
+  };
+
+  const addSecondGameMoment = (exercise: Exercise) => {
+    const defaultMoment = availableGameMoments.find(moment => moment !== '-') || '-';
+    updateExercise(exercise.id, { gameMoment2: defaultMoment, subMoment2: '-' });
+  };
+
+  const removeSecondGameMoment = (exercise: Exercise) => {
+    updateExercise(exercise.id, { gameMoment2: undefined, subMoment2: undefined });
   };
 
   const toggleMalikaChallenge = (exercise: Exercise) => {
@@ -562,11 +573,13 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                 <div className="mt-0.5 text-[8pt] text-slate-700">
                   Sets {ex.series || '—'} • Time {ex.workTime || '—'} min • Rest {ex.restTime || '—'} min
                 </div>
-                {(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') || (ex.dimensions && ex.dimensions.trim()) ? (
+                {(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') || ex.gameMoment2 || (ex.dimensions && ex.dimensions.trim()) ? (
                   <div className="mt-0.5 text-[8pt] text-slate-700">
                     {ex.gameMoment && ex.gameMoment !== '-' ? `Moment: ${ex.gameMoment}` : ''}
                     {ex.subMoment && ex.subMoment !== '-' ? `${ex.gameMoment && ex.gameMoment !== '-' ? ' • ' : ''}Sub-moment: ${ex.subMoment}` : ''}
-                    {ex.dimensions ? `${(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') ? ' • ' : ''}Pitch: ${ex.dimensions}` : ''}
+                    {ex.gameMoment2 ? ` • Moment 2: ${ex.gameMoment2}` : ''}
+                    {ex.gameMoment2 && ex.subMoment2 && ex.subMoment2 !== '-' ? ` • Sub-moment 2: ${ex.subMoment2}` : ''}
+                    {ex.dimensions ? `${(ex.gameMoment && ex.gameMoment !== '-') || (ex.subMoment && ex.subMoment !== '-') || ex.gameMoment2 ? ' • ' : ''}Pitch: ${ex.dimensions}` : ''}
                   </div>
                 ) : null}
                 <div className="mt-2 print:grid print:grid-cols-[1.3fr_0.7fr] print:items-start print:gap-3">
@@ -702,6 +715,11 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                   <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md border ${getMomentBadgeStyles(ex.gameMoment)} print:px-1.5 print:py-0.5 print:text-[8px] print:font-extrabold`}>
                     {ex.gameMoment}
                   </span>
+                  {ex.gameMoment2 && (
+                    <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-md border ${getMomentBadgeStyles(ex.gameMoment2)} print:px-1.5 print:py-0.5 print:text-[8px] print:font-extrabold`}>
+                      {ex.gameMoment2}
+                    </span>
+                  )}
 
                   {/* Reordering, library save, and deleting buttons (Hidden in print) */}
                   <div className="flex items-center space-x-1 print:hidden" onClick={(e) => e.stopPropagation()}>
@@ -920,7 +938,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         </label>
                         <select
                           value={ex.gameMoment}
-                          onChange={(e) => updateExercise(ex.id, { gameMoment: e.target.value as GameMoment })}
+                          onChange={(e) => updateExercise(ex.id, { gameMoment: e.target.value as GameMoment, subMoment: '-' })}
                           className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all print:p-1 print:bg-slate-50 print:border print:border-slate-200 print:rounded print:text-[10px] print:font-bold truncate cursor-pointer"
                         >
                           {availableGameMoments.map(moment => (
@@ -958,6 +976,61 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
                         />
                       </div>
                     </div>
+
+                    {allowSecondGameMoment && (
+                      <div className="print:hidden">
+                        {ex.gameMoment2 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/70">
+                            <div>
+                              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">
+                                Game Moment 2
+                              </label>
+                              <select
+                                value={ex.gameMoment2}
+                                onChange={(e) => updateExercise(ex.id, { gameMoment2: e.target.value as GameMoment, subMoment2: '-' })}
+                                className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all truncate cursor-pointer"
+                              >
+                                {availableGameMoments.map(moment => (
+                                  <option key={moment} value={moment}>{moment}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">
+                                Tactical Sub-moment 2
+                              </label>
+                              <select
+                                value={ex.subMoment2 || '-'}
+                                onChange={(e) => updateExercise(ex.id, { subMoment2: e.target.value })}
+                                className="w-full text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all truncate cursor-pointer"
+                              >
+                                {TACTICAL_SUB_MOMENTS.map(sub => (
+                                  <option key={sub} value={sub}>{sub}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeSecondGameMoment(ex)}
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Remove second game moment"
+                              aria-label="Remove second game moment"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => addSecondGameMoment(ex)}
+                            className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 hover:text-emerald-800"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Game Moment
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 space-y-3 print:hidden">
                       <div className="flex items-center justify-between gap-3">

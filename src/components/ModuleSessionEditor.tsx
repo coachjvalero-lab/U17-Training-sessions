@@ -123,6 +123,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         toggleExpand={onToggleExpand}
         sessionGroups={moduleView.playerGroups}
         gameMoments={getModuleGameMoments(moduleId)}
+        allowSecondGameMoment={moduleId === 'football'}
         sessionId={session.id}
         squadPlayers={squadPlayers}
         onApplyMalikaPoints={onApplyMalikaPoints}
@@ -135,6 +136,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         toggleExpand={onToggleExpand}
         sessionGroups={moduleView.playerGroups}
         gameMoments={getModuleGameMoments(moduleId)}
+        allowSecondGameMoment={moduleId === 'football'}
         sessionId={session.id}
         squadPlayers={squadPlayers}
         onApplyMalikaPoints={onApplyMalikaPoints}
@@ -148,6 +150,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           toggleExpand={onToggleExpand}
           sessionGroups={moduleView.playerGroups}
           gameMoments={getModuleGameMoments(moduleId)}
+          allowSecondGameMoment={moduleId === 'football'}
           sessionId={session.id}
           squadPlayers={squadPlayers}
           onApplyMalikaPoints={onApplyMalikaPoints}

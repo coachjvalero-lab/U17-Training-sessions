@@ -308,48 +308,49 @@ export const PlanificationAnalyticsSection: React.FC<PlanificationAnalyticsSecti
         block.forEach(ex => {
           if (!ex || !ex.name) return;
 
-          // Determine game moment key from exercise
-          let momentKey: string = ex.gameMoment || 'Other';
-
-          if (!statsMap.has(momentKey)) {
-            momentKey = 'Other';
-          }
-
           const durationMins = parseDurationMinutes(ex.duration);
-          const subMomentName = (ex.subMoment && ex.subMoment.trim()) ? ex.subMoment.trim() : 'General / Tactical Drills';
-
-          const mStat = statsMap.get(momentKey)!;
-          mStat.totalMinutes += durationMins;
-          mStat.exerciseCount += 1;
-          mStat.sessionIds.add(sessId);
-
           totalTrainingMinutesAll += durationMins;
           totalExercisesAll += 1;
 
-          // Aggregate inside sub-moments map
-          if (!mStat.subMoments.has(subMomentName)) {
-            mStat.subMoments.set(subMomentName, {
-              subMomentName,
-              totalMinutes: 0,
-              sessionIds: new Set<string>(),
-              sessionNumbers: new Set<string>(),
-              exerciseCount: 0,
-              exercises: []
-            });
-          }
+          const momentPairs = [
+            { gameMoment: ex.gameMoment, subMoment: ex.subMoment },
+            ...(ex.gameMoment2 ? [{ gameMoment: ex.gameMoment2, subMoment: ex.subMoment2 || '' }] : [])
+          ];
 
-          const subStat = mStat.subMoments.get(subMomentName)!;
-          subStat.totalMinutes += durationMins;
-          subStat.exerciseCount += 1;
-          subStat.sessionIds.add(sessId);
-          subStat.sessionNumbers.add(sessNum);
-          subStat.exercises.push({
-            sessionId: sessId,
-            sessionNumber: sessNum,
-            sessionObjective: sessObjective,
-            exerciseName: ex.name,
-            duration: durationMins,
-            category
+          momentPairs.forEach(({ gameMoment, subMoment }) => {
+            let momentKey: string = gameMoment || 'Other';
+            if (!statsMap.has(momentKey)) momentKey = 'Other';
+
+            const subMomentName = subMoment.trim() || 'General / Tactical Drills';
+            const mStat = statsMap.get(momentKey)!;
+            mStat.totalMinutes += durationMins;
+            mStat.exerciseCount += 1;
+            mStat.sessionIds.add(sessId);
+
+            if (!mStat.subMoments.has(subMomentName)) {
+              mStat.subMoments.set(subMomentName, {
+                subMomentName,
+                totalMinutes: 0,
+                sessionIds: new Set<string>(),
+                sessionNumbers: new Set<string>(),
+                exerciseCount: 0,
+                exercises: []
+              });
+            }
+
+            const subStat = mStat.subMoments.get(subMomentName)!;
+            subStat.totalMinutes += durationMins;
+            subStat.exerciseCount += 1;
+            subStat.sessionIds.add(sessId);
+            subStat.sessionNumbers.add(sessNum);
+            subStat.exercises.push({
+              sessionId: sessId,
+              sessionNumber: sessNum,
+              sessionObjective: sessObjective,
+              exerciseName: ex.name,
+              duration: durationMins,
+              category
+            });
           });
         });
       });

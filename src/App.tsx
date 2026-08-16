@@ -1901,6 +1901,7 @@ export default function App() {
               toggleExpand={toggleExpand}
               sessionGroups={session.playerGroups}
               gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
+              allowSecondGameMoment
             />
 
             {/* Section: Main Part Block */}
@@ -1911,6 +1912,7 @@ export default function App() {
               toggleExpand={toggleExpand}
               sessionGroups={session.playerGroups}
               gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
+              allowSecondGameMoment
             />
 
             {/* Section: Cool Down Block */}
@@ -1922,6 +1924,7 @@ export default function App() {
                 toggleExpand={toggleExpand}
                 sessionGroups={session.playerGroups}
                 gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
+                allowSecondGameMoment
               />
             </div>
 

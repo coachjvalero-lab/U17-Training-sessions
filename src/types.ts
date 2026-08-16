@@ -208,6 +208,8 @@ export interface Exercise {
   name: string;
   gameMoment: GameMoment;
   subMoment: string;
+  gameMoment2?: GameMoment;
+  subMoment2?: string;
   description: string;
   duration: string; // e.g., "15 min"
   series?: number | string; // Number of sets/series e.g. 3
