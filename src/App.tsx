@@ -477,6 +477,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    setAuthorizationUserEmail(currentUser?.email ?? null);
+  }, [currentUser?.email]);
+
   // Load and merge into a single unified session.
   // Firestore is now the source of truth for the shared sessions list; localStorage
   // is only kept as a transient cache for the current browser and must not decide
