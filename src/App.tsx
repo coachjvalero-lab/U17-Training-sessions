@@ -295,6 +295,10 @@ export default function App() {
   // Subscribe to the shared cloud squad roster in real time so every coach sees the same players.
   // Automatic cloud migration is disabled; migration must be triggered explicitly.
   useEffect(() => {
+    if (isAuthInitializing || !currentUser?.email) {
+      return;
+    }
+
     const unsubscribe = subscribeToSquadPlayers((cloudPlayers) => {
       const list: SquadPlayer[] = cloudPlayers.map(({ updatedAt, ...p }) => p);
       const resolved = normalizeSquadPlayerPhotos(list);
@@ -314,7 +318,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAuthInitializing, currentUser?.email]);
 
   // Excluded/removed players list ("Plantilla" deletions) — shared across the whole staff so a
   // deletion made by one coach applies for everyone, not just their own browser.
