@@ -1,5 +1,6 @@
-import { PlayerAttendance, SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary } from '../types';
+import { SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary } from '../types';
 import { supabase } from '../supabaseClient';
+import { calculatePlayerAttendanceStatistics } from '../utils/attendanceStatistics';
 
 export interface SquadStatisticsInput {
   players: SquadPlayer[];
@@ -49,31 +50,14 @@ function buildAttendanceStats(
       return player;
     }
 
-    let total = 0;
-    let attended = 0;
-
-    sessionList.forEach((session) => {
-      const attendance = Array.isArray(session.attendance) ? session.attendance : [];
-      if (attendance.length === 0) return;
-
-      total += 1;
-      const record = attendance.find(
-        (entry: PlayerAttendance) => entry.playerName.trim().toLowerCase() === getPlayerFullName(player).trim().toLowerCase()
-      );
-
-      if (!record || record.status === 'Attending' || record.status === 'Gym') {
-        attended += 1;
-      }
-    });
-
-    const percentage = total > 0 ? Math.round((attended / total) * 100) : 100;
+    const statistics = calculatePlayerAttendanceStatistics(getPlayerFullName(player), sessionList);
 
     return {
       ...player,
       attendanceStats: {
-        attended,
-        total,
-        percentage,
+        attended: statistics.attendingCount,
+        total: statistics.recordedSessions,
+        percentage: Math.round(statistics.attendanceRate),
         ranking: 0,
         updatedAt: Date.now()
       }
@@ -293,7 +277,7 @@ export function calculateSquadStatistics({
   const totalRecordedSessions = sessions.filter((session) => Array.isArray(session.attendance) && session.attendance.length > 0).length;
   const overallAttended = attendanceRankingWithRanks.reduce((sum, player) => sum + (player.attendanceStats?.attended || 0), 0);
   const overallPossible = attendanceRankingWithRanks.reduce((sum, player) => sum + (player.attendanceStats?.total || 0), 0);
-  const attendanceRate = overallPossible > 0 ? Math.round((overallAttended / overallPossible) * 100) : 100;
+  const attendanceRate = overallPossible > 0 ? Math.round((overallAttended / overallPossible) * 100) : 0;
 
   return {
     players: playersWithStats.map((player) => {

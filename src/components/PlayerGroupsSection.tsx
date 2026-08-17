@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Users, Plus, Trash2, Edit3, Check, RefreshCw, Shield, UserCheck, AlertCircle } from 'lucide-react';
 import { PlayerGroup, PlayerAttendance } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
+import { getAvailablePlayerNamesForGroups } from '../utils/attendanceStatistics';
 
 interface PlayerGroupsSectionProps {
   groups: PlayerGroup[];
@@ -26,11 +27,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Compute attending vs absent lists
   const attendingPlayers = useMemo(() => {
-    if (!attendance || attendance.length === 0) return squadRoster;
-    return squadRoster.filter(player => {
-      const record = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
-      return !record || record.status === 'Attending';
-    });
+    return getAvailablePlayerNamesForGroups(squadRoster, attendance);
   }, [attendance, squadRoster]);
 
   const gymPlayers = useMemo(() => {

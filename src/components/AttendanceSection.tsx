@@ -35,6 +35,7 @@ import {
 import { TrainingSession, AbsenceReason, CloudTrainingSession } from '../types';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { calculatePlayerAttendanceStatistics } from '../utils/attendanceStatistics';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -151,48 +152,18 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
   // Build stats per player
   const playerStats = masterPlayerList.map(player => {
-    let totalSessions = 0;
-    let attendedCount = 0;
-    let absentCount = 0;
-    const reasonsMap: Record<AbsenceReason, number> = {
-      Vacation: 0,
-      Study: 0,
-      Injury: 0,
-      Permission: 0,
-      Unknown: 0
-    };
-
-    allSessionsList.forEach(s => {
-      const attList = s.attendance || [];
-      const record = attList.find(a => a.playerName.toLowerCase() === player.toLowerCase());
-      
-      // If session had attendance recorded
-      if (attList.length > 0) {
-        totalSessions++;
-        if (record) {
-          if (record.status === 'Attending' || record.status === 'Gym') {
-            attendedCount++;
-          } else {
-            absentCount++;
-            const r = record.absenceReason || 'Unknown';
-            reasonsMap[r] = (reasonsMap[r] || 0) + 1;
-          }
-        } else {
-          // Default if not listed in that session
-          attendedCount++;
-        }
-      }
-    });
-
-    const rate = totalSessions > 0 ? Math.round((attendedCount / totalSessions) * 100) : 100;
+    const statistics = calculatePlayerAttendanceStatistics(player, allSessionsList);
 
     return {
       player,
-      totalSessions,
-      attendedCount,
-      absentCount,
-      reasonsMap,
-      rate
+      totalSessions: statistics.totalSessions,
+      recordedSessions: statistics.recordedSessions,
+      attendedCount: statistics.attendingCount,
+      absentCount: statistics.absentCount,
+      gymCount: statistics.gymCount,
+      unknownCount: statistics.unknownCount,
+      reasonsMap: statistics.reasonsMap,
+      rate: Math.round(statistics.attendanceRate)
     };
   });
 
@@ -209,10 +180,10 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   });
 
   // Overall statistics
-  const totalRecordedSessions = allSessionsList.filter(s => s.attendance && s.attendance.length > 0).length || 1;
+  const totalRecordedSessions = allSessionsList.filter(s => s.attendance && s.attendance.length > 0).length;
   const overallAttendedTotal = playerStats.reduce((sum, p) => sum + p.attendedCount, 0);
-  const overallPossibleTotal = playerStats.reduce((sum, p) => sum + p.totalSessions, 0);
-  const globalAttendanceRate = overallPossibleTotal > 0 ? Math.round((overallAttendedTotal / overallPossibleTotal) * 100) : 100;
+  const overallPossibleTotal = playerStats.reduce((sum, p) => sum + p.recordedSessions, 0);
+  const globalAttendanceRate = overallPossibleTotal > 0 ? Math.round((overallAttendedTotal / overallPossibleTotal) * 100) : 0;
 
   const totalVacations = playerStats.reduce((sum, p) => sum + p.reasonsMap.Vacation, 0);
   const totalStudies = playerStats.reduce((sum, p) => sum + p.reasonsMap.Study, 0);
@@ -497,6 +468,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 <th className="py-3 px-3 text-center">Attendance %</th>
                 <th className="py-3 px-3 text-center">Attended</th>
                 <th className="py-3 px-3 text-center">Absences</th>
+                <th className="py-3 px-3 text-center">Gym</th>
+                <th className="py-3 px-3 text-center">Unrecorded</th>
                 <th className="py-3 px-3 text-center">Vacation</th>
                 <th className="py-3 px-3 text-center">Study</th>
                 <th className="py-3 px-3 text-center">Injury</th>
@@ -546,7 +519,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                     {/* Attended Count */}
                     <td className="py-3 px-3 text-center font-bold text-emerald-700">
                       <span className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        {stat.attendedCount} / {stat.totalSessions}
+                        {stat.attendedCount} / {stat.recordedSessions}
                       </span>
                     </td>
 
@@ -559,6 +532,14 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                       ) : (
                         <span className="text-slate-300">0</span>
                       )}
+                    </td>
+
+                    <td className="py-3 px-3 text-center font-bold text-sky-700">
+                      {stat.gymCount > 0 ? stat.gymCount : <span className="text-slate-300">0</span>}
+                    </td>
+
+                    <td className="py-3 px-3 text-center font-bold text-slate-600">
+                      {stat.unknownCount > 0 ? stat.unknownCount : <span className="text-slate-300">0</span>}
                     </td>
 
                     {/* Vacation */}
@@ -642,15 +623,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
           const pastSessions = chronologicalSessions.slice(0, sIdx + 1);
           masterPlayerList.forEach(player => {
-            let attended = 0;
-            pastSessions.forEach(ps => {
-              const rec = (ps.attendance || []).find(a => a.playerName.toLowerCase() === player.toLowerCase());
-              if (!rec || rec.status === 'Attending' || rec.status === 'Gym') {
-                attended += 1;
-              }
-            });
-            const cumRate = Math.round((attended / pastSessions.length) * 100);
-            dataPoint[player] = cumRate;
+            const statistics = calculatePlayerAttendanceStatistics(player, pastSessions);
+            dataPoint[player] = Math.round(statistics.attendanceRate);
           });
 
           return dataPoint;
@@ -876,7 +850,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                         rate: p.rate,
                         attended: p.attendedCount,
                         absent: p.absentCount,
-                        total: p.totalSessions,
+                        total: p.recordedSessions,
                         rank: idx + 1
                       }))}
                       margin={{ top: 20, right: 35, left: 15, bottom: 20 }}
