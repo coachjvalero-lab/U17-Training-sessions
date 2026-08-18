@@ -7,7 +7,9 @@ import { ExercisesLibrary } from './ExercisesLibrary';
 import { deleteFitnessSession, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 
-const WELLNESS_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/1xy65h7ojIfbeIsoQHIW8hirxKbmy1Tz4Trjq_6wfnEg/export?format=csv&gid=874045129';
+const WELLNESS_SHEET_ID = import.meta.env.VITE_WELLNESS_SHEET_ID || '178oyGRKhSNlsdl2zV5oIu_uXE9Qdtq1xUkFpUXbSQDw';
+const WELLNESS_SHEET_NAME = 'Wellness';
+const WELLNESS_SHEET_JSON_URL = `https://docs.google.com/spreadsheets/d/${WELLNESS_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(WELLNESS_SHEET_NAME)}`;
 const WELLNESS_VISIT_TOKEN_KEY = 'u17_fitness_wellness_visit_token';
 
 type WellnessRow = {
@@ -26,6 +28,10 @@ type WellnessRow = {
   painIntensity: string;
   menstrualCycle: string;
   dayOfPeriod: string;
+  symptoms: string;
+  otherSymptom: string;
+  cyclePhase: string;
+  status: string;
   additionalInformation: string;
   dateKey: string;
 };
@@ -120,16 +126,58 @@ function formatSheetValue(value: string | undefined): string {
   return trimmed ? trimmed : '—';
 }
 
+function parseGoogleDateValue(value: string | null | undefined): string {
+  const raw = (value || '').trim();
+  if (!raw) return 'Unknown Date';
+
+  const dateMatch = raw.match(/^Date\((\d{4}),(\d+),(\d+)(?:,\d+,\d+,\d+)?\)$/);
+  if (dateMatch) {
+    const year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    const localDate = new Date(year, month, day);
+    const monthValue = String(localDate.getMonth() + 1).padStart(2, '0');
+    const dayValue = String(localDate.getDate()).padStart(2, '0');
+    return `${localDate.getFullYear()}-${monthValue}-${dayValue}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw || 'Unknown Date';
+
+  const year = parsed.getFullYear();
+  const monthValue = String(parsed.getMonth() + 1).padStart(2, '0');
+  const dayValue = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${monthValue}-${dayValue}`;
+}
+
 function parseTimestampDateKey(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value.trim() || 'Unknown Date';
-  return parsed.toISOString().slice(0, 10);
+  return parseGoogleDateValue(value);
 }
 
 function resolveHeaderIndex(headers: string[], candidates: string[]): number {
   const normalizedHeaders = headers.map((header) => normalizeWellnessText(header));
   const normalizedCandidates = candidates.map((candidate) => normalizeWellnessText(candidate));
   return normalizedHeaders.findIndex((header) => normalizedCandidates.some((candidate) => header.includes(candidate)));
+}
+
+function parseGoogleSheetCell(cell: unknown): string {
+  if (!cell || typeof cell !== 'object') return '';
+
+  const record = cell as Record<string, unknown>;
+  const value = record.f ?? record.v;
+
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+export function parseWellnessSheetData(jsonText: string): string[][] {
+  const payload = jsonText.split('google.visualization.Query.setResponse(', 1)[1]?.rsplit(');', 1)[0] ?? jsonText;
+  const data = JSON.parse(payload);
+  const columns = Array.isArray(data?.table?.cols) ? data.table.cols.map((column: Record<string, unknown>) => String(column.label ?? '')) : [];
+  const rows = Array.isArray(data?.table?.rows) ? data.table.rows.map((row: Record<string, unknown>) => (Array.isArray(row.c) ? row.c.map(parseGoogleSheetCell) : [])) : [];
+  return [columns, ...rows];
 }
 
 function resolveWellnessPlayerName(playerName: string, squadPlayers: SquadPlayer[]): WellnessPlayerResolution {
@@ -199,58 +247,70 @@ async function loadWellnessSnapshot(
   if (inFlight) return inFlight;
 
   const request = (async () => {
-    const response = await fetch(WELLNESS_SHEET_CSV_URL, { signal });
+    const response = await fetch(WELLNESS_SHEET_JSON_URL, { signal });
     if (!response.ok) {
       throw new Error(`Wellness sheet request failed (${response.status})`);
     }
 
-    const csvText = await response.text();
-    const rows = parseWellnessCsv(csvText);
+    const jsonText = await response.text();
+    const rows = parseWellnessSheetData(jsonText);
     if (rows.length < 2) {
       return { rows: [], availableDates: [], resolutions: [] } satisfies WellnessSnapshot;
     }
 
     const headers = rows[0];
-    const weekIndex = resolveHeaderIndex(headers, ['Week']);
-    const mdIndex = resolveHeaderIndex(headers, ['MD']);
     const timestampIndex = resolveHeaderIndex(headers, ['Timestamp']);
-    const playerIndex = resolveHeaderIndex(headers, ['Player Name', 'Player']);
-    const sleepQualityIndex = resolveHeaderIndex(headers, ['Sleep Quality']);
-    const sleepTimeIndex = resolveHeaderIndex(headers, ['Sleep Time']);
-    const fatigueIndex = resolveHeaderIndex(headers, ['Fadigue', 'Fatigue']);
-    const sorenessIndex = resolveHeaderIndex(headers, ['Muscle Soreness']);
-    const stressIndex = resolveHeaderIndex(headers, ['Stress Levels']);
-    const scoreIndex = resolveHeaderIndex(headers, ['Sum Score']);
-    const painIndex = resolveHeaderIndex(headers, ['Do you have a specific pain']);
-    const intensityIndex = resolveHeaderIndex(headers, ['If you have a specific pain, how intense is it']);
-    const menstrualIndex = resolveHeaderIndex(headers, ['Are you with period']);
-    const dayOfPeriodIndex = resolveHeaderIndex(headers, ['Day of perriod', 'Day of period']);
-    const infoIndex = resolveHeaderIndex(headers, ['Feel free do add some important informations']);
+    const dateIndex = resolveHeaderIndex(headers, ['Date']);
+    const playerIndex = resolveHeaderIndex(headers, ['Player']);
+    const sleepQualityIndex = resolveHeaderIndex(headers, ['Sleep quality', 'Sleep Quality']);
+    const sleepTimeIndex = resolveHeaderIndex(headers, ['Sleep time', 'Sleep Time']);
+    const fatigueIndex = resolveHeaderIndex(headers, ['Fatigue']);
+    const sorenessIndex = resolveHeaderIndex(headers, ['Muscle soreness', 'Muscle Soreness']);
+    const stressIndex = resolveHeaderIndex(headers, ['Stress']);
+    const readinessIndex = resolveHeaderIndex(headers, ['Readiness']);
+    const painIndex = resolveHeaderIndex(headers, ['Pain location', 'Pain Location']);
+    const intensityIndex = resolveHeaderIndex(headers, ['Pain intensity', 'Pain Intensity']);
+    const menstrualIndex = resolveHeaderIndex(headers, ['Menstrual cycle', 'Menstrual Cycle']);
+    const dayOfPeriodIndex = resolveHeaderIndex(headers, ['Period day', 'Day of period', 'Day of period']);
+    const symptomsIndex = resolveHeaderIndex(headers, ['Symptoms']);
+    const otherSymptomIndex = resolveHeaderIndex(headers, ['Other symptom', 'Other Symptom']);
+    const cyclePhaseIndex = resolveHeaderIndex(headers, ['Cycle phase', 'Cycle Phase']);
+    const infoIndex = resolveHeaderIndex(headers, ['Additional information', 'Additional Information']);
+    const statusIndex = resolveHeaderIndex(headers, ['Status']);
 
     const wellnessRows = rows.slice(1)
       .map((cells, index) => {
         const timestamp = formatSheetValue(cells[timestampIndex]);
+        const dateValue = formatSheetValue(cells[dateIndex]);
         const playerName = formatSheetValue(cells[playerIndex]);
-        if (playerName === '—' && timestamp === '—') return null;
+        if (playerName === '—' && timestamp === '—' && dateValue === '—') return null;
+
+        const resolvedTimestamp = timestamp === '—' ? dateValue : timestamp;
+        const dateKey = parseTimestampDateKey(dateValue !== '—' ? dateValue : resolvedTimestamp);
+        const sumScoreValue = formatSheetValue(cells[readinessIndex]);
 
         return {
-          rowId: `${timestamp}-${playerName}-${index}`,
-          week: formatSheetValue(cells[weekIndex]),
-          md: formatSheetValue(cells[mdIndex]),
-          timestamp,
+          rowId: `${dateValue}-${playerName}-${index}`,
+          week: '',
+          md: '',
+          timestamp: resolvedTimestamp,
           playerName,
           sleepQuality: formatSheetValue(cells[sleepQualityIndex]),
           sleepTime: formatSheetValue(cells[sleepTimeIndex]),
           fatigue: formatSheetValue(cells[fatigueIndex]),
           muscleSoreness: formatSheetValue(cells[sorenessIndex]),
           stress: formatSheetValue(cells[stressIndex]),
-          sumScore: formatSheetValue(cells[scoreIndex]),
+          sumScore: sumScoreValue === '—' ? '' : sumScoreValue,
           pain: formatSheetValue(cells[painIndex]),
           painIntensity: formatSheetValue(cells[intensityIndex]),
           menstrualCycle: formatSheetValue(cells[menstrualIndex]),
           dayOfPeriod: formatSheetValue(cells[dayOfPeriodIndex]),
+          symptoms: formatSheetValue(cells[symptomsIndex]),
+          otherSymptom: formatSheetValue(cells[otherSymptomIndex]),
+          cyclePhase: formatSheetValue(cells[cyclePhaseIndex]),
+          status: formatSheetValue(cells[statusIndex]),
           additionalInformation: formatSheetValue(cells[infoIndex]),
-          dateKey: parseTimestampDateKey(timestamp)
+          dateKey
         } satisfies WellnessRow;
       })
       .filter((row): row is WellnessRow => Boolean(row));

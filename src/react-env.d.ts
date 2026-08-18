@@ -9,6 +9,7 @@ interface ImportMetaEnv {
 	readonly VITE_SUPABASE_URL?: string;
 	readonly VITE_SUPABASE_ANON_KEY?: string;
 	readonly VITE_SUPABASE_AUTO_MIGRATE_SESSIONS?: 'true' | 'false';
+	readonly VITE_WELLNESS_SHEET_ID?: string;
 }
 
 interface ImportMeta {

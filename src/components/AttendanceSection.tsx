@@ -637,11 +637,6 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                             <span className="font-extrabold text-slate-900">
                               {stat.player}
                             </span>
-                            {stat.playerId && (
-                              <span className="text-[10px] font-black uppercase tracking-wider text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full">
-                                {stat.playerId}
-                              </span>
-                            )}
                             {stat.resolution !== 'matched' && (
                               <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
                                 {stat.resolution}
