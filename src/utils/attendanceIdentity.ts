@@ -2,6 +2,17 @@ import type { SquadPlayer } from '../types';
 
 export type AttendanceAliasMap = Record<string, string>;
 
+export type HistoricalNameClassification = 'squad' | 'external' | 'unresolved';
+
+export interface HistoricalNameMapping {
+  historicalName: string;
+  normalizedHistoricalName: string;
+  classification: HistoricalNameClassification;
+  playerId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type AttendanceNameResolution =
   | {
       kind: 'matched';
@@ -18,6 +29,10 @@ export type AttendanceNameResolution =
   | {
       kind: 'unmatched';
       normalizedName: string;
+    }
+  | {
+      kind: 'external';
+      normalizedName: string;
     };
 
 export interface ResolvedAttendanceIdentity {
@@ -30,14 +45,14 @@ export interface UnresolvedAttendanceIdentity {
   key: string;
   displayName: string;
   historicalNames: string[];
-  resolution: 'ambiguous' | 'unmatched';
+  resolution: 'ambiguous' | 'unmatched' | 'external';
 }
 
 export interface AttendanceIdentityRow {
   key: string;
   displayName: string;
   historicalNames: string[];
-  resolution: 'matched' | 'ambiguous' | 'unmatched';
+  resolution: 'matched' | 'ambiguous' | 'unmatched' | 'external';
   playerId?: string;
 }
 
@@ -69,7 +84,8 @@ function uniqueSorted(values: Iterable<string>): string[] {
 
 export function createAttendanceNameResolver(
   squadPlayers: SquadPlayer[],
-  aliases: AttendanceAliasMap = {}
+  aliases: AttendanceAliasMap = {},
+  mappings: HistoricalNameMapping[] = []
 ): {
   resolveName: (playerName: string) => AttendanceNameResolution;
   getPlayerIdentity: (playerId: string) => ResolvedAttendanceIdentity | undefined;
@@ -109,10 +125,47 @@ export function createAttendanceNameResolver(
     }
   });
 
+  const manualMappingIndex = new Map<string, HistoricalNameMapping>();
+  mappings.forEach((mapping) => {
+    const normalized = mapping.normalizedHistoricalName || normalizeAttendanceName(mapping.historicalName);
+    if (!normalized) return;
+    manualMappingIndex.set(normalized, {
+      ...mapping,
+      normalizedHistoricalName: normalized
+    });
+  });
+
   const resolveName = (playerName: string): AttendanceNameResolution => {
     const normalizedName = normalizeAttendanceName(playerName);
 
     if (!normalizedName) {
+      return {
+        kind: 'unmatched',
+        normalizedName
+      };
+    }
+
+    const manualMapping = manualMappingIndex.get(normalizedName);
+    if (manualMapping) {
+      if (manualMapping.classification === 'external') {
+        return {
+          kind: 'external',
+          normalizedName
+        };
+      }
+
+      if (manualMapping.classification === 'squad' && manualMapping.playerId) {
+        const mappedIdentity = byId.get(manualMapping.playerId);
+        if (mappedIdentity) {
+          return {
+            kind: 'matched',
+            playerId: mappedIdentity.playerId,
+            displayName: mappedIdentity.displayName,
+            normalizedName
+          };
+        }
+      }
+
       return {
         kind: 'unmatched',
         normalizedName
@@ -217,9 +270,10 @@ export function buildAttendanceIdentityRows(params: {
   rosterNames: string[];
   attendanceNames: string[];
   aliases?: AttendanceAliasMap;
+  mappings?: HistoricalNameMapping[];
 }): AttendanceIdentityRow[] {
-  const { squadPlayers, rosterNames, attendanceNames, aliases = {} } = params;
-  const resolver = createAttendanceNameResolver(squadPlayers, aliases);
+  const { squadPlayers, rosterNames, attendanceNames, aliases = {}, mappings = [] } = params;
+  const resolver = createAttendanceNameResolver(squadPlayers, aliases, mappings);
 
   const matchedByPlayerId = new Map<string, Set<string>>();
   resolver.listSquadIdentities().forEach((identity) => {
@@ -277,3 +331,31 @@ export function buildAttendanceIdentityRows(params: {
 }
 
 export const DEFAULT_ATTENDANCE_ALIASES: AttendanceAliasMap = {};
+
+export function buildAttendanceAliasMapFromMappings(mappings: HistoricalNameMapping[]): AttendanceAliasMap {
+  const aliasMap: AttendanceAliasMap = {};
+  mappings.forEach((mapping) => {
+    if (mapping.classification !== 'squad' || !mapping.playerId) return;
+    const key = normalizeAttendanceName(mapping.historicalName);
+    if (!key) return;
+    aliasMap[key] = mapping.playerId;
+  });
+  return aliasMap;
+}
+
+export function createHistoricalNameMapping(input: {
+  historicalName: string;
+  classification: HistoricalNameClassification;
+  playerId?: string;
+  now?: number;
+}): HistoricalNameMapping {
+  const now = input.now ?? Date.now();
+  return {
+    historicalName: input.historicalName.trim(),
+    normalizedHistoricalName: normalizeAttendanceName(input.historicalName),
+    classification: input.classification,
+    playerId: input.playerId,
+    createdAt: now,
+    updatedAt: now
+  };
+}

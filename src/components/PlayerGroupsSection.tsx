@@ -3,7 +3,12 @@ import { Users, Plus, Trash2, Edit3, Check, RefreshCw, Shield, UserCheck, AlertC
 import { PlayerGroup, PlayerAttendance, SquadPlayer } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
 import { getAvailablePlayerNamesForGroups } from '../utils/attendanceStatistics';
-import { createAttendanceNameResolver, DEFAULT_ATTENDANCE_ALIASES } from '../utils/attendanceIdentity';
+import {
+  buildAttendanceAliasMapFromMappings,
+  createAttendanceNameResolver,
+  DEFAULT_ATTENDANCE_ALIASES
+} from '../utils/attendanceIdentity';
+import { readAttendanceIdentityMappings } from '../utils/attendanceIdentityStore';
 
 interface PlayerGroupsSectionProps {
   groups: PlayerGroup[];
@@ -28,10 +33,17 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   const [rosterInput, setRosterInput] = useState(squadRoster.join(', '));
   const [selectedUnassignedPlayer, setSelectedUnassignedPlayer] = useState<string | null>(null);
 
-  const resolver = useMemo(
-    () => createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES),
-    [squadPlayers]
-  );
+  const resolver = useMemo(() => {
+    const mappings = readAttendanceIdentityMappings();
+    return createAttendanceNameResolver(
+      squadPlayers,
+      {
+        ...DEFAULT_ATTENDANCE_ALIASES,
+        ...buildAttendanceAliasMapFromMappings(mappings)
+      },
+      mappings
+    );
+  }, [squadPlayers]);
 
   // Compute attending vs absent lists
   const attendingPlayers = useMemo(() => {

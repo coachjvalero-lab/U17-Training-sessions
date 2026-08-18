@@ -1,7 +1,12 @@
 import { SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary } from '../types';
 import { supabase } from '../supabaseClient';
 import { calculatePlayerAttendanceStatisticsByPlayerId } from '../utils/attendanceStatistics';
-import { createAttendanceNameResolver, DEFAULT_ATTENDANCE_ALIASES } from '../utils/attendanceIdentity';
+import {
+  buildAttendanceAliasMapFromMappings,
+  createAttendanceNameResolver,
+  DEFAULT_ATTENDANCE_ALIASES
+} from '../utils/attendanceIdentity';
+import { readAttendanceIdentityMappings } from '../utils/attendanceIdentityStore';
 
 export interface SquadStatisticsInput {
   players: SquadPlayer[];
@@ -46,7 +51,15 @@ function buildAttendanceStats(
     ).values()
   ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const resolver = createAttendanceNameResolver(players, DEFAULT_ATTENDANCE_ALIASES);
+  const identityMappings = readAttendanceIdentityMappings();
+  const resolver = createAttendanceNameResolver(
+    players,
+    {
+      ...DEFAULT_ATTENDANCE_ALIASES,
+      ...buildAttendanceAliasMapFromMappings(identityMappings)
+    },
+    identityMappings
+  );
 
   const enrichedPlayers = players.map((player) => {
     if (isExcludedPlayer(getPlayerFullName(player), excludedPlayers)) {

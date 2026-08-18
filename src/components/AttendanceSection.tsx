@@ -41,9 +41,15 @@ import {
 } from '../utils/attendanceStatistics';
 import {
   buildAttendanceIdentityRows,
+  buildAttendanceAliasMapFromMappings,
   createAttendanceNameResolver,
   DEFAULT_ATTENDANCE_ALIASES
 } from '../utils/attendanceIdentity';
+import {
+  readAttendanceIdentityMappings,
+  upsertAttendanceIdentityMapping,
+  writeAttendanceIdentityMappings
+} from '../utils/attendanceIdentityStore';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -112,6 +118,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [nameHistory, setNameHistory] = useState<string[]>(() => readPlayerNameHistory());
+  const [identityMappings, setIdentityMappings] = useState(() => readAttendanceIdentityMappings());
+  const [expandedHistoricalAssigners, setExpandedHistoricalAssigners] = useState<Record<string, boolean>>({});
+  const [pendingIdentityAssignments, setPendingIdentityAssignments] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (showRosterModal) {
@@ -122,6 +131,10 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { searchTerm, reasonFilter, chartSort, chartView });
   }, [searchTerm, reasonFilter, chartSort, chartView]);
+
+  useEffect(() => {
+    writeAttendanceIdentityMappings(identityMappings);
+  }, [identityMappings]);
 
   // Collect all sessions (cloud sessions + current session if not in cloud)
   const allSessionsMap = new Map<string, TrainingSession | CloudTrainingSession>();
@@ -160,16 +173,25 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
     }
   });
 
-  const resolver = createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES);
+  const aliasMap = {
+    ...DEFAULT_ATTENDANCE_ALIASES,
+    ...buildAttendanceAliasMapFromMappings(identityMappings)
+  };
+  const resolver = createAttendanceNameResolver(squadPlayers, aliasMap, identityMappings);
   const identityRows = buildAttendanceIdentityRows({
     squadPlayers: squadPlayers.filter(
       (player) => !isPlayerExcluded(`${player.firstName} ${player.lastName}`)
     ),
     rosterNames: Array.from(masterPlayerSet),
     attendanceNames: allAttendanceNames,
-    aliases: DEFAULT_ATTENDANCE_ALIASES
+    aliases: aliasMap,
+    mappings: identityMappings
   });
-  const masterPlayerList = identityRows.map((identity) => identity.displayName).sort((a, b) => a.localeCompare(b));
+  const squadIdentityRows = identityRows.filter(
+    (identity) => identity.resolution === 'matched' && Boolean(identity.playerId)
+  );
+  const historicalIdentityRows = identityRows.filter((identity) => identity.resolution !== 'matched');
+  const masterPlayerList = squadIdentityRows.map((identity) => identity.displayName).sort((a, b) => a.localeCompare(b));
 
   const calculateStatisticsForIdentity = (
     identity: (typeof identityRows)[number],
@@ -192,7 +214,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   };
 
   // Build stats per player
-  const playerStats = identityRows.map(identity => {
+  const playerStats = squadIdentityRows.map(identity => {
     const statistics = calculateStatisticsForIdentity(identity, allSessionsList);
 
     return {
@@ -284,6 +306,46 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
       }
     }
   };
+
+  const handleSaveHistoricalIdentityAssignment = (historicalName: string, assignment: string) => {
+    const trimmedName = historicalName.trim();
+    if (!trimmedName) return;
+
+    if (assignment === 'external') {
+      setIdentityMappings((previous) =>
+        upsertAttendanceIdentityMapping(previous, {
+          historicalName: trimmedName,
+          classification: 'external'
+        })
+      );
+      return;
+    }
+
+    if (assignment === 'unresolved') {
+      setIdentityMappings((previous) =>
+        upsertAttendanceIdentityMapping(previous, {
+          historicalName: trimmedName,
+          classification: 'unresolved'
+        })
+      );
+      return;
+    }
+
+    if (assignment.startsWith('squad:')) {
+      const playerId = assignment.replace('squad:', '').trim();
+      if (!playerId) return;
+      setIdentityMappings((previous) =>
+        upsertAttendanceIdentityMapping(previous, {
+          historicalName: trimmedName,
+          classification: 'squad',
+          playerId
+        })
+      );
+    }
+  };
+
+  const unresolvedHistoricalRows = historicalIdentityRows.filter((row) => row.resolution !== 'external');
+  const externalHistoricalRows = historicalIdentityRows.filter((row) => row.resolution === 'external');
 
   return (
     <div className="space-y-6 pb-12">
@@ -458,6 +520,117 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         </div>
       </div>
 
+      {/* Historical Identity Resolution */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+              Historical Identity Resolution
+            </h3>
+            <p className="text-[11px] text-slate-500 font-semibold">
+              Squad identities: {squadIdentityRows.length} · Unresolved/Ambiguous: {unresolvedHistoricalRows.length} · External: {externalHistoricalRows.length}
+            </p>
+          </div>
+        </div>
+
+        {historicalIdentityRows.length === 0 ? (
+          <p className="text-xs font-semibold text-slate-500">No unresolved historical names found.</p>
+        ) : (
+          <div className="space-y-3">
+            {historicalIdentityRows.map((row) => {
+              const pending = pendingIdentityAssignments[row.key] || '';
+              const isExpanded = expandedHistoricalAssigners[row.key] || false;
+              return (
+                <div key={row.key} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div>
+                      <div className="text-xs font-black text-slate-900">{row.displayName}</div>
+                      <div className="text-[10px] font-semibold text-slate-500">
+                        Historical variants: {row.historicalNames.join(', ')}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {row.resolution}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedHistoricalAssigners((previous) => ({
+                          ...previous,
+                          [row.key]: !isExpanded
+                        }));
+                        if (!pendingIdentityAssignments[row.key]) {
+                          setPendingIdentityAssignments((previous) => ({
+                            ...previous,
+                            [row.key]: ''
+                          }));
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                    >
+                      Asignar a jugadora
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveHistoricalIdentityAssignment(row.displayName, 'external')}
+                      className="px-2.5 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                    >
+                      Marcar como External
+                    </button>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={pending}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setPendingIdentityAssignments((previous) => ({
+                            ...previous,
+                            [row.key]: value
+                          }));
+                        }}
+                        className="text-xs font-bold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 min-w-[260px]"
+                      >
+                        <option value="">Seleccionar jugadora del Squad</option>
+                        {squadPlayers
+                          .slice()
+                          .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+                          .map((player) => (
+                            <option key={player.id} value={`squad:${player.id}`}>
+                              {`${player.firstName} ${player.lastName}`}
+                            </option>
+                          ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={!pending || !pending.startsWith('squad:')}
+                        onClick={() => {
+                          if (!pending || !pending.startsWith('squad:')) return;
+                          handleSaveHistoricalIdentityAssignment(row.displayName, pending);
+                          setExpandedHistoricalAssigners((previous) => ({
+                            ...previous,
+                            [row.key]: false
+                          }));
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Main Content Area: Player Leaderboard Table */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
         
@@ -539,14 +712,28 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                         <div className="w-7 h-7 rounded-full bg-[#002142] text-[#a79078] font-black text-[10px] flex items-center justify-center shrink-0">
                           {stat.player.substring(0, 2).toUpperCase()}
                         </div>
-                        <span className="font-extrabold text-slate-900">
-                          {stat.player}
-                        </span>
-                        {stat.resolution !== 'matched' && (
-                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                            {stat.resolution}
-                          </span>
-                        )}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-slate-900">
+                              {stat.player}
+                            </span>
+                            {stat.playerId && (
+                              <span className="text-[10px] font-black uppercase tracking-wider text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full">
+                                {stat.playerId}
+                              </span>
+                            )}
+                            {stat.resolution !== 'matched' && (
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                {stat.resolution}
+                              </span>
+                            )}
+                          </div>
+                          {stat.historicalNames.length > 1 && (
+                            <p className="text-[10px] font-semibold text-slate-500">
+                              Historical: {stat.historicalNames.join(', ')}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -675,7 +862,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
           };
 
           const pastSessions = chronologicalSessions.slice(0, sIdx + 1);
-          identityRows.forEach(identity => {
+          squadIdentityRows.forEach(identity => {
             const statistics = calculateStatisticsForIdentity(identity, pastSessions);
             dataPoint[identity.key] = Math.round(statistics.attendanceRate);
           });

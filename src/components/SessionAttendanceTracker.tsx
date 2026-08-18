@@ -19,7 +19,12 @@ import { PlayerAttendance, AbsenceReason } from '../types';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import type { SquadPlayer } from '../types';
-import { createAttendanceNameResolver, DEFAULT_ATTENDANCE_ALIASES } from '../utils/attendanceIdentity';
+import {
+  buildAttendanceAliasMapFromMappings,
+  createAttendanceNameResolver,
+  DEFAULT_ATTENDANCE_ALIASES
+} from '../utils/attendanceIdentity';
+import { readAttendanceIdentityMappings } from '../utils/attendanceIdentityStore';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -117,7 +122,15 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const cleanRoster = squadRoster.filter(p => !isPlayerExcluded(p));
-  const resolver = createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES);
+  const identityMappings = readAttendanceIdentityMappings();
+  const resolver = createAttendanceNameResolver(
+    squadPlayers,
+    {
+      ...DEFAULT_ATTENDANCE_ALIASES,
+      ...buildAttendanceAliasMapFromMappings(identityMappings)
+    },
+    identityMappings
+  );
 
   // Synchronize attendance list with squad roster
   const effectiveAttendance: PlayerAttendance[] = cleanRoster.map(player => {
