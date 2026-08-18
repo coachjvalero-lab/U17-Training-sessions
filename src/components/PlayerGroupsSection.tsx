@@ -440,7 +440,10 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {groups.map((group) => {
             const preset = getColorPreset(group.bibColor);
-            const playerList = getGroupPlayersList(group);
+            // Only render players who are currently Attending; a status change to
+            // First Team / National Team Call / Absent / Gym hides them here without
+            // mutating the stored group assignment (they reappear if Attending again).
+            const playerList = getGroupPlayersList(group).filter((player) => attendingPlayers.includes(player));
 
             return (
               <div 

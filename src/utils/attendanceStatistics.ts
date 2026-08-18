@@ -15,6 +15,8 @@ export type PlayerAttendanceStatistics = {
   attendingCount: number;
   absentCount: number;
   gymCount: number;
+  firstTeamCount: number;
+  nationalTeamCount: number;
   unknownCount: number;
   participationRate: number;
   attendanceRate: number;
@@ -57,6 +59,8 @@ function calculateStatsFromResolver(
   let attendingCount = 0;
   let absentCount = 0;
   let gymCount = 0;
+  let firstTeamCount = 0;
+  let nationalTeamCount = 0;
   const reasonsMap = buildReasonsMap();
 
   sessions.forEach((session) => {
@@ -73,6 +77,16 @@ function calculateStatsFromResolver(
       return;
     }
 
+    if (record.status === 'First Team') {
+      firstTeamCount += 1;
+      return;
+    }
+
+    if (record.status === 'National Team Call') {
+      nationalTeamCount += 1;
+      return;
+    }
+
     absentCount += 1;
     const reason = record.absenceReason || 'Unknown';
     reasonsMap[reason] += 1;
@@ -80,7 +94,8 @@ function calculateStatsFromResolver(
 
   const totalSessions = sessions.length;
   const recordedSessions = attendingCount + absentCount + gymCount;
-  const unknownCount = totalSessions - recordedSessions;
+  const explicitRecords = recordedSessions + firstTeamCount + nationalTeamCount;
+  const unknownCount = totalSessions - explicitRecords;
 
   return {
     playerName: playerLabel,
@@ -89,8 +104,11 @@ function calculateStatsFromResolver(
     attendingCount,
     absentCount,
     gymCount,
+    firstTeamCount,
+    nationalTeamCount,
     unknownCount,
-    participationRate: totalSessions > 0 ? (recordedSessions / totalSessions) * 100 : 0,
+    // Participation = share of ALL sessions actually attended (not just the recorded ones).
+    participationRate: totalSessions > 0 ? (attendingCount / totalSessions) * 100 : 0,
     attendanceRate: recordedSessions > 0 ? (attendingCount / recordedSessions) * 100 : 0,
     reasonsMap
   };

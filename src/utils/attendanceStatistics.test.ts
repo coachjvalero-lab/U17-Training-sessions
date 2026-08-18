@@ -51,7 +51,7 @@ test('separates attending, absent, gym and unknown metrics', () => {
   assert.equal(result.recordedSessions, 8);
   assert.equal(result.unknownCount, 8);
   assert.equal(result.attendanceRate, 62.5);
-  assert.equal(result.participationRate, 50);
+  assert.equal(result.participationRate, 31.25);
 });
 
 test('reports three of sixteen participation and three of three attendance', () => {

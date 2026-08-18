@@ -197,7 +197,7 @@ export type PortalSection =
 
 export interface PlayerAttendance {
   playerName: string;
-  status: 'Attending' | 'Absent' | 'Gym';
+  status: 'Attending' | 'Absent' | 'Gym' | 'First Team' | 'National Team Call';
   absenceReason?: AbsenceReason;
   notes?: string;
 }

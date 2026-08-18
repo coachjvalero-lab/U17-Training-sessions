@@ -121,6 +121,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   const [identityMappings, setIdentityMappings] = useState(() => readAttendanceIdentityMappings());
   const [expandedHistoricalAssigners, setExpandedHistoricalAssigners] = useState<Record<string, boolean>>({});
   const [pendingIdentityAssignments, setPendingIdentityAssignments] = useState<Record<string, string>>({});
+  const [showHistoricalManager, setShowHistoricalManager] = useState(false);
+  const [showExternalPlayers, setShowExternalPlayers] = useState(false);
 
   useEffect(() => {
     if (showRosterModal) {
@@ -229,6 +231,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
       attendedCount: statistics.attendingCount,
       absentCount: statistics.absentCount,
       gymCount: statistics.gymCount,
+      firstTeamCount: statistics.firstTeamCount,
+      nationalTeamCount: statistics.nationalTeamCount,
       unknownCount: statistics.unknownCount,
       reasonsMap: statistics.reasonsMap,
       rate: Math.round(statistics.attendanceRate)
@@ -346,6 +350,31 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
   const unresolvedHistoricalRows = historicalIdentityRows.filter((row) => row.resolution !== 'external');
   const externalHistoricalRows = historicalIdentityRows.filter((row) => row.resolution === 'external');
+  const historicalIdentitiesResolvedCount = squadIdentityRows.reduce(
+    (sum, identity) => sum + Math.max(identity.historicalNames.length - 1, 0),
+    0
+  );
+
+  const externalPlayerStats = externalHistoricalRows.map((row) => {
+    const statistics = calculatePlayerAttendanceStatisticsByHistoricalNames(
+      row.displayName,
+      row.historicalNames,
+      allSessionsList
+    );
+    return {
+      key: row.key,
+      player: row.displayName,
+      historicalNames: row.historicalNames,
+      totalSessions: statistics.totalSessions,
+      recordedSessions: statistics.recordedSessions,
+      attendedCount: statistics.attendingCount,
+      absentCount: statistics.absentCount,
+      gymCount: statistics.gymCount,
+      unknownCount: statistics.unknownCount,
+      participationRate: Math.round(statistics.participationRate),
+      rate: Math.round(statistics.attendanceRate)
+    };
+  });
 
   return (
     <div className="space-y-6 pb-12">
@@ -520,117 +549,6 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
         </div>
       </div>
 
-      {/* Historical Identity Resolution */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
-              Historical Identity Resolution
-            </h3>
-            <p className="text-[11px] text-slate-500 font-semibold">
-              Squad identities: {squadIdentityRows.length} · Unresolved/Ambiguous: {unresolvedHistoricalRows.length} · External: {externalHistoricalRows.length}
-            </p>
-          </div>
-        </div>
-
-        {historicalIdentityRows.length === 0 ? (
-          <p className="text-xs font-semibold text-slate-500">No unresolved historical names found.</p>
-        ) : (
-          <div className="space-y-3">
-            {historicalIdentityRows.map((row) => {
-              const pending = pendingIdentityAssignments[row.key] || '';
-              const isExpanded = expandedHistoricalAssigners[row.key] || false;
-              return (
-                <div key={row.key} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <div>
-                      <div className="text-xs font-black text-slate-900">{row.displayName}</div>
-                      <div className="text-[10px] font-semibold text-slate-500">
-                        Historical variants: {row.historicalNames.join(', ')}
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                      {row.resolution}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExpandedHistoricalAssigners((previous) => ({
-                          ...previous,
-                          [row.key]: !isExpanded
-                        }));
-                        if (!pendingIdentityAssignments[row.key]) {
-                          setPendingIdentityAssignments((previous) => ({
-                            ...previous,
-                            [row.key]: ''
-                          }));
-                        }
-                      }}
-                      className="px-2.5 py-1.5 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
-                    >
-                      Asignar a jugadora
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSaveHistoricalIdentityAssignment(row.displayName, 'external')}
-                      className="px-2.5 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
-                    >
-                      Marcar como External
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        value={pending}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setPendingIdentityAssignments((previous) => ({
-                            ...previous,
-                            [row.key]: value
-                          }));
-                        }}
-                        className="text-xs font-bold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 min-w-[260px]"
-                      >
-                        <option value="">Seleccionar jugadora del Squad</option>
-                        {squadPlayers
-                          .slice()
-                          .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
-                          .map((player) => (
-                            <option key={player.id} value={`squad:${player.id}`}>
-                              {`${player.firstName} ${player.lastName}`}
-                            </option>
-                          ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        disabled={!pending || !pending.startsWith('squad:')}
-                        onClick={() => {
-                          if (!pending || !pending.startsWith('squad:')) return;
-                          handleSaveHistoricalIdentityAssignment(row.displayName, pending);
-                          setExpandedHistoricalAssigners((previous) => ({
-                            ...previous,
-                            [row.key]: false
-                          }));
-                        }}
-                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
-                      >
-                        Guardar
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {/* Main Content Area: Player Leaderboard Table */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
         
@@ -690,6 +608,8 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 <th className="py-3 px-3 text-center">Attended</th>
                 <th className="py-3 px-3 text-center">Absences</th>
                 <th className="py-3 px-3 text-center">Gym</th>
+                <th className="py-3 px-3 text-center">First Team</th>
+                <th className="py-3 px-3 text-center">National Team</th>
                 <th className="py-3 px-3 text-center">Unrecorded</th>
                 <th className="py-3 px-3 text-center">Vacation</th>
                 <th className="py-3 px-3 text-center">Study</th>
@@ -778,6 +698,14 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                       {stat.gymCount > 0 ? stat.gymCount : <span className="text-slate-300">0</span>}
                     </td>
 
+                    <td className="py-3 px-3 text-center font-bold text-indigo-700">
+                      {stat.firstTeamCount > 0 ? stat.firstTeamCount : <span className="text-slate-300">0</span>}
+                    </td>
+
+                    <td className="py-3 px-3 text-center font-bold text-fuchsia-700">
+                      {stat.nationalTeamCount > 0 ? stat.nationalTeamCount : <span className="text-slate-300">0</span>}
+                    </td>
+
                     <td className="py-3 px-3 text-center font-bold text-slate-600">
                       {stat.unknownCount > 0 ? stat.unknownCount : <span className="text-slate-300">0</span>}
                     </td>
@@ -824,6 +752,185 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* External Players — participate in sessions but are not part of the U17 Squad */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <button
+          type="button"
+          onClick={() => setShowExternalPlayers((previous) => !previous)}
+          className="w-full flex flex-wrap items-center justify-between gap-3 cursor-pointer"
+        >
+          <div className="text-left">
+            <h3 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+              External Players
+            </h3>
+            <p className="text-[11px] text-slate-500 font-semibold">
+              {externalPlayerStats.length} external {externalPlayerStats.length === 1 ? 'identity' : 'identities'} with attendance records
+            </p>
+          </div>
+          <span className="text-xs font-black text-[#002142]">
+            {showExternalPlayers ? '▴' : '▾'}
+          </span>
+        </button>
+
+        {showExternalPlayers && (
+          externalPlayerStats.length === 0 ? (
+            <p className="text-xs font-semibold text-slate-500">No external players recorded yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {externalPlayerStats.map((stat) => (
+                <div key={stat.key} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-black text-slate-900">{stat.player}</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                      External
+                    </span>
+                  </div>
+                  {stat.historicalNames.length > 1 && (
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      Historical: {stat.historicalNames.join(', ')}
+                    </p>
+                  )}
+                  <div className="text-[11px] font-bold text-slate-700 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>Attended: <strong className="text-emerald-700">{stat.attendedCount}</strong></span>
+                    <span>Recorded: <strong>{stat.recordedSessions}</strong></span>
+                    <span>Attendance: <strong>{stat.rate}%</strong></span>
+                    <span>Participation: <strong>{stat.attendedCount} / {stat.totalSessions}</strong></span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Historical Identity Resolution — secondary tool, collapsed by default */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <button
+          type="button"
+          onClick={() => setShowHistoricalManager((previous) => !previous)}
+          className="w-full flex flex-wrap items-center justify-between gap-3 cursor-pointer"
+        >
+          <div className="text-left">
+            <h3 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">
+              Historical Identity Resolution
+            </h3>
+            <p className="text-[11px] text-slate-500 font-semibold">
+              {squadIdentityRows.length} Squad players · {historicalIdentitiesResolvedCount} historical identities resolved · {externalHistoricalRows.length} External · {unresolvedHistoricalRows.length} unresolved
+            </p>
+          </div>
+          <span className="text-xs font-black text-[#002142]">
+            Manage historical identities {showHistoricalManager ? '▴' : '▾'}
+          </span>
+        </button>
+
+        {showHistoricalManager && (
+          unresolvedHistoricalRows.length === 0 ? (
+            <p className="text-xs font-semibold text-slate-500">No unresolved historical names found.</p>
+          ) : (
+          <div className="space-y-3">
+            {unresolvedHistoricalRows.map((row) => {
+              const pending = pendingIdentityAssignments[row.key] || '';
+              const isExpanded = expandedHistoricalAssigners[row.key] || false;
+              return (
+                <div key={row.key} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div>
+                      <div className="text-xs font-black text-slate-900">{row.displayName}</div>
+                      <div className="text-[10px] font-semibold text-slate-500">
+                        Historical variants: {row.historicalNames.join(', ')}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {row.resolution}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedHistoricalAssigners((previous) => ({
+                          ...previous,
+                          [row.key]: !isExpanded
+                        }));
+                        if (!pendingIdentityAssignments[row.key]) {
+                          setPendingIdentityAssignments((previous) => ({
+                            ...previous,
+                            [row.key]: ''
+                          }));
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-[#002142] hover:bg-[#002e5c] text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                    >
+                      Asignar a jugadora
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveHistoricalIdentityAssignment(row.displayName, 'external')}
+                      className="px-2.5 py-1.5 bg-white border border-amber-300 text-amber-800 hover:bg-amber-50 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                    >
+                      Marcar como External
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveHistoricalIdentityAssignment(row.displayName, 'unresolved')}
+                      className="px-2.5 py-1.5 bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                    >
+                      Keep unresolved
+                    </button>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={pending}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setPendingIdentityAssignments((previous) => ({
+                            ...previous,
+                            [row.key]: value
+                          }));
+                        }}
+                        className="text-xs font-bold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 min-w-[260px]"
+                      >
+                        <option value="">Seleccionar jugadora del Squad</option>
+                        {squadPlayers
+                          .slice()
+                          .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+                          .map((player) => (
+                            <option key={player.id} value={`squad:${player.id}`}>
+                              {`${player.firstName} ${player.lastName}`}
+                            </option>
+                          ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={!pending || !pending.startsWith('squad:')}
+                        onClick={() => {
+                          if (!pending || !pending.startsWith('squad:')) return;
+                          handleSaveHistoricalIdentityAssignment(row.displayName, pending);
+                          setExpandedHistoricalAssigners((previous) => ({
+                            ...previous,
+                            [row.key]: false
+                          }));
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          )
+        )}
       </div>
 
       {/* Attendance Classification & Ranking Chart (Gráfico de Clasificación de Asistencia con Puntos y Líneas) */}

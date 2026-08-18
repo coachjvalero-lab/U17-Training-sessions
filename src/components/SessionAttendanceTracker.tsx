@@ -13,7 +13,9 @@ import {
   ChevronDown, 
   ChevronUp, 
   Check, 
-  Dumbbell
+  Dumbbell,
+  Shield,
+  Globe2
 } from 'lucide-react';
 import { PlayerAttendance, AbsenceReason } from '../types';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
@@ -152,10 +154,14 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
   const pitchCount = effectiveAttendance.filter(a => a.status === 'Attending').length;
   const gymCount = effectiveAttendance.filter(a => a.status === 'Gym').length;
+  const firstTeamCount = effectiveAttendance.filter(a => a.status === 'First Team').length;
+  const nationalTeamCount = effectiveAttendance.filter(a => a.status === 'National Team Call').length;
   const attendingCount = pitchCount + gymCount; // Both pitch and gym count as attendance!
   const absentCount = effectiveAttendance.filter(a => a.status === 'Absent').length;
   const totalCount = effectiveAttendance.length;
-  const attendanceRate = totalCount > 0 ? Math.round((attendingCount / totalCount) * 100) : 0;
+  // First Team / National Team Call are explicit unavailability states, excluded from the attendance % denominator.
+  const attendanceDenominator = attendingCount + absentCount;
+  const attendanceRate = attendanceDenominator > 0 ? Math.round((attendingCount / attendanceDenominator) * 100) : 0;
 
   // Count by reason
   const vacationCount = effectiveAttendance.filter(a => a.status === 'Absent' && a.absenceReason === 'Vacation').length;
@@ -178,6 +184,18 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
           return {
             ...a,
             status: 'Gym' as const,
+            absenceReason: undefined
+          };
+        } else if (value === 'First Team') {
+          return {
+            ...a,
+            status: 'First Team' as const,
+            absenceReason: undefined
+          };
+        } else if (value === 'National Team Call') {
+          return {
+            ...a,
+            status: 'National Team Call' as const,
             absenceReason: undefined
           };
         } else {
@@ -290,7 +308,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                   ? 'bg-amber-100 text-amber-800 border-amber-300' 
                   : 'bg-rose-100 text-rose-800 border-rose-300'
               }`}>
-                {attendanceRate}% Present ({attendingCount}/{totalCount})
+                {attendanceRate}% Present ({attendingCount}/{attendanceDenominator})
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-bold">
@@ -348,7 +366,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
       </div>
 
       {/* Summary Stat Chips Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 text-xs font-bold">
+      <div className="grid grid-cols-2 sm:grid-cols-9 gap-2 text-xs font-bold">
         <div className="bg-emerald-50 border border-emerald-200/80 p-2 rounded-xl flex items-center justify-between text-emerald-900">
           <div className="flex items-center space-x-1.5 text-[11px]">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -363,6 +381,22 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
             <span>Gym</span>
           </div>
           <span className="text-sm font-black">{gymCount}</span>
+        </div>
+
+        <div className="bg-indigo-50 border border-indigo-200/80 p-2 rounded-xl flex items-center justify-between text-indigo-900">
+          <div className="flex items-center space-x-1.5 text-[11px]">
+            <Shield className="w-3.5 h-3.5 text-indigo-600" />
+            <span>First Team</span>
+          </div>
+          <span className="text-sm font-black">{firstTeamCount}</span>
+        </div>
+
+        <div className="bg-fuchsia-50 border border-fuchsia-200/80 p-2 rounded-xl flex items-center justify-between text-fuchsia-900">
+          <div className="flex items-center space-x-1.5 text-[11px]">
+            <Globe2 className="w-3.5 h-3.5 text-fuchsia-600" />
+            <span>Nat. Team</span>
+          </div>
+          <span className="text-sm font-black">{nationalTeamCount}</span>
         </div>
 
         <div className="bg-amber-50 border border-amber-200/80 p-2 rounded-xl flex items-center justify-between text-amber-900">
@@ -459,7 +493,15 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
             {filteredPlayers.map((record) => {
               const isAttending = record.status === 'Attending';
               const isGym = record.status === 'Gym';
-              const currentSelectValue = isGym ? 'Gym' : (isAttending ? 'Attending' : (record.absenceReason || 'Unknown'));
+              const isFirstTeam = record.status === 'First Team';
+              const isNationalTeam = record.status === 'National Team Call';
+              const currentSelectValue = isGym
+                ? 'Gym'
+                : isFirstTeam
+                ? 'First Team'
+                : isNationalTeam
+                ? 'National Team Call'
+                : (isAttending ? 'Attending' : (record.absenceReason || 'Unknown'));
               
               // Determine card styling based on attendance status
               let cardBg = 'bg-emerald-50/50 border-emerald-200/80 hover:border-emerald-300';
@@ -468,6 +510,12 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
               if (isGym) {
                 cardBg = 'bg-cyan-50/70 border-cyan-200 hover:border-cyan-300';
                 selectBg = 'bg-cyan-700 text-white border-cyan-800 focus:ring-cyan-500';
+              } else if (isFirstTeam) {
+                cardBg = 'bg-indigo-50/70 border-indigo-200 hover:border-indigo-300';
+                selectBg = 'bg-indigo-700 text-white border-indigo-800 focus:ring-indigo-500';
+              } else if (isNationalTeam) {
+                cardBg = 'bg-fuchsia-50/70 border-fuchsia-200 hover:border-fuchsia-300';
+                selectBg = 'bg-fuchsia-700 text-white border-fuchsia-800 focus:ring-fuchsia-500';
               } else if (!isAttending) {
                 if (record.absenceReason === 'Vacation') {
                   cardBg = 'bg-amber-50/60 border-amber-200 hover:border-amber-300';
@@ -532,6 +580,12 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                       </option>
                       <option value="Gym" className="bg-white text-cyan-900 font-bold py-1">
                         🏋️ Gym (Attending)
+                      </option>
+                      <option value="First Team" className="bg-white text-indigo-900 font-bold py-1">
+                        🛡️ First Team (Unavailable)
+                      </option>
+                      <option value="National Team Call" className="bg-white text-fuchsia-900 font-bold py-1">
+                        🌍 National Team Call (Unavailable)
                       </option>
                       <option value="Vacation" className="bg-white text-amber-900 font-bold py-1">
                         🏖️ Vacation (Absent)
