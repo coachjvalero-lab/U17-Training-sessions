@@ -1171,135 +1171,178 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                       </div>
                     ) : null}
 
-                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                      <table className="min-w-full divide-y divide-slate-200 text-left">
-                        <thead className="bg-slate-50">
-                          <tr className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                            <th className="px-4 py-3">Player</th>
-                            <th className="px-4 py-3">Sleep Quality</th>
-                            <th className="px-4 py-3">Sleep Time</th>
-                            <th className="px-4 py-3">Fatigue</th>
-                            <th className="px-4 py-3">Muscle Soreness</th>
-                            <th className="px-4 py-3">Stress</th>
-                            <th className="px-4 py-3">Wellness Score</th>
-                            <th className="px-4 py-3">Pain</th>
-                            <th className="px-4 py-3">Menstrual Cycle</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {wellnessRowsForDate.map((row) => {
-                            const resolution = wellnessSnapshot?.resolutions.find((item) => item.playerName === row.playerName) || null;
-                            const isSelected = selectedWellnessRow?.rowId === row.rowId;
-                            return (
-                              <tr
-                                key={row.rowId}
-                                onClick={() => setSelectedWellnessRowId(row.rowId)}
-                                className={`cursor-pointer transition-colors ${isSelected ? 'bg-[#e9f3f8]' : 'hover:bg-slate-50'}`}
-                              >
-                                <td className="px-4 py-3">
-                                  <div className="text-sm font-bold text-slate-900">{row.playerName}</div>
+                    <div className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {wellnessRowsForDate.map((row) => {
+                          const resolution = wellnessSnapshot?.resolutions.find((item) => item.playerName === row.playerName) || null;
+                          const isSelected = selectedWellnessRow?.rowId === row.rowId;
+                          const status = (row.status || '').toUpperCase();
+                          const playerNumber = (() => {
+                            const found = squadPlayers.find((player) => {
+                              const nameA = `${player.firstName} ${player.lastName}`.trim();
+                              const nameB = `${player.lastName} ${player.firstName}`.trim();
+                              return nameA === row.playerName || nameB === row.playerName;
+                            });
+                            return found?.number ?? null;
+                          })();
+
+                          const statusTone = status === 'GREEN'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                            : status === 'AMBER'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                              : status === 'RED'
+                                ? 'bg-rose-100 text-rose-900 border border-rose-200'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200';
+
+                          const scoreTone = row.sumScore && Number(row.sumScore) >= 18
+                            ? 'text-emerald-700'
+                            : row.sumScore && Number(row.sumScore) >= 12
+                              ? 'text-amber-700'
+                              : row.sumScore && Number(row.sumScore) > 0
+                                ? 'text-rose-700'
+                                : 'text-slate-500';
+
+                          return (
+                            <article
+                              key={row.rowId}
+                              onClick={() => setSelectedWellnessRowId(row.rowId)}
+                              className={`cursor-pointer rounded-3xl border bg-white p-4 shadow-sm transition-all duration-200 ${isSelected ? 'border-[#002142] shadow-lg ring-2 ring-[#002142]/10' : 'border-slate-200 hover:border-slate-300 hover:shadow-md'}`}
+                            >
+                              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                                <div className="min-w-0">
+                                  {playerNumber !== null && playerNumber !== undefined ? (
+                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">#{String(playerNumber)}</div>
+                                  ) : null}
+                                  <h4 className="mt-1 text-lg font-black uppercase tracking-tight text-slate-900 break-words">{row.playerName}</h4>
                                   <div className="mt-1 text-[10px] font-semibold text-slate-500">
-                                    {resolution?.status === 'matched' ? `Matched: ${resolution.resolvedLabel || row.playerName}` : resolution?.status === 'ambiguous' ? 'Ambiguous match' : 'Unresolved'}
+                                    {resolution?.status === 'matched' ? `Matched • ${resolution.resolvedLabel || row.playerName}` : resolution?.status === 'ambiguous' ? 'Ambiguous match' : resolution?.status === 'unresolved' ? 'Unresolved' : 'Pending'}
                                   </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.sleepQuality}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.sleepTime}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.fatigue}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.muscleSoreness}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.stress}</td>
-                                <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.sumScore}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.pain}</td>
-                                <td className="px-4 py-3 text-sm text-slate-700">{row.menstrualCycle}</td>
-                              </tr>
-                            );
-                          })}
-                          {wellnessRowsForDate.length === 0 ? (
-                            <tr>
-                              <td className="px-4 py-6 text-sm text-slate-500" colSpan={9}>
-                                No Wellness responses for the selected date.
-                              </td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                                </div>
 
-                  <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Player detail</div>
-                        <h3 className="text-base font-black text-slate-900 mt-1">{selectedWellnessRow?.playerName || '—'}</h3>
+                                <div className="flex flex-col items-end gap-2">
+                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${statusTone}`}>
+                                    {status || '—'}
+                                  </span>
+                                  <div className="text-right">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Wellness Score</div>
+                                    <div className={`text-2xl font-black ${scoreTone}`}>{row.sumScore || '—'}</div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 space-y-4 text-sm">
+                                <div>
+                                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Wellness</div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Sleep quality</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.sleepQuality || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Sleep time</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.sleepTime || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Fatigue</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.fatigue || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Muscle soreness</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.muscleSoreness || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Stress</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.stress || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Readiness</div>
+                                      <div className="mt-1 text-base font-bold text-slate-800">{row.sumScore || '—'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Pain</div>
+                                  <div className="space-y-2 rounded-2xl bg-slate-50 p-3">
+                                    <div><span className="font-bold text-slate-800">Location:</span> {row.pain || '—'}</div>
+                                    <div><span className="font-bold text-slate-800">Intensity:</span> {row.painIntensity || '—'}</div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Menstrual / recovery</div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Menstrual cycle</div>
+                                      <div className="mt-1 text-sm font-bold text-slate-800">{row.menstrualCycle || '—'}</div>
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Period day</div>
+                                      <div className="mt-1 text-sm font-bold text-slate-800">{row.dayOfPeriod || '—'}</div>
+                                    </div>
+                                    <div className="col-span-2 rounded-2xl bg-slate-50 p-2.5">
+                                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Cycle phase</div>
+                                      <div className="mt-1 text-sm font-bold text-slate-800">{row.cyclePhase || '—'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Symptoms</div>
+                                  <div className="space-y-2 rounded-2xl bg-slate-50 p-3">
+                                    <div><span className="font-bold text-slate-800">Symptoms:</span> {row.symptoms || '—'}</div>
+                                    <div><span className="font-bold text-slate-800">Other symptom:</span> {row.otherSymptom || '—'}</div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Additional information</div>
+                                  <div className="rounded-2xl bg-slate-50 p-3 text-sm font-medium text-slate-700">
+                                    {row.additionalInformation || '—'}
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-3">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Record</div>
+                                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                                    <div><span className="font-bold text-slate-800">Date:</span> {row.dateKey || '—'}</div>
+                                    <div><span className="font-bold text-slate-800">Timestamp:</span> {row.timestamp || '—'}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
                       </div>
-                      <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">Read only</span>
-                    </div>
 
-                    {selectedWellnessRow ? (
-                      <div className="space-y-4 text-sm">
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Wellness</div>
-                          <div className="mt-2 space-y-1.5 text-slate-700">
-                            <div><span className="font-bold text-slate-900">Sleep Quality:</span> {selectedWellnessRow.sleepQuality}</div>
-                            <div><span className="font-bold text-slate-900">Sleep Time:</span> {selectedWellnessRow.sleepTime}</div>
-                            <div><span className="font-bold text-slate-900">Fatigue:</span> {selectedWellnessRow.fatigue}</div>
-                            <div><span className="font-bold text-slate-900">Muscle Soreness:</span> {selectedWellnessRow.muscleSoreness}</div>
-                            <div><span className="font-bold text-slate-900">Stress:</span> {selectedWellnessRow.stress}</div>
-                            <div><span className="font-bold text-slate-900">Wellness Score:</span> {selectedWellnessRow.sumScore}</div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pain</div>
-                          <div className="mt-2 space-y-1.5 text-slate-700">
-                            <div><span className="font-bold text-slate-900">Pain:</span> {selectedWellnessRow.pain}</div>
-                            <div><span className="font-bold text-slate-900">Location:</span> {selectedWellnessRow.pain}</div>
-                            <div><span className="font-bold text-slate-900">Pain Intensity:</span> {selectedWellnessRow.painIntensity}</div>
-                            <div><span className="font-bold text-slate-900">Additional information:</span> {selectedWellnessRow.additionalInformation}</div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Menstrual cycle</div>
-                          <div className="mt-2 space-y-1.5 text-slate-700">
-                            <div><span className="font-bold text-slate-900">Menstrual cycle:</span> {selectedWellnessRow.menstrualCycle}</div>
-                            <div><span className="font-bold text-slate-900">Day of period:</span> {selectedWellnessRow.dayOfPeriod}</div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Record info</div>
-                          <div className="mt-2 space-y-1.5 text-slate-700">
-                            <div><span className="font-bold text-slate-900">Date / Timestamp:</span> {selectedWellnessRow.timestamp}</div>
-                            <div><span className="font-bold text-slate-900">Week:</span> {selectedWellnessRow.week}</div>
-                            <div><span className="font-bold text-slate-900">MD:</span> {selectedWellnessRow.md}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm font-semibold text-slate-500">Select a Wellness row to inspect the detail view.</p>
-                    )}
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Matching diagnostics</div>
-                      <div className="mt-2 space-y-1.5 text-xs font-semibold text-slate-700">
-                        <div>Matched: {wellnessDiagnostics.matched.length}</div>
-                        <div>Unresolved: {wellnessDiagnostics.unresolved.length}</div>
-                        <div>Ambiguous: {wellnessDiagnostics.ambiguous.length}</div>
-                      </div>
-                      {wellnessDiagnostics.unresolved.length > 0 ? (
-                        <div className="mt-3 text-xs text-slate-600">
-                          <div className="font-black uppercase tracking-wider text-slate-400">Unresolved players</div>
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {wellnessDiagnostics.unresolved.map((item) => (
-                              <span key={item.playerName} className="rounded-full bg-white px-2 py-1 border border-slate-200">
-                                {item.playerName}
-                              </span>
-                            ))}
-                          </div>
+                      {wellnessRowsForDate.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                          No Wellness responses for the selected date.
                         </div>
                       ) : null}
+
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Matching diagnostics</div>
+                        <div className="mt-2 space-y-1.5 text-xs font-semibold text-slate-700">
+                          <div>Matched: {wellnessDiagnostics.matched.length}</div>
+                          <div>Unresolved: {wellnessDiagnostics.unresolved.length}</div>
+                          <div>Ambiguous: {wellnessDiagnostics.ambiguous.length}</div>
+                        </div>
+                        {wellnessDiagnostics.unresolved.length > 0 ? (
+                          <div className="mt-3 text-xs text-slate-600">
+                            <div className="font-black uppercase tracking-wider text-slate-400">Unresolved players</div>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              {wellnessDiagnostics.unresolved.map((item) => (
+                                <span key={item.playerName} className="rounded-full bg-white px-2 py-1 border border-slate-200">
+                                  {item.playerName}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </aside>
+                  </div>
                 </div>
               </div>
             ) : (
