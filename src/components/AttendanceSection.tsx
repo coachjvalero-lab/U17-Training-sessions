@@ -32,10 +32,18 @@ import {
   ResponsiveContainer, 
   ReferenceLine 
 } from 'recharts';
-import { TrainingSession, AbsenceReason, CloudTrainingSession } from '../types';
+import { TrainingSession, AbsenceReason, CloudTrainingSession, SquadPlayer } from '../types';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
-import { calculatePlayerAttendanceStatistics } from '../utils/attendanceStatistics';
+import {
+  calculatePlayerAttendanceStatisticsByHistoricalNames,
+  calculatePlayerAttendanceStatisticsByPlayerId
+} from '../utils/attendanceStatistics';
+import {
+  buildAttendanceIdentityRows,
+  createAttendanceNameResolver,
+  DEFAULT_ATTENDANCE_ALIASES
+} from '../utils/attendanceIdentity';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -71,6 +79,7 @@ interface AttendanceSectionProps {
   session: TrainingSession;
   cloudSessions: CloudTrainingSession[];
   squadRoster?: string[];
+  squadPlayers?: SquadPlayer[];
   onChangeSession: (fields: Partial<TrainingSession>) => void;
   onChangeRoster?: (roster: string[]) => void;
   excludedPlayers?: string[];
@@ -82,6 +91,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
   session,
   cloudSessions = [],
   squadRoster = DEFAULT_SQUAD_PLAYERS,
+  squadPlayers = [],
   onChangeSession,
   onChangeRoster,
   excludedPlayers = [],
@@ -138,24 +148,60 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
   // Calculate global squad roster (union of squadRoster and any player appearing in attendance, minus excluded)
   const masterPlayerSet = new Set<string>(squadRoster.filter(p => !isPlayerExcluded(p)));
+  const allAttendanceNames: string[] = [];
   allSessionsList.forEach(s => {
     if (s.attendance && Array.isArray(s.attendance)) {
       s.attendance.forEach(a => {
         if (a.playerName && !isPlayerExcluded(a.playerName)) {
           masterPlayerSet.add(a.playerName);
+          allAttendanceNames.push(a.playerName);
         }
       });
     }
   });
 
-  const masterPlayerList = Array.from(masterPlayerSet).sort((a, b) => a.localeCompare(b));
+  const resolver = createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES);
+  const identityRows = buildAttendanceIdentityRows({
+    squadPlayers: squadPlayers.filter(
+      (player) => !isPlayerExcluded(`${player.firstName} ${player.lastName}`)
+    ),
+    rosterNames: Array.from(masterPlayerSet),
+    attendanceNames: allAttendanceNames,
+    aliases: DEFAULT_ATTENDANCE_ALIASES
+  });
+  const masterPlayerList = identityRows.map((identity) => identity.displayName).sort((a, b) => a.localeCompare(b));
+
+  const calculateStatisticsForIdentity = (
+    identity: (typeof identityRows)[number],
+    sessions: Array<TrainingSession | CloudTrainingSession>
+  ) => {
+    if (identity.resolution === 'matched' && identity.playerId) {
+      return calculatePlayerAttendanceStatisticsByPlayerId(
+        identity.playerId,
+        identity.displayName,
+        sessions,
+        resolver.resolveName
+      );
+    }
+
+    return calculatePlayerAttendanceStatisticsByHistoricalNames(
+      identity.displayName,
+      identity.historicalNames,
+      sessions
+    );
+  };
 
   // Build stats per player
-  const playerStats = masterPlayerList.map(player => {
-    const statistics = calculatePlayerAttendanceStatistics(player, allSessionsList);
+  const playerStats = identityRows.map(identity => {
+    const statistics = calculateStatisticsForIdentity(identity, allSessionsList);
 
     return {
-      player,
+      key: identity.key,
+      chartKey: identity.key,
+      player: identity.displayName,
+      playerId: identity.playerId,
+      resolution: identity.resolution,
+      historicalNames: identity.historicalNames,
       totalSessions: statistics.totalSessions,
       recordedSessions: statistics.recordedSessions,
       attendedCount: statistics.attendingCount,
@@ -169,7 +215,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
 
   // Filter player stats based on search & reason filter
   const filteredPlayerStats = playerStats.filter(stat => {
-    const matchesSearch = stat.player.toLowerCase().includes(searchTerm.toLowerCase());
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchesSearch = stat.player.toLowerCase().includes(normalizedSearch)
+      || stat.historicalNames.some((name) => name.toLowerCase().includes(normalizedSearch));
     if (!matchesSearch) return false;
 
     if (reasonFilter !== 'all') {
@@ -484,7 +532,7 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                 const isGood = stat.rate >= 70 && stat.rate < 85;
 
                 return (
-                  <tr key={stat.player} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={stat.key} className="hover:bg-slate-50/80 transition-colors">
                     {/* Player Name & Avatar */}
                     <td className="py-3 px-3">
                       <div className="flex items-center space-x-2.5">
@@ -494,6 +542,11 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                         <span className="font-extrabold text-slate-900">
                           {stat.player}
                         </span>
+                        {stat.resolution !== 'matched' && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                            {stat.resolution}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -622,9 +675,9 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
           };
 
           const pastSessions = chronologicalSessions.slice(0, sIdx + 1);
-          masterPlayerList.forEach(player => {
-            const statistics = calculatePlayerAttendanceStatistics(player, pastSessions);
-            dataPoint[player] = Math.round(statistics.attendanceRate);
+          identityRows.forEach(identity => {
+            const statistics = calculateStatisticsForIdentity(identity, pastSessions);
+            dataPoint[identity.key] = Math.round(statistics.attendanceRate);
           });
 
           return dataPoint;
@@ -1042,12 +1095,13 @@ export const AttendanceSection: React.FC<AttendanceSectionProps> = ({
                       />
                       {sortedChartPlayers.map((playerStat, idx) => {
                         const player = playerStat.player;
+                        const chartKey = playerStat.chartKey;
                         const strokeColor = RACE_COLORS[idx % RACE_COLORS.length];
                         return (
                           <Line
-                            key={player}
+                            key={chartKey}
                             type="monotone"
-                            dataKey={player}
+                            dataKey={chartKey}
                             name={player}
                             stroke={strokeColor}
                             strokeWidth={idx < 3 ? 3 : 2}

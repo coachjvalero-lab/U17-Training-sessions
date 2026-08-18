@@ -96,6 +96,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         <SessionAttendanceTracker
           attendance={sessionAttendance}
           squadRoster={rosterForAttendance}
+          squadPlayers={squadPlayers}
           onChangeAttendance={updateAttendance}
           onChangeRoster={updateRoster}
           excludedPlayers={excludedPlayers}
@@ -109,6 +110,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         <PlayerGroupsSection
           groups={moduleView.playerGroups}
           squadRoster={rosterForAttendance}
+          squadPlayers={squadPlayers}
           attendance={sessionAttendance}
           onChangeGroups={onUpdateGroups}
           onChangeRoster={updateRoster}

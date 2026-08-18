@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Users, Plus, Trash2, Edit3, Check, RefreshCw, Shield, UserCheck, AlertCircle } from 'lucide-react';
-import { PlayerGroup, PlayerAttendance } from '../types';
+import { PlayerGroup, PlayerAttendance, SquadPlayer } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
 import { getAvailablePlayerNamesForGroups } from '../utils/attendanceStatistics';
+import { createAttendanceNameResolver, DEFAULT_ATTENDANCE_ALIASES } from '../utils/attendanceIdentity';
 
 interface PlayerGroupsSectionProps {
   groups: PlayerGroup[];
   squadRoster?: string[];
+  squadPlayers?: SquadPlayer[];
   attendance?: PlayerAttendance[];
   onChangeGroups: (groups: PlayerGroup[]) => void;
   onChangeRoster?: (roster: string[]) => void;
@@ -16,6 +18,7 @@ interface PlayerGroupsSectionProps {
 export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   groups,
   squadRoster = DEFAULT_SQUAD_PLAYERS,
+  squadPlayers = [],
   attendance = [],
   onChangeGroups,
   onChangeRoster,
@@ -25,10 +28,17 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   const [rosterInput, setRosterInput] = useState(squadRoster.join(', '));
   const [selectedUnassignedPlayer, setSelectedUnassignedPlayer] = useState<string | null>(null);
 
+  const resolver = useMemo(
+    () => createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES),
+    [squadPlayers]
+  );
+
   // Compute attending vs absent lists
   const attendingPlayers = useMemo(() => {
-    return getAvailablePlayerNamesForGroups(squadRoster, attendance);
-  }, [attendance, squadRoster]);
+    return getAvailablePlayerNamesForGroups(squadRoster, attendance, {
+      resolveName: resolver.resolveName
+    });
+  }, [attendance, resolver, squadRoster]);
 
   const gymPlayers = useMemo(() => {
     if (!attendance || attendance.length === 0) return [];

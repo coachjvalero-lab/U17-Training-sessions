@@ -1878,6 +1878,7 @@ export default function App() {
               <SessionAttendanceTracker
                 attendance={session.attendance}
                 squadRoster={session.squadRoster}
+                squadPlayers={squadPlayersWithStats}
                 onChangeAttendance={handleUpdateAttendance}
                 onChangeRoster={handleUpdateRoster}
                 excludedPlayers={excludedPlayers}
@@ -1891,6 +1892,7 @@ export default function App() {
               <PlayerGroupsSection
                 groups={session.playerGroups}
                 squadRoster={session.squadRoster}
+                squadPlayers={squadPlayersWithStats}
                 attendance={session.attendance}
                 onChangeGroups={handleUpdateGroups}
                 onChangeRoster={handleUpdateRoster}

@@ -966,6 +966,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         <AttendanceSection
           session={session}
           cloudSessions={cloudSessions}
+          squadPlayers={players}
           squadRoster={session.squadRoster || players.map(p => `${p.firstName} ${p.lastName}`)}
           onChangeSession={onChangeSession}
           onChangeRoster={onChangeRoster}

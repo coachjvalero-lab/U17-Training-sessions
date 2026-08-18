@@ -18,6 +18,8 @@ import {
 import { PlayerAttendance, AbsenceReason } from '../types';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
+import type { SquadPlayer } from '../types';
+import { createAttendanceNameResolver, DEFAULT_ATTENDANCE_ALIASES } from '../utils/attendanceIdentity';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -52,6 +54,7 @@ function savePlayerNameToHistory(name: string): void {
 interface SessionAttendanceTrackerProps {
   attendance?: PlayerAttendance[];
   squadRoster?: string[];
+  squadPlayers?: SquadPlayer[];
   onChangeAttendance: (attendance: PlayerAttendance[]) => void;
   onChangeRoster?: (roster: string[]) => void;
   compact?: boolean;
@@ -76,6 +79,7 @@ export const getAbsenceReasonConfig = (reason?: AbsenceReason) => {
 export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> = ({
   attendance = [],
   squadRoster = DEFAULT_SQUAD_PLAYERS,
+  squadPlayers = [],
   onChangeAttendance,
   onChangeRoster,
   compact: _compact = false,
@@ -113,10 +117,19 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   };
 
   const cleanRoster = squadRoster.filter(p => !isPlayerExcluded(p));
+  const resolver = createAttendanceNameResolver(squadPlayers, DEFAULT_ATTENDANCE_ALIASES);
 
   // Synchronize attendance list with squad roster
   const effectiveAttendance: PlayerAttendance[] = cleanRoster.map(player => {
-    const existing = attendance.find(a => a.playerName.toLowerCase() === player.toLowerCase());
+    const playerResolution = resolver.resolveName(player);
+    const existing = attendance.find((entry) => {
+      const entryResolution = resolver.resolveName(entry.playerName);
+      if (playerResolution.kind === 'matched' && entryResolution.kind === 'matched') {
+        return playerResolution.playerId === entryResolution.playerId;
+      }
+
+      return entry.playerName.toLowerCase() === player.toLowerCase();
+    });
     if (existing) return existing;
     return {
       playerName: player,
