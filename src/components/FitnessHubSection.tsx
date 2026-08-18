@@ -1142,7 +1142,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)] gap-4">
+                <div className="w-full">
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1181,9 +1181,27 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                      <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
-                          <table className="min-w-full border-collapse text-left text-[11px] text-slate-700">
+                          <table className="w-full min-w-[1280px] table-fixed border-collapse text-left text-[11px] leading-snug text-slate-700">
+                            <colgroup>
+                              <col className="w-[9%]" />
+                              <col className="w-[5%]" />
+                              <col className="w-[5%]" />
+                              <col className="w-[5%]" />
+                              <col className="w-[7%]" />
+                              <col className="w-[5%]" />
+                              <col className="w-[6%]" />
+                              <col className="w-[9%]" />
+                              <col className="w-[6%]" />
+                              <col className="w-[8%]" />
+                              <col className="w-[5%]" />
+                              <col className="w-[7%]" />
+                              <col className="w-[7%]" />
+                              <col className="w-[7%]" />
+                              <col className="w-[8%]" />
+                              <col className="w-[6%]" />
+                            </colgroup>
                             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                               <tr>
                                 <th className="px-3 py-3">Player</th>
@@ -1193,6 +1211,14 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                                 <th className="px-3 py-3">Muscle Soreness</th>
                                 <th className="px-3 py-3">Stress</th>
                                 <th className="px-3 py-3">Wellness Score</th>
+                                <th className="px-3 py-3">Pain Location</th>
+                                <th className="px-3 py-3">Pain Intensity</th>
+                                <th className="px-3 py-3">Menstrual Cycle</th>
+                                <th className="px-3 py-3">Period Day</th>
+                                <th className="px-3 py-3">Symptoms</th>
+                                <th className="px-3 py-3">Other Symptom</th>
+                                <th className="px-3 py-3">Cycle Phase</th>
+                                <th className="px-3 py-3">Additional Information</th>
                                 <th className="px-3 py-3">Status</th>
                               </tr>
                             </thead>
@@ -1231,7 +1257,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                                     onClick={() => setSelectedWellnessRowId(row.rowId)}
                                     className={`cursor-pointer border-t border-slate-200 transition-colors ${isSelected ? 'bg-[#002142]/5' : 'hover:bg-slate-50'}`}
                                   >
-                                    <td className="px-3 py-3 align-top">
+                                    <td className="break-words px-3 py-3 align-top">
                                       <div className="font-black text-slate-900">{row.playerName}</div>
                                       {playerNumber !== null && playerNumber !== undefined ? (
                                         <div className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">#{String(playerNumber)}</div>
@@ -1243,6 +1269,14 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                                     <td className="px-3 py-3 align-top">{row.muscleSoreness || '—'}</td>
                                     <td className="px-3 py-3 align-top">{row.stress || '—'}</td>
                                     <td className={`px-3 py-3 align-top font-black ${scoreTone}`}>{row.sumScore || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.pain || '—'}</td>
+                                    <td className="px-3 py-3 align-top">{row.painIntensity || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.menstrualCycle || '—'}</td>
+                                    <td className="px-3 py-3 align-top">{row.dayOfPeriod || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.symptoms || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.otherSymptom || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.cyclePhase || '—'}</td>
+                                    <td className="break-words px-3 py-3 align-top">{row.additionalInformation || '—'}</td>
                                     <td className="px-3 py-3 align-top">
                                       <span className={`inline-flex rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${statusTone}`}>
                                         {status || '—'}
