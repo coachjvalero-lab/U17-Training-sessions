@@ -130,24 +130,28 @@ function parseGoogleDateValue(value: string | null | undefined): string {
   const raw = (value || '').trim();
   if (!raw) return 'Unknown Date';
 
-  const dateMatch = raw.match(/^Date\((\d{4}),(\d+),(\d+)(?:,\d+,\d+,\d+)?\)$/);
-  if (dateMatch) {
-    const year = Number(dateMatch[1]);
-    const month = Number(dateMatch[2]);
-    const day = Number(dateMatch[3]);
-    const localDate = new Date(year, month, day);
-    const monthValue = String(localDate.getMonth() + 1).padStart(2, '0');
-    const dayValue = String(localDate.getDate()).padStart(2, '0');
-    return `${localDate.getFullYear()}-${monthValue}-${dayValue}`;
+  const googleDateMatch = raw.match(/^Date\((\d{4}),(\d+),(\d+)(?:,\d+,\d+,\d+)?\)$/);
+  if (googleDateMatch) {
+    const year = Number(googleDateMatch[1]);
+    const monthZeroBased = Number(googleDateMatch[2]);
+    const day = Number(googleDateMatch[3]);
+    const localDate = new Date(year, monthZeroBased, day);
+    return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+  }
+
+  const slashDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}:\d{2})?$/);
+  if (slashDateMatch) {
+    const month = Number(slashDateMatch[1]);
+    const day = Number(slashDateMatch[2]);
+    const year = Number(slashDateMatch[3]);
+    const localDate = new Date(year, month - 1, day);
+    return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
   }
 
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw || 'Unknown Date';
 
-  const year = parsed.getFullYear();
-  const monthValue = String(parsed.getMonth() + 1).padStart(2, '0');
-  const dayValue = String(parsed.getDate()).padStart(2, '0');
-  return `${year}-${monthValue}-${dayValue}`;
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
 }
 
 function parseTimestampDateKey(value: string): string {
@@ -173,8 +177,14 @@ function parseGoogleSheetCell(cell: unknown): string {
 }
 
 export function parseWellnessSheetData(jsonText: string): string[][] {
-  const payload = jsonText.split('google.visualization.Query.setResponse(', 1)[1]?.rsplit(');', 1)[0] ?? jsonText;
-  const data = JSON.parse(payload);
+  const wrapperStart = jsonText.indexOf('google.visualization.Query.setResponse(');
+  const payload = wrapperStart >= 0
+    ? jsonText.slice(wrapperStart + 'google.visualization.Query.setResponse('.length).trim()
+    : jsonText;
+
+  const wrapperEnd = payload.lastIndexOf(');');
+  const normalizedPayload = wrapperEnd >= 0 ? payload.slice(0, wrapperEnd).trim() : payload.trim();
+  const data = JSON.parse(normalizedPayload);
   const columns = Array.isArray(data?.table?.cols) ? data.table.cols.map((column: Record<string, unknown>) => String(column.label ?? '')) : [];
   const rows = Array.isArray(data?.table?.rows) ? data.table.rows.map((row: Record<string, unknown>) => (Array.isArray(row.c) ? row.c.map(parseGoogleSheetCell) : [])) : [];
   return [columns, ...rows];
@@ -541,6 +551,14 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
     if (!wellnessRowsForDate.length) return null;
     return wellnessRowsForDate.find((row) => row.rowId === selectedWellnessRowId) || wellnessRowsForDate[0];
   }, [selectedWellnessRowId, wellnessRowsForDate]);
+
+  const selectedWellnessStatusClass = useMemo(() => {
+    const status = selectedWellnessRow?.status?.toUpperCase();
+    if (status === 'GREEN') return 'bg-emerald-100 text-emerald-900 border border-emerald-300';
+    if (status === 'AMBER') return 'bg-amber-100 text-amber-900 border border-amber-300';
+    if (status === 'RED') return 'bg-rose-100 text-rose-900 border border-rose-300';
+    return 'bg-slate-100 text-slate-700 border border-slate-200';
+  }, [selectedWellnessRow]);
 
   useEffect(() => {
     if (!wellnessSnapshot) return;
