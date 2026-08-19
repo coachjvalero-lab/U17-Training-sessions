@@ -391,7 +391,7 @@ export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Mi
     };
 
     const { data, error } = await getClient()
-      .from(MICROCLES_TABLE)
+      .from(MICROCYCLES_TABLE)
       .insert(payload)
       .select('*')
       .single();

@@ -30,6 +30,7 @@ import {
 } from '../services/planning/microcycleService';
 import { useTeamContext } from '../contexts/TeamContext';
 import { classifySupabaseError } from '../services/supabaseError';
+import { useSectionActionAuthorization } from '../services/permissions/authorization';
 
 interface MicrocyclePlannerSectionProps {
   cloudSessions: CloudTrainingSession[];
@@ -197,6 +198,11 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     name: 'U17 Women Al Ula'
   }), []);
   const effectiveTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0] ?? defaultSingleTeam;
+  const { allowed: canCreateMicrocycle, loading: isLoadingCreatePermission } = useSectionActionAuthorization(
+    'planning',
+    'create',
+    effectiveTeam.id
+  );
 
   useEffect(() => {
     const cleanup = () => {
@@ -319,6 +325,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   };
 
   const handleCreateNew = async () => {
+    if (!canCreateMicrocycle) return;
+
     try {
       const team = teams.find((item) => item.id === createInput.teamId) ?? effectiveTeam;
       if (!team) {
@@ -370,6 +378,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   };
 
   const handleDuplicateCurrent = async () => {
+    if (!canCreateMicrocycle) return;
     if (!draft) return;
     try {
       const created = await createMicrocycle({
@@ -425,6 +434,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   };
 
   const handleDuplicatePrevious = async () => {
+    if (!canCreateMicrocycle) return;
     if (selectedIndex === -1) return;
     const source = microcycles[selectedIndex + 1];
     if (!source) {
@@ -629,8 +639,19 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
       <section className="space-y-4">
         {!draft && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-600">
-            No microcycles yet. Use New Microcycle to create the first week.
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-600 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <span>No microcycles yet. Use New Microcycle to create the first week.</span>
+            {canCreateMicrocycle && (
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                disabled={isLoadingCreatePermission}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New Microcycle
+              </button>
+            )}
           </div>
         )}
 
@@ -700,14 +721,17 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                 </div>
 
                 <div className="no-print-microcycle flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateOpen(true)}
-                    className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Week
-                  </button>
+                  {canCreateMicrocycle && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateOpen(true)}
+                      disabled={isLoadingCreatePermission}
+                      className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      New Week
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPreviousOrNext(1)}
@@ -729,6 +753,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   <button
                     type="button"
                     onClick={handleDuplicateCurrent}
+                    disabled={!canCreateMicrocycle || isLoadingCreatePermission}
                     className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -737,6 +762,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   <button
                     type="button"
                     onClick={handleDuplicatePrevious}
+                    disabled={!canCreateMicrocycle || isLoadingCreatePermission}
                     className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
                   >
                     <Copy className="w-3.5 h-3.5" />
