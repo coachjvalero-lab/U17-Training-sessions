@@ -7,6 +7,7 @@ import { ExercisesLibrary } from './ExercisesLibrary';
 import { deleteFitnessSession, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
+import { selectWellnessRowsForDate } from '../utils/wellnessVisibility';
 
 const WELLNESS_SHEET_ID = import.meta.env.VITE_WELLNESS_SHEET_ID || '178oyGRKhSNlsdl2zV5oIu_uXE9Qdtq1xUkFpUXbSQDw';
 const WELLNESS_SHEET_NAME = 'Wellness';
@@ -479,10 +480,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
 
   const wellnessRowsForDate = useMemo(() => {
     if (!wellnessSnapshot) return [];
-    const rows = selectedWellnessDate
-      ? wellnessSnapshot.rows.filter((row) => row.dateKey === selectedWellnessDate)
-      : wellnessSnapshot.rows;
-    return rows.slice().sort((left, right) => left.playerName.localeCompare(right.playerName));
+    return selectWellnessRowsForDate(wellnessSnapshot.rows, selectedWellnessDate);
   }, [selectedWellnessDate, wellnessSnapshot]);
 
   const selectedWellnessRow = useMemo(() => {
@@ -520,12 +518,13 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   }, [selectedWellnessRowId, wellnessRowsForDate]);
 
   const wellnessDiagnostics = useMemo(() => {
-    const resolutions = wellnessSnapshot?.resolutions || [];
+    const resolutionsByName = new Map((wellnessSnapshot?.resolutions || []).map((resolution) => [resolution.playerName, resolution]));
+    const resolutions = wellnessRowsForDate.map((row) => resolutionsByName.get(row.playerName)).filter((resolution): resolution is WellnessPlayerResolution => Boolean(resolution));
     const matched = resolutions.filter((resolution) => resolution.status === 'matched');
     const unresolved = resolutions.filter((resolution) => resolution.status === 'unresolved');
     const ambiguous = resolutions.filter((resolution) => resolution.status === 'ambiguous');
     return { matched, unresolved, ambiguous };
-  }, [wellnessSnapshot]);
+  }, [wellnessRowsForDate, wellnessSnapshot]);
 
   useEffect(() => {
     const unsubscribe = subscribeToFitnessSessions((items) => {
@@ -1164,6 +1163,8 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                               {wellnessRowsForDate.map((row) => {
                                 const isSelected = selectedWellnessRow?.rowId === row.rowId;
                                 const status = (row.status || '').toUpperCase();
+                                const resolution = wellnessSnapshot?.resolutions.find((item) => item.playerName === row.playerName);
+                                const displayPlayerName = resolution?.status === 'matched' ? resolution.resolvedLabel || row.playerName : row.playerName;
                                 const playerNumber = (() => {
                                   const found = squadPlayers.find((player) => {
                                     const nameA = `${player.firstName} ${player.lastName}`.trim();
@@ -1196,10 +1197,13 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                                     className={`cursor-pointer border-t border-slate-200 transition-colors ${isSelected ? 'bg-[#002142]/5' : 'hover:bg-slate-50'}`}
                                   >
                                     <td className="break-words px-3 py-3 align-top">
-                                      <div className="font-black text-slate-900">{row.playerName}</div>
+                                      <div className="font-black text-slate-900">{displayPlayerName}</div>
                                       {playerNumber !== null && playerNumber !== undefined ? (
                                         <div className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">#{String(playerNumber)}</div>
                                       ) : null}
+                                      <div className={`mt-1 text-[9px] font-black uppercase tracking-[0.16em] ${resolution?.status === 'matched' ? 'text-emerald-700' : resolution?.status === 'ambiguous' ? 'text-amber-700' : 'text-slate-500'}`}>
+                                        {resolution?.status || 'unresolved'}
+                                      </div>
                                     </td>
                                     <td className="px-3 py-3 align-top">{row.sleepQuality || '—'}</td>
                                     <td className="px-3 py-3 align-top">{row.sleepTime || '—'}</td>
@@ -1239,6 +1243,8 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                           <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0">
                               {(() => {
+                                const selectedResolution = wellnessSnapshot?.resolutions.find((item) => item.playerName === selectedWellnessRow.playerName);
+                                const selectedDisplayName = selectedResolution?.status === 'matched' ? selectedResolution.resolvedLabel || selectedWellnessRow.playerName : selectedWellnessRow.playerName;
                                 const selectedPlayerNumber = (() => {
                                   const found = squadPlayers.find((player) => {
                                     const nameA = `${player.firstName} ${player.lastName}`.trim();
@@ -1253,7 +1259,10 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                                     {selectedPlayerNumber !== null && selectedPlayerNumber !== undefined ? (
                                       <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">#{String(selectedPlayerNumber)}</div>
                                     ) : null}
-                                    <h4 className="mt-1 text-2xl font-black uppercase tracking-tight text-slate-900">{selectedWellnessRow.playerName}</h4>
+                                    <h4 className="mt-1 text-2xl font-black uppercase tracking-tight text-slate-900">{selectedDisplayName}</h4>
+                                    <div className={`mt-1 text-[10px] font-black uppercase tracking-[0.18em] ${selectedResolution?.status === 'matched' ? 'text-emerald-700' : selectedResolution?.status === 'ambiguous' ? 'text-amber-700' : 'text-slate-500'}`}>
+                                      {selectedResolution?.status || 'unresolved'}
+                                    </div>
                                   </>
                                 );
                               })()}

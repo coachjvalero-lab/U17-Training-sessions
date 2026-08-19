@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { SquadPlayer } from '../types';
 import { resolveWellnessPlayerName } from '../utils/wellnessMatching';
+import { selectWellnessRowsForDate } from '../utils/wellnessVisibility';
 
 function makePlayer(id: string, firstName: string, lastName: string): SquadPlayer {
   return {
@@ -62,4 +63,21 @@ test('uses an explicit confirmed manual mapping before exact matching', () => {
 
   assert.equal(resolution.status, 'matched');
   assert.equal(resolution.playerId, 'alba');
+});
+
+test('keeps unresolved Google Sheet responses visible for the selected date', () => {
+  const rows = selectWellnessRowsForDate([
+    { playerName: 'Alba Almutairi', dateKey: '2026-08-16' },
+    { playerName: 'Shaden', dateKey: '2026-08-16' },
+    { playerName: 'Lara Bakheet', dateKey: '2026-08-16' }
+  ], '2026-08-16');
+  const squad = [makePlayer('p1', 'Alba', 'Almutairi')];
+  const resolutions = new Map(rows.map((row) => [row.playerName, resolveWellnessPlayerName(row.playerName, squad)]));
+
+  assert.equal(rows.length, 3);
+  assert.equal(resolutions.get('Alba Almutairi')?.status, 'matched');
+  assert.equal(resolutions.get('Shaden')?.status, 'unresolved');
+  assert.equal(resolutions.get('Lara Bakheet')?.status, 'unresolved');
+  assert.ok(rows.some((row) => row.playerName === 'Shaden'));
+  assert.ok(rows.some((row) => row.playerName === 'Lara Bakheet'));
 });
