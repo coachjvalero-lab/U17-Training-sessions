@@ -115,6 +115,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           onChangeGroups={onUpdateGroups}
           onChangeRoster={updateRoster}
           rosterReadOnly={isSharedDataReadOnly}
+          includeExternalPlayers={moduleId === 'football'}
         />
       </div>
 

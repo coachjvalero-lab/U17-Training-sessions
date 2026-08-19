@@ -18,6 +18,7 @@ interface PlayerGroupsSectionProps {
   onChangeGroups: (groups: PlayerGroup[]) => void;
   onChangeRoster?: (roster: string[]) => void;
   rosterReadOnly?: boolean;
+  includeExternalPlayers?: boolean;
 }
 
 export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
@@ -27,7 +28,8 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   attendance = [],
   onChangeGroups,
   onChangeRoster,
-  rosterReadOnly = false
+  rosterReadOnly = false,
+  includeExternalPlayers = false
 }) => {
   const [isEditingRoster, setIsEditingRoster] = useState(false);
   const [rosterInput, setRosterInput] = useState(squadRoster.join(', '));
@@ -48,9 +50,16 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   // Compute attending vs absent lists
   const attendingPlayers = useMemo(() => {
     return getAvailablePlayerNamesForGroups(squadRoster, attendance, {
-      resolveName: resolver.resolveName
+      resolveName: resolver.resolveName,
+      includeExternalPlayers
     });
-  }, [attendance, resolver, squadRoster]);
+  }, [attendance, includeExternalPlayers, resolver, squadRoster]);
+
+  const selectablePlayersTotal = useMemo(() => {
+    const names = new Set(squadRoster.map((name) => name.trim().toLowerCase()));
+    attendingPlayers.forEach((name) => names.add(name.trim().toLowerCase()));
+    return names.size;
+  }, [attendingPlayers, squadRoster]);
 
   const gymPlayers = useMemo(() => {
     if (!attendance || attendance.length === 0) return [];
@@ -220,7 +229,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
               <span>Player Groups</span>
               <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1">
                 <UserCheck className="w-3 h-3" />
-                <span>{attendingPlayers.length}/{squadRoster.length} Attending</span>
+                <span>{attendingPlayers.length}/{selectablePlayersTotal} Attending</span>
               </span>
             </h2>
             <p className="text-[10px] text-slate-400 font-bold">

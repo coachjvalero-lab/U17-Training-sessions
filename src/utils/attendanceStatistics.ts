@@ -156,6 +156,7 @@ export function getAvailablePlayerNamesForGroups(
   attendance: PlayerAttendance[] | undefined,
   options?: {
     resolveName?: AttendanceNameResolver;
+    includeExternalPlayers?: boolean;
   }
 ): string[] {
   const resolveName = options?.resolveName;
@@ -166,7 +167,7 @@ export function getAvailablePlayerNamesForGroups(
     );
   }
 
-  return squadRoster.filter(
+  const squadNames = squadRoster.filter(
     (playerName) => {
       const playerResolution = resolveName(playerName);
       if (playerResolution.kind !== 'matched') return false;
@@ -178,4 +179,25 @@ export function getAvailablePlayerNamesForGroups(
       });
     }
   );
+
+  if (!options?.includeExternalPlayers) {
+    return squadNames;
+  }
+
+  // External identities are not part of the squad roster, so they are taken from the session's own attendance.
+  const seen = new Set(squadNames.map((name) => normalizeAttendanceName(name)));
+  const externalNames: string[] = [];
+
+  (attendance || []).forEach((record) => {
+    if (record.status !== 'Attending') return;
+    if (resolveName(record.playerName).kind !== 'external') return;
+
+    const normalized = normalizeAttendanceName(record.playerName);
+    if (!normalized || seen.has(normalized)) return;
+
+    seen.add(normalized);
+    externalNames.push(record.playerName.trim());
+  });
+
+  return [...squadNames, ...externalNames];
 }

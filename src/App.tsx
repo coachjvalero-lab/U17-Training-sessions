@@ -1896,6 +1896,7 @@ export default function App() {
                 attendance={session.attendance}
                 onChangeGroups={handleUpdateGroups}
                 onChangeRoster={handleUpdateRoster}
+                includeExternalPlayers
               />
             </div>
 

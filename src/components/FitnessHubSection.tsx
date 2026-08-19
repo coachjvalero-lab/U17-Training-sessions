@@ -6,6 +6,7 @@ import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
 import { deleteFitnessSession, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
+import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
 
 const WELLNESS_SHEET_ID = import.meta.env.VITE_WELLNESS_SHEET_ID || '178oyGRKhSNlsdl2zV5oIu_uXE9Qdtq1xUkFpUXbSQDw';
 const WELLNESS_SHEET_NAME = 'Wellness';
@@ -34,14 +35,6 @@ type WellnessRow = {
   status: string;
   additionalInformation: string;
   dateKey: string;
-};
-
-type WellnessPlayerResolution = {
-  playerName: string;
-  playerId: string | null;
-  status: 'matched' | 'unresolved' | 'ambiguous';
-  resolvedLabel?: string;
-  options?: Array<{ playerId: string; label: string }>;
 };
 
 type WellnessSnapshot = {
@@ -188,61 +181,6 @@ export function parseWellnessSheetData(jsonText: string): string[][] {
   const columns = Array.isArray(data?.table?.cols) ? data.table.cols.map((column: Record<string, unknown>) => String(column.label ?? '')) : [];
   const rows = Array.isArray(data?.table?.rows) ? data.table.rows.map((row: Record<string, unknown>) => (Array.isArray(row.c) ? row.c.map(parseGoogleSheetCell) : [])) : [];
   return [columns, ...rows];
-}
-
-function resolveWellnessPlayerName(playerName: string, squadPlayers: SquadPlayer[]): WellnessPlayerResolution {
-  const normalizedName = normalizeWellnessText(playerName);
-  const candidates = squadPlayers.flatMap((player) => {
-    const primaryLabel = `${player.firstName} ${player.lastName}`.trim();
-    const labels = [player.firstName, primaryLabel];
-    if (player.position === 'GK') {
-      labels.push(`${player.firstName} (GK)`);
-    }
-    return labels.map((label) => ({
-      playerId: player.id,
-      label,
-      normalized: normalizeWellnessText(label)
-    }));
-  });
-
-  const exactMatches = candidates.filter((candidate) => candidate.normalized === normalizedName);
-  const uniqueMatches = exactMatches.filter((candidate, index, list) => list.findIndex((item) => item.playerId === candidate.playerId) === index);
-
-  if (uniqueMatches.length === 1) {
-    return {
-      playerName,
-      playerId: uniqueMatches[0].playerId,
-      status: 'matched',
-      resolvedLabel: uniqueMatches[0].label
-    };
-  }
-
-  if (uniqueMatches.length > 1) {
-    return {
-      playerName,
-      playerId: null,
-      status: 'ambiguous',
-      options: uniqueMatches.map((candidate) => ({ playerId: candidate.playerId, label: candidate.label }))
-    };
-  }
-
-  const partialMatches = candidates.filter((candidate) => candidate.normalized.includes(normalizedName) || normalizedName.includes(candidate.normalized));
-  const partialUniqueMatches = partialMatches.filter((candidate, index, list) => list.findIndex((item) => item.playerId === candidate.playerId) === index);
-
-  if (partialUniqueMatches.length === 1) {
-    return {
-      playerName,
-      playerId: partialUniqueMatches[0].playerId,
-      status: 'matched',
-      resolvedLabel: partialUniqueMatches[0].label
-    };
-  }
-
-  return {
-    playerName,
-    playerId: null,
-    status: 'unresolved'
-  };
 }
 
 async function loadWellnessSnapshot(
