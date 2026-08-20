@@ -151,6 +151,16 @@ export function calculatePlayerAttendanceStatisticsByHistoricalNames(
   );
 }
 
+export function getPlayerIdentityKey(playerName: string, resolveName?: AttendanceNameResolver): string {
+  const normalized = normalizeAttendanceName(playerName);
+  if (!resolveName) return `name:${normalized}`;
+
+  const resolution = resolveName(playerName);
+  if (resolution.kind === 'matched') return `player:${resolution.playerId}`;
+  if (resolution.kind === 'external') return `external:${normalized}`;
+  return `name:${normalized}`;
+}
+
 export function getAvailablePlayerNamesForGroups(
   squadRoster: string[],
   attendance: PlayerAttendance[] | undefined,
@@ -167,35 +177,42 @@ export function getAvailablePlayerNamesForGroups(
     );
   }
 
-  const squadNames = squadRoster.filter(
-    (playerName) => {
-      const playerResolution = resolveName(playerName);
-      if (playerResolution.kind !== 'matched') return false;
+  const seenIdentities = new Set<string>();
+  const squadNames: string[] = [];
 
-      return (attendance || []).some((record) => {
-        if (record.status !== 'Attending') return false;
-        const recordResolution = resolveName(record.playerName);
-        return recordResolution.kind === 'matched' && recordResolution.playerId === playerResolution.playerId;
-      });
-    }
-  );
+  squadRoster.forEach((playerName) => {
+    const playerResolution = resolveName(playerName);
+    if (playerResolution.kind !== 'matched') return;
+    if (seenIdentities.has(playerResolution.playerId)) return;
+
+    const isAttending = (attendance || []).some((record) => {
+      if (record.status !== 'Attending') return false;
+      const recordResolution = resolveName(record.playerName);
+      return recordResolution.kind === 'matched' && recordResolution.playerId === playerResolution.playerId;
+    });
+    if (!isAttending) return;
+
+    seenIdentities.add(playerResolution.playerId);
+    // Aliases such as "Leen" and "Leen Alhaidari" share one identity, so the squad display name wins.
+    squadNames.push(playerResolution.displayName || playerName.trim());
+  });
 
   if (!options?.includeExternalPlayers) {
     return squadNames;
   }
 
   // External identities are not part of the squad roster, so they are taken from the session's own attendance.
-  const seen = new Set(squadNames.map((name) => normalizeAttendanceName(name)));
+  const seenExternals = new Set<string>();
   const externalNames: string[] = [];
 
   (attendance || []).forEach((record) => {
     if (record.status !== 'Attending') return;
     if (resolveName(record.playerName).kind !== 'external') return;
 
-    const normalized = normalizeAttendanceName(record.playerName);
-    if (!normalized || seen.has(normalized)) return;
+    const identityKey = getPlayerIdentityKey(record.playerName, resolveName);
+    if (identityKey === 'external:' || seenExternals.has(identityKey)) return;
 
-    seen.add(normalized);
+    seenExternals.add(identityKey);
     externalNames.push(record.playerName.trim());
   });
 

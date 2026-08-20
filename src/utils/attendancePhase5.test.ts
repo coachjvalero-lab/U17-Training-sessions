@@ -289,3 +289,31 @@ test('First Team y National Team Call no incrementan attendingCount', () => {
   assert.equal(stats.participationRate, 0);
 });
 
+test('GROUPS: alias y nombre completo colapsan en una unica entrada canonica, Gym excluido y external incluido', () => {
+  const squadPlayers = [makePlayer('p10', 'Leen', 'Alhaidari'), makePlayer('p7', 'Ghala', 'Kurdi')];
+  const mappings = [
+    createHistoricalNameMapping({ historicalName: 'Guest Trialist', classification: 'external', now: 1 })
+  ];
+  const resolver = buildResolver(squadPlayers, mappings);
+
+  const roster = ['Leen', 'Leen Alhaidari', 'Ghala Kurdi', 'Guest Trialist'];
+  const attendance: PlayerAttendance[] = [
+    { playerName: 'Leen', status: 'Attending' },
+    { playerName: 'Ghala Kurdi', status: 'Gym' },
+    { playerName: 'Guest Trialist', status: 'Attending' }
+  ];
+
+  const available = getAvailablePlayerNamesForGroups(roster, attendance, {
+    resolveName: resolver.resolveName,
+    includeExternalPlayers: true
+  });
+
+  assert.deepEqual(available, ['Leen Alhaidari', 'Guest Trialist']);
+
+  const withoutExternals = getAvailablePlayerNamesForGroups(roster, attendance, {
+    resolveName: resolver.resolveName
+  });
+
+  assert.deepEqual(withoutExternals, ['Leen Alhaidari']);
+});
+

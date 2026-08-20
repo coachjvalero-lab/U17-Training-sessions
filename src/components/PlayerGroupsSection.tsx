@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Users, Plus, Trash2, Edit3, Check, RefreshCw, Shield, UserCheck, AlertCircle } from 'lucide-react';
 import { PlayerGroup, PlayerAttendance, SquadPlayer } from '../types';
 import { DEFAULT_SQUAD_PLAYERS, GROUP_COLOR_PRESETS, getColorPreset } from '../constants/squad';
-import { getAvailablePlayerNamesForGroups } from '../utils/attendanceStatistics';
+import { getAvailablePlayerNamesForGroups, getPlayerIdentityKey } from '../utils/attendanceStatistics';
 import {
   buildAttendanceAliasMapFromMappings,
   createAttendanceNameResolver,
@@ -55,11 +55,16 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
     });
   }, [attendance, includeExternalPlayers, resolver, squadRoster]);
 
+  const identityKeyOf = useMemo(
+    () => (playerName: string) => getPlayerIdentityKey(playerName, resolver.resolveName),
+    [resolver]
+  );
+
   const selectablePlayersTotal = useMemo(() => {
-    const names = new Set(squadRoster.map((name) => name.trim().toLowerCase()));
-    attendingPlayers.forEach((name) => names.add(name.trim().toLowerCase()));
-    return names.size;
-  }, [attendingPlayers, squadRoster]);
+    const identities = new Set(squadRoster.map(identityKeyOf));
+    attendingPlayers.forEach((name) => identities.add(identityKeyOf(name)));
+    return identities.size;
+  }, [attendingPlayers, identityKeyOf, squadRoster]);
 
   const gymPlayers = useMemo(() => {
     if (!attendance || attendance.length === 0) return [];
@@ -80,14 +85,14 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
       .filter(p => p.length > 0);
   };
 
-  // Find all assigned players across all groups
-  const allAssignedPlayers = new Set<string>();
+  // Assignments are keyed by resolved identity so stored aliases still count as assigned
+  const allAssignedIdentities = new Set<string>();
   groups.forEach(g => {
-    getGroupPlayersList(g).forEach(p => allAssignedPlayers.add(p));
+    getGroupPlayersList(g).forEach(p => allAssignedIdentities.add(identityKeyOf(p)));
   });
 
   // Unassigned attending players vs unassigned all
-  const unassignedAttendingPlayers = attendingPlayers.filter(p => !allAssignedPlayers.has(p));
+  const unassignedAttendingPlayers = attendingPlayers.filter(p => !allAssignedIdentities.has(identityKeyOf(p)));
 
   // Add new group
   const handleAddGroup = () => {
@@ -122,16 +127,17 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
 
   // Add player to group
   const handleAddPlayerToGroup = (groupId: string, playerName: string) => {
+    const playerKey = identityKeyOf(playerName);
     const updated = groups.map(g => {
       const currentList = getGroupPlayersList(g);
       if (g.id === groupId) {
-        if (!currentList.includes(playerName)) {
+        if (!currentList.some(p => identityKeyOf(p) === playerKey)) {
           return { ...g, players: [...currentList, playerName].join(', ') };
         }
       } else {
         // Remove from other group if present to keep groups disjoint
-        if (currentList.includes(playerName)) {
-          return { ...g, players: currentList.filter(p => p !== playerName).join(', ') };
+        if (currentList.some(p => identityKeyOf(p) === playerKey)) {
+          return { ...g, players: currentList.filter(p => identityKeyOf(p) !== playerKey).join(', ') };
         }
       }
       return g;
