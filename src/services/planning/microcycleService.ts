@@ -377,8 +377,11 @@ export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Mi
     teamName: input.teamName || 'U17 Women Al Ula'
   };
 
+  const newId = crypto.randomUUID();
+
   try {
     const payload = {
+      id: newId,
       team_id: safeInput.teamId,
       team_name: safeInput.teamName,
       name: safeInput.name,
@@ -399,14 +402,18 @@ export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Mi
     if (error) throw error;
 
     const base = toMicrocycle(data as MicrocycleRow);
-    return {
+    const result: Microcycle = {
       ...base,
       days: [],
       availability: []
     };
+
+    const rows = readLocalMicrocycles().filter((item) => item.id !== result.id);
+    writeLocalMicrocycles([result, ...rows]);
+    return result;
   } catch (error) {
     const next: Microcycle = {
-      id: crypto.randomUUID(),
+      id: newId,
       teamId: safeInput.teamId,
       teamName: safeInput.teamName,
       name: safeInput.name,
@@ -422,7 +429,7 @@ export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Mi
       availability: []
     };
 
-    const rows = readLocalMicrocycles();
+    const rows = readLocalMicrocycles().filter((item) => item.id !== next.id);
     writeLocalMicrocycles([next, ...rows]);
     return next;
   }
@@ -440,12 +447,10 @@ export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
 
     const dayIds = microcycle.days.map((day) => day.id);
     if (dayIds.length > 0) {
-      const { error: deleteConceptsErr } = await client
+      await client
         .from(MICROCYCLE_CONCEPTS_TABLE)
         .delete()
         .in('microcycle_day_id', dayIds);
-
-      if (deleteConceptsErr) throw deleteConceptsErr;
     }
 
     const { error: deleteDaysErr } = await client
@@ -463,7 +468,10 @@ export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
     if (deleteAvailabilityErr) throw deleteAvailabilityErr;
 
     if (microcycle.days.length > 0) {
-      const dayRows = microcycle.days.map((day) => toDayRow(day));
+      const dayRows = microcycle.days.map((day) => ({
+        ...toDayRow(day),
+        microcycle_id: microcycle.id
+      }));
       const { error: insertDaysErr } = await client
         .from(MICROCYCLE_DAYS_TABLE)
         .insert(dayRows);
@@ -480,13 +488,21 @@ export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
     }
 
     if (microcycle.availability.length > 0) {
-      const availabilityRows = toAvailabilityRows(microcycle.availability);
+      const availabilityRows = toAvailabilityRows(microcycle.availability).map((row) => ({
+        ...row,
+        microcycle_id: microcycle.id
+      }));
       const { error: insertAvailabilityErr } = await client
         .from(MICROCYCLE_AVAILABILITY_TABLE)
         .insert(availabilityRows);
 
       if (insertAvailabilityErr) throw insertAvailabilityErr;
     }
+
+    const rows = readLocalMicrocycles();
+    const nextRows = rows.filter((item) => item.id !== microcycle.id);
+    nextRows.unshift(microcycle);
+    writeLocalMicrocycles(nextRows);
   } catch (error) {
     const rows = readLocalMicrocycles();
     const nextRows = rows.filter((item) => item.id !== microcycle.id);
@@ -503,6 +519,9 @@ export async function deleteMicrocycle(microcycleId: string): Promise<void> {
       .eq('id', microcycleId);
 
     if (error) throw error;
+
+    const rows = readLocalMicrocycles().filter((item) => item.id !== microcycleId);
+    writeLocalMicrocycles(rows);
   } catch (error) {
     const rows = readLocalMicrocycles().filter((item) => item.id !== microcycleId);
     writeLocalMicrocycles(rows);

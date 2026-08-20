@@ -74,24 +74,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) 
       onSuccess();
     } catch (err: any) {
       console.error('Authentication error:', err);
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+      const rawMessage = err?.message ? String(err.message) : '';
+      if (rawMessage.toLowerCase().includes('failed to fetch')) {
+        setErrorMessage('Unable to reach the authentication service (network error). Please check your internet connection and Supabase environment settings.');
+      } else if (
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential' ||
+        rawMessage.toLowerCase().includes('invalid login credentials')
+      ) {
         setErrorMessage('Incorrect username or password. Please try again.');
       } else if (err && typeof err === 'object') {
-        const code = 'code' in err ? String(err.code) : 'unknown';
+        const code = 'code' in err ? String(err.code) : '';
         const message = 'message' in err ? String(err.message) : 'Unknown authentication error';
         const details = 'details' in err ? String(err.details) : '';
         const hint = 'hint' in err ? String(err.hint) : '';
         const status = 'status' in err ? String(err.status) : '';
 
         const lines = [
-          `Code: ${code}`,
+          code && code !== 'unknown' ? `Code: ${code}` : '',
           message,
           details ? `Details: ${details}` : '',
           hint ? `Hint: ${hint}` : '',
           status ? `Status: ${status}` : ''
         ].filter(Boolean);
 
-        setErrorMessage(lines.join(' | '));
+        setErrorMessage(lines.join(' | ') || 'Authentication failed.');
       } else {
         setErrorMessage('Failed to sign in.');
       }

@@ -1,25 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeSessionsForDisplay } from './sessionMerge';
+import type { CloudTrainingSession, TrainingSession } from '../types';
 
-function createSession(overrides: Partial<any> = {}) {
+function createSession(overrides: Partial<CloudTrainingSession> = {}): CloudTrainingSession {
   return {
     id: 'session-1',
     sessionNumber: '10',
+    date: '2026-08-01',
+    time: '18:00',
+    teamName: 'U17 Women Al Ula',
+    microcycleDay: 'MD-2',
+    materialsNeeded: '',
     mainObjective: 'Test',
-    warmUp: { exercises: [] },
-    mainPart: { exercises: [] },
-    coolDown: { exercises: [] },
+    updatedAt: Date.now(),
+    warmUp: { id: 'w1', title: 'Warmup', exercises: [] },
+    mainPart: { id: 'm1', title: 'Main', exercises: [] },
+    coolDown: { id: 'c1', title: 'Cool down', exercises: [] },
     playerGroups: [],
     squadRoster: [],
     attendance: [],
-    fitnessWarmUp: { exercises: [] },
-    fitnessMainPart: { exercises: [] },
-    fitnessCoolDown: { exercises: [] },
+    fitnessWarmUp: { id: 'fw1', title: 'Fitness Warmup', exercises: [] },
+    fitnessMainPart: { id: 'fm1', title: 'Fitness Main', exercises: [] },
+    fitnessCoolDown: { id: 'fc1', title: 'Fitness Cool down', exercises: [] },
     fitnessPlayerGroups: [],
-    gkWarmUp: { exercises: [] },
-    gkMainPart: { exercises: [] },
-    gkCoolDown: { exercises: [] },
+    gkWarmUp: { id: 'gw1', title: 'GK Warmup', exercises: [] },
+    gkMainPart: { id: 'gm1', title: 'GK Main', exercises: [] },
+    gkCoolDown: { id: 'gc1', title: 'GK Cool down', exercises: [] },
     gkPlayerGroups: [],
     ...overrides
   };

@@ -93,14 +93,21 @@ export async function logoutUser(): Promise<void> {
 }
 
 export function subscribeToAuth(callback: (event: string, user: AppUser | null) => void): () => void {
-  const client = getSupabaseOrThrow();
+  let client: ReturnType<typeof getSupabaseOrThrow>;
+  try {
+    client = getSupabaseOrThrow();
+  } catch (error) {
+    console.warn('[subscribeToAuth] Supabase client not ready:', error);
+    callback('INITIAL_SESSION', null);
+    return () => {};
+  }
 
   client.auth.getSession()
     .then(({ data, error }) => {
       if (error) {
         console.error('[subscribeToAuth] initial session read failed', error);
       }
-      callback('INITIAL_SESSION', toAppUser(data.session?.user || null));
+      callback('INITIAL_SESSION', toAppUser(data?.session?.user || null));
     })
     .catch((error) => {
       console.error('[subscribeToAuth] initial session read failed', error);
@@ -112,7 +119,7 @@ export function subscribeToAuth(callback: (event: string, user: AppUser | null) 
   });
 
   return () => {
-    data.subscription.unsubscribe();
+    data?.subscription?.unsubscribe();
   };
 }
 

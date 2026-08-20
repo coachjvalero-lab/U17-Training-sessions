@@ -53,8 +53,8 @@ import {
 } from './services/team/teamLogoService';
 import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
 import {
-  deleteCompetitionFixtureFromCloud,
-  saveCodeoAnalysisToCloud,
+  deleteVideoAnalysisFromCloud,
+  saveVideoAnalysisToCloud,
   subscribeToVideoAnalysis
 } from './services/video/videoAnalysisService';
 import { setAuthorizationUserEmail } from './services/permissions/authorization';
@@ -1332,7 +1332,7 @@ export default function App() {
           updatedAt: savedTime,
           footballUpdatedAt: role === 'football' ? savedTime : undefined,
           fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
-          gkUpdatedAt: role === 'gk' ? savedTime : undefined,
+          gkUpdatedAt: undefined,
         };
 
         setCloudSessions((prev) => {

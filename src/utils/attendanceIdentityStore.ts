@@ -21,8 +21,8 @@ export function readAttendanceIdentityMappings(): HistoricalNameMapping[] {
     if (!Array.isArray(parsed)) return [];
 
     return parsed
-      .filter((value): value is Partial<HistoricalNameMapping> => value && typeof value === 'object')
-      .map((value) => {
+      .filter((value): value is Partial<HistoricalNameMapping> => Boolean(value && typeof value === 'object'))
+      .map((value): HistoricalNameMapping | null => {
         const historicalName = String(value.historicalName || '').trim();
         if (!historicalName) return null;
 
@@ -44,7 +44,7 @@ export function readAttendanceIdentityMappings(): HistoricalNameMapping[] {
           updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now()
         };
       })
-      .filter((value): value is HistoricalNameMapping => Boolean(value));
+      .filter((value): value is HistoricalNameMapping => value !== null);
   } catch {
     return [];
   }

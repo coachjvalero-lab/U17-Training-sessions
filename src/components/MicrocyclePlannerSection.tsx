@@ -1,13 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowRight,
   Calendar,
+  CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Copy,
+  Edit3,
+  Filter,
+  FolderOpen,
+  Layers,
   Link2,
   Plus,
   Save,
   Search,
+  Sparkles,
   Trash2,
   Users
 } from 'lucide-react';
@@ -87,14 +96,6 @@ const DAY_FIELDS: { key: string; label: string; type: 'text' | 'textarea' | 'dat
   { key: 'sessionLink', label: 'Linked Session', type: 'sessionLink' }
 ];
 
-const DEFAULT_FILTERS: MicrocycleSearchFilters = {
-  date: '',
-  weekNumber: '',
-  concept: '',
-  sessionType: '',
-  load: ''
-};
-
 function isoDateFromToday(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -104,6 +105,18 @@ function isoDateFromToday(offsetDays = 0): string {
 function toDisplayDayName(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00`);
   return d.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+function formatDateRange(startDate: string, endDate: string): string {
+  try {
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+    const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${startStr} – ${endStr}`;
+  } catch {
+    return `${startDate} – ${endDate}`;
+  }
 }
 
 function playerFullName(player: SquadPlayer): string {
@@ -126,7 +139,7 @@ function createDaysFromRange(startDate: string, endDate: string): MicrocycleDay[
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   const days: MicrocycleDay[] = [];
-  let cursor = new Date(start);
+  const cursor = new Date(start);
   let order = 0;
 
   while (cursor <= end) {
@@ -169,6 +182,46 @@ function reconcileDaysForRange(draft: Microcycle): Microcycle {
   };
 }
 
+function getNextWeekDefaults(existingMicrocycles: Microcycle[]) {
+  if (existingMicrocycles.length === 0) {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const diffToMonday = (dayOfWeek + 6) % 7;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    return {
+      name: 'Microcycle Week 1',
+      weekNumber: 1,
+      startDate: monday.toISOString().slice(0, 10),
+      endDate: sunday.toISOString().slice(0, 10)
+    };
+  }
+
+  let latestEndDate = existingMicrocycles[0].endDate;
+  let maxWeek = 0;
+  for (const m of existingMicrocycles) {
+    if (m.endDate > latestEndDate) latestEndDate = m.endDate;
+    if (m.weekNumber && m.weekNumber > maxWeek) maxWeek = m.weekNumber;
+  }
+
+  const nextMonday = new Date(`${latestEndDate}T00:00:00`);
+  nextMonday.setDate(nextMonday.getDate() + 1);
+  const nextSunday = new Date(nextMonday);
+  nextSunday.setDate(nextMonday.getDate() + 6);
+
+  const nextWeekNum = maxWeek > 0 ? maxWeek + 1 : existingMicrocycles.length + 1;
+
+  return {
+    name: `Microcycle Week ${nextWeekNum}`,
+    weekNumber: nextWeekNum,
+    startDate: nextMonday.toISOString().slice(0, 10),
+    endDate: nextSunday.toISOString().slice(0, 10)
+  };
+}
+
 export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> = ({
   cloudSessions,
   squadPlayers,
@@ -182,7 +235,14 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
-  const [filters, setFilters] = useState<MicrocycleSearchFilters>(DEFAULT_FILTERS);
+  
+  // Navigation between Cards gallery and Active Week editor
+  const [subNav, setSubNav] = useState<'cards' | 'editor'>('cards');
+  
+  // Cards search & filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'active' | 'archived'>('all');
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createInput, setCreateInput] = useState<CreateMicrocycleInput>({
     teamId: '',
@@ -217,12 +277,17 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   }, []);
 
   useEffect(() => {
+    const defaults = getNextWeekDefaults(microcycles);
     setCreateInput((prev) => ({
       ...prev,
       teamId: effectiveTeam?.id || prev.teamId || defaultSingleTeam.id,
-      teamName: effectiveTeam?.name || prev.teamName || defaultSingleTeam.name
+      teamName: effectiveTeam?.name || prev.teamName || defaultSingleTeam.name,
+      name: prev.name || defaults.name,
+      weekNumber: prev.weekNumber ?? defaults.weekNumber,
+      startDate: prev.startDate || defaults.startDate,
+      endDate: prev.endDate || defaults.endDate
     }));
-  }, [effectiveTeam, defaultSingleTeam]);
+  }, [effectiveTeam, defaultSingleTeam, microcycles]);
 
   useEffect(() => {
     const unsubscribe = subscribeToMicrocycles(
@@ -241,8 +306,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         if (selectedMicrocycleId) {
           const selected = sorted.find((row) => row.id === selectedMicrocycleId);
           if (!selected) {
-            setSelectedMicrocycleId(sorted[0]?.id || '');
-            setDraft(sorted[0] ? createDraftFromLoaded(sorted[0]) : null);
+            if (sorted.length > 0) {
+              setSelectedMicrocycleId(sorted[0].id);
+              setDraft(createDraftFromLoaded(sorted[0]));
+            } else {
+              setSelectedMicrocycleId('');
+              setDraft(null);
+            }
             setIsDirty(false);
             return;
           }
@@ -273,26 +343,23 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     }
   }, [draft?.startDate, draft?.endDate]);
 
-  const filteredHistory = useMemo(() => {
-    return microcycles.filter((microcycle) => {
-      const dateMatch = !filters.date || microcycle.days.some((day) => day.dayDate === filters.date);
-      const weekMatch = !filters.weekNumber || String(microcycle.weekNumber || '').includes(filters.weekNumber.trim());
-      const conceptNeedle = filters.concept.trim().toLowerCase();
-      const conceptMatch = !conceptNeedle || microcycle.days.some((day) =>
-        day.concepts.some((c) => c.concept.toLowerCase().includes(conceptNeedle))
-      );
-      const sessionTypeNeedle = filters.sessionType.trim().toLowerCase();
-      const sessionTypeMatch = !sessionTypeNeedle || microcycle.days.some((day) =>
-        day.sessionType.toLowerCase().includes(sessionTypeNeedle)
-      );
-      const loadNeedle = filters.load.trim().toLowerCase();
-      const loadMatch = !loadNeedle || microcycle.days.some((day) =>
-        String(day.load || '').toLowerCase().includes(loadNeedle)
-      );
+  const filteredMicrocycles = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return microcycles.filter((m) => {
+      const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
+      if (!matchesStatus) return false;
 
-      return dateMatch && weekMatch && conceptMatch && sessionTypeMatch && loadMatch;
+      if (!term) return true;
+
+      const nameMatch = (m.name || '').toLowerCase().includes(term);
+      const weekMatch = String(m.weekNumber || '').includes(term) || `week ${m.weekNumber}`.toLowerCase().includes(term);
+      const dateMatch = (m.startDate || '').includes(term) || (m.endDate || '').includes(term);
+      const teamMatch = (m.teamName || '').toLowerCase().includes(term);
+      const conceptMatch = m.days.some((d) => d.concepts.some((c) => (c.concept || '').toLowerCase().includes(term)));
+
+      return nameMatch || weekMatch || dateMatch || teamMatch || conceptMatch;
     });
-  }, [filters, microcycles]);
+  }, [microcycles, searchTerm, statusFilter]);
 
   const selectedIndex = useMemo(() => microcycles.findIndex((row) => row.id === selectedMicrocycleId), [microcycles, selectedMicrocycleId]);
 
@@ -314,7 +381,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     setSaveError('');
   };
 
-  const selectMicrocycle = (id: string) => {
+  const selectMicrocycle = (id: string, switchView = true) => {
     const target = microcycles.find((row) => row.id === id);
     if (!target) return;
     setSelectedMicrocycleId(id);
@@ -322,6 +389,23 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     setIsDirty(false);
     setSaveStatus('idle');
     setSaveError('');
+    if (switchView) {
+      setSubNav('editor');
+    }
+  };
+
+  const handleOpenCreateModal = () => {
+    const defaults = getNextWeekDefaults(microcycles);
+    setCreateInput({
+      teamId: effectiveTeam?.id || defaultSingleTeam.id,
+      teamName: effectiveTeam?.name || defaultSingleTeam.name,
+      name: defaults.name,
+      weekNumber: defaults.weekNumber,
+      startDate: defaults.startDate,
+      endDate: defaults.endDate,
+      status: 'draft'
+    });
+    setIsCreateOpen(true);
   };
 
   const handleCreateNew = async () => {
@@ -338,7 +422,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         ...createInput,
         teamId: team.id,
         teamName: team.name,
-        name: createInput.name.trim() || `Microcycle ${createInput.weekNumber || ''}`.trim(),
+        name: createInput.name.trim() || `Microcycle Week ${createInput.weekNumber || ''}`.trim(),
         status: createInput.status || 'draft'
       });
 
@@ -358,18 +442,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
       await saveMicrocycle(next);
       setIsCreateOpen(false);
-      setCreateInput((prev) => ({
-        ...prev,
-        name: '',
-        startDate: isoDateFromToday(),
-        endDate: isoDateFromToday(6),
-        teamId: effectiveTeam?.id || defaultSingleTeam.id,
-        teamName: effectiveTeam?.name || defaultSingleTeam.name
-      }));
+      
+      // Update local state and switch directly to editor for the newly created microcycle
       setSelectedMicrocycleId(next.id);
       setDraft(next);
       setIsDirty(false);
       setSaveStatus('saved');
+      setSubNav('editor');
     } catch (error) {
       console.error('Failed to create microcycle', error);
       const classified = classifySupabaseError(error);
@@ -377,71 +456,8 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     }
   };
 
-  const handleDuplicateCurrent = async () => {
+  const handleDuplicateMicrocycle = async (source: Microcycle) => {
     if (!canCreateMicrocycle) return;
-    if (!draft) return;
-    try {
-      const created = await createMicrocycle({
-        teamId: draft.teamId,
-        teamName: draft.teamName,
-        name: `${draft.name} (Copy)`,
-        weekNumber: draft.weekNumber,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
-        status: 'draft',
-        teamTotal: draft.teamTotal,
-        notes: draft.notes
-      });
-
-      const next: Microcycle = {
-        ...deepClone(draft),
-        id: created.id,
-        name: `${draft.name} (Copy)`,
-        status: 'draft',
-        createdAt: created.createdAt,
-        updatedAt: created.updatedAt,
-        days: draft.days.map((day) => {
-          const newDayId = crypto.randomUUID();
-          return {
-            ...deepClone(day),
-            id: newDayId,
-            microcycleId: created.id,
-            sessionId: day.sessionId,
-            concepts: day.concepts.map((concept, index) => ({
-              ...deepClone(concept),
-              id: crypto.randomUUID(),
-              microcycleDayId: newDayId,
-              sortOrder: index
-            }))
-          };
-        }),
-        availability: draft.availability.map((entry) => ({
-          ...deepClone(entry),
-          id: crypto.randomUUID(),
-          microcycleId: created.id
-        }))
-      };
-
-      await saveMicrocycle(next);
-      setSelectedMicrocycleId(next.id);
-      setDraft(next);
-      setIsDirty(false);
-      setSaveStatus('saved');
-    } catch (error) {
-      console.error('Failed to duplicate microcycle', error);
-      alert('Failed to duplicate microcycle.');
-    }
-  };
-
-  const handleDuplicatePrevious = async () => {
-    if (!canCreateMicrocycle) return;
-    if (selectedIndex === -1) return;
-    const source = microcycles[selectedIndex + 1];
-    if (!source) {
-      alert('No previous microcycle available to duplicate.');
-      return;
-    }
-
     try {
       const created = await createMicrocycle({
         teamId: source.teamId,
@@ -468,6 +484,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
             ...deepClone(day),
             id: newDayId,
             microcycleId: created.id,
+            sessionId: day.sessionId,
             concepts: day.concepts.map((concept, index) => ({
               ...deepClone(concept),
               id: crypto.randomUUID(),
@@ -488,19 +505,31 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
       setDraft(next);
       setIsDirty(false);
       setSaveStatus('saved');
+      setSubNav('editor');
     } catch (error) {
-      console.error('Failed to duplicate previous microcycle', error);
-      alert('Failed to duplicate previous microcycle.');
+      console.error('Failed to duplicate microcycle', error);
+      alert('Failed to duplicate microcycle.');
     }
   };
 
-  const handleDeleteCurrent = async () => {
-    if (!draft) return;
-    const shouldDelete = window.confirm(`Delete ${draft.name}? This cannot be undone.`);
+  const handleDeleteMicrocycle = async (id: string, name: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const shouldDelete = window.confirm(`Delete "${name}"? This cannot be undone.`);
     if (!shouldDelete) return;
 
     try {
-      await deleteMicrocycle(draft.id);
+      await deleteMicrocycle(id);
+      if (selectedMicrocycleId === id) {
+        const remaining = microcycles.filter((m) => m.id !== id);
+        if (remaining.length > 0) {
+          setSelectedMicrocycleId(remaining[0].id);
+          setDraft(createDraftFromLoaded(remaining[0]));
+        } else {
+          setSelectedMicrocycleId('');
+          setDraft(null);
+          setSubNav('cards');
+        }
+      }
       setIsDirty(false);
       setSaveStatus('idle');
     } catch (error) {
@@ -531,7 +560,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     if (selectedIndex === -1) return;
     const next = microcycles[selectedIndex + direction];
     if (!next) return;
-    selectMicrocycle(next.id);
+    selectMicrocycle(next.id, true);
   };
 
   const patchDay = (dayId: string, updater: (day: MicrocycleDay) => MicrocycleDay) => {
@@ -637,426 +666,739 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
         ))}
       </datalist>
 
-      <section className="space-y-4">
-        {!draft && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-600 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <span>No microcycles yet. Use New Microcycle to create the first week.</span>
-            {canCreateMicrocycle && (
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                disabled={isLoadingCreatePermission}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New Microcycle
-              </button>
+      {/* SECONDARY NAVIGATION BAR (MATCHING FOOTBALL HUB STYLE) */}
+      <div className="no-print-microcycle bg-white border border-slate-200 rounded-2xl p-2.5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setSubNav('cards')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center space-x-2 cursor-pointer ${
+              subNav === 'cards'
+                ? 'bg-[#002142] text-white shadow-md'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-emerald-400" />
+            <span>Weekly Microcycles / Galería</span>
+            <span className="ml-1.5 px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-emerald-300 font-mono">
+              {microcycles.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubNav('editor')}
+            disabled={!draft}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center space-x-2 cursor-pointer disabled:opacity-40 ${
+              subNav === 'editor'
+                ? 'bg-[#002142] text-white shadow-md'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Edit3 className="w-4 h-4 text-amber-400" />
+            <span>Active Week Planner / Editor</span>
+            {draft && (
+              <span className="hidden md:inline text-[10px] text-slate-300 font-medium truncate max-w-[150px]">
+                ({draft.name})
+              </span>
             )}
-          </div>
+          </button>
+        </div>
+
+        {canCreateMicrocycle && (
+          <button
+            type="button"
+            onClick={handleOpenCreateModal}
+            disabled={isLoadingCreatePermission}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Microcycle / Nueva Semana</span>
+          </button>
         )}
+      </div>
 
-        {draft && (
-          <>
-            <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-4">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      value={draft.name}
-                      onChange={(e) => updateDraft({ ...draft, name: e.target.value })}
-                      className="w-full max-w-[420px] text-2xl md:text-3xl font-black tracking-tight text-slate-900 bg-transparent border-0 border-b-2 border-slate-200 focus:border-slate-900 focus:ring-0 px-0 py-1"
-                    />
-                    <span className="px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">
-                      {draft.status}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <input
-                      type="number"
-                      placeholder="Week"
-                      value={draft.weekNumber || ''}
-                      onChange={(e) => updateDraft({ ...draft, weekNumber: e.target.value ? Number(e.target.value) : undefined })}
-                      className="w-20 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700"
-                    />
-                    <input
-                      type="date"
-                      value={draft.startDate}
-                      onChange={(e) => updateDraft({ ...draft, startDate: e.target.value })}
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
-                    />
-                    <span className="text-slate-400 font-bold">to</span>
-                    <input
-                      type="date"
-                      value={draft.endDate}
-                      onChange={(e) => updateDraft({ ...draft, endDate: e.target.value })}
-                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
-                    />
-                    <select
-                      value={draft.teamId}
-                      onChange={(e) => {
-                        const nextTeamId = e.target.value;
-                        const selectedTeam = teams.find((team) => team.id === nextTeamId);
-                        updateDraft({
-                          ...draft,
-                          teamId: nextTeamId,
-                          teamName: selectedTeam?.name || draft.teamName
-                        });
-                      }}
-                      className="min-w-[190px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
-                    >
-                      <option value="">Select team...</option>
-                      {teams.map((team) => (
-                        <option key={team.id} value={team.id}>{team.name}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      placeholder="Team total"
-                      value={draft.teamTotal || ''}
-                      onChange={(e) => updateDraft({ ...draft, teamTotal: e.target.value ? Number(e.target.value) : undefined })}
-                      className="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700"
-                    />
-                  </div>
-                </div>
-
-                <div className="no-print-microcycle flex flex-wrap items-center gap-2">
-                  {canCreateMicrocycle && (
-                    <button
-                      type="button"
-                      onClick={() => setIsCreateOpen(true)}
-                      disabled={isLoadingCreatePermission}
-                      className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      New Week
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setPreviousOrNext(1)}
-                    disabled={selectedIndex <= 0}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviousOrNext(-1)}
-                    disabled={selectedIndex === -1 || selectedIndex >= microcycles.length - 1}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
-                  >
-                    Next
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDuplicateCurrent}
-                    disabled={!canCreateMicrocycle || isLoadingCreatePermission}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDuplicatePrevious}
-                    disabled={!canCreateMicrocycle || isLoadingCreatePermission}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    Duplicate Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!draft) return;
-                      const next = deepClone(draft);
-                      next.days = createDaysFromRange(next.startDate, next.endDate).map((day) => {
-                        const existing = draft.days.find((item) => item.dayDate === day.dayDate);
-                        return existing
-                          ? { ...deepClone(existing), id: existing.id, microcycleId: draft.id, dayOrder: day.dayOrder, dayLabel: day.dayLabel }
-                          : { ...day, microcycleId: draft.id };
-                      });
-                      updateDraft(next);
-                    }}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700"
-                  >
-                    Regenerate Week Days
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteCurrent}
-                    className="px-3 py-2 rounded-xl border border-rose-300 text-xs font-bold text-rose-700 inline-flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!isDirty || isSaving}
-                    onClick={handleSave}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black disabled:opacity-40 inline-flex items-center gap-1"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    {isSaving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportPdf}
-                    className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-black text-slate-700 inline-flex items-center gap-1"
-                  >
-                    Export PDF
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
-                <span>Weekly board view</span>
-                <span className="h-1 w-1 rounded-full bg-slate-300" />
-                <span>{draft.teamName}</span>
-                <span className="h-1 w-1 rounded-full bg-slate-300" />
-                <span>{draft.days.length} days</span>
-                {isDirty && <span className="text-amber-700">Unsaved changes</span>}
-                {!isDirty && saveStatus === 'saved' && <span className="text-emerald-700">Saved</span>}
-                {saveStatus === 'error' && <span className="text-rose-700">Save failed: {saveError}</span>}
-              </div>
+      {/* VIEW MODE 1: WEEKLY MICROCYCLES GALLERY (INDEPENDENT WEEK CARDS) */}
+      {subNav === 'cards' && (
+        <div className="space-y-5">
+          {/* Filter & Search Bar */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search microcycles by name, week, concept..."
+                className="w-full pl-9 pr-4 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              />
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-[1320px] w-full border-collapse text-xs table-fixed">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200">
-                      <th className="sticky left-0 z-20 bg-slate-100 text-left px-3 py-3 font-black uppercase tracking-wide text-slate-600 w-[220px]">
-                        Planning Category
-                      </th>
-                      {draft.days.map((day) => (
-                        <th key={day.id} className="px-3 py-3 text-left border-l border-slate-200 w-[157px] align-bottom">
-                          <div className="font-black text-slate-800 text-sm">{day.dayLabel || 'Day'}</div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 font-medium">{day.dayDate}</div>
+            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {(['all', 'draft', 'active', 'archived'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatusFilter(st)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all ${
+                      statusFilter === st
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-xs font-bold text-slate-600 shrink-0">
+                {filteredMicrocycles.length} week{filteredMicrocycles.length !== 1 ? 's' : ''} found
+              </div>
+            </div>
+          </div>
+
+          {/* MICROCYCLE CARDS GRID (3-COLUMN RESPONSIVE) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {microcycles.length === 0 ? (
+              <div className="col-span-full p-10 text-center bg-white rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <FolderOpen className="w-12 h-12 text-slate-300 mx-auto" />
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-slate-800">No Microcycles Created Yet</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Create your first weekly microcycle to plan daily training sessions, tactical concepts, and track player availability.
+                  </p>
+                </div>
+                {canCreateMicrocycle && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateModal}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-sm transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create First Microcycle
+                  </button>
+                )}
+              </div>
+            ) : filteredMicrocycles.length === 0 ? (
+              <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-slate-200">
+                <p className="text-sm text-slate-500 font-semibold">No microcycles match your search criteria.</p>
+              </div>
+            ) : (
+              filteredMicrocycles.map((m) => {
+                const isActive = selectedMicrocycleId === m.id;
+                const linkedSessionsCount = m.days.filter((d) => d.sessionId).length;
+                const totalConceptsCount = m.days.reduce((acc, d) => acc + (d.concepts?.length || 0), 0);
+                const availabilityCount = m.availability?.length || 0;
+
+                return (
+                  <div
+                    key={m.id}
+                    className={`group bg-white rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col justify-between overflow-hidden relative ${
+                      isActive
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {/* CARD TOP HEADER */}
+                    <div className="p-4 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#002142] text-emerald-400 font-mono font-black text-xs flex items-center justify-center shadow-sm shrink-0 border border-slate-800">
+                          {m.weekNumber ? `W${m.weekNumber}` : 'WK'}
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 leading-none tracking-tight">
+                            {m.name || `Microcycle Week ${m.weekNumber || '?'}`}
+                          </h4>
+                          <p className="text-[11px] font-semibold text-slate-500 mt-1 flex items-center space-x-1">
+                            <Clock className="w-3 h-3 text-slate-400 inline" />
+                            <span>{formatDateRange(m.startDate, m.endDate)}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                          m.status === 'active'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : m.status === 'archived'
+                            ? 'bg-slate-100 text-slate-600 border-slate-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {m.status}
+                        </span>
+                        {isActive && (
+                          <span className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-black uppercase">
+                            Open
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* CARD BODY */}
+                    <div
+                      onClick={() => selectMicrocycle(m.id, true)}
+                      className="p-4 bg-white space-y-3 flex-1 flex flex-col justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold text-[10px] border border-slate-200">
+                            {m.teamName || 'U17 Women'}
+                          </span>
+                          <span className="text-slate-500">
+                            {m.days.length} planned days
+                          </span>
+                        </div>
+
+                        {/* Badges metadata */}
+                        <div className="flex items-center gap-2 text-[11px] text-slate-600 font-semibold flex-wrap pt-1">
+                          <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1">
+                            <Link2 className="w-3 h-3" />
+                            {linkedSessionsCount} linked session{linkedSessionsCount !== 1 ? 's' : ''}
+                          </span>
+                          <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            {totalConceptsCount} concept{totalConceptsCount !== 1 ? 's' : ''}
+                          </span>
+                          {availabilityCount > 0 && (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {availabilityCount} availability alert{availabilityCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+
+                        {m.notes && (
+                          <p className="text-xs text-slate-500 line-clamp-2 italic pt-1">
+                            {m.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* CARD FOOTER */}
+                    <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => selectMicrocycle(m.id, true)}
+                        className="text-xs font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+                      >
+                        <span>Open Planner</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicateMicrocycle(m);
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-all"
+                          title="Duplicate Week"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteMicrocycle(m.id, m.name, e)}
+                          className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg transition-all border border-rose-200 hover:border-rose-500"
+                          title="Delete Microcycle"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW MODE 2: ACTIVE MICROCYCLE PLANNER / EDITOR */}
+      {subNav === 'editor' && (
+        <section className="space-y-4">
+          {!draft && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-600 space-y-3">
+              <p>No microcycle is currently selected.</p>
+              <button
+                type="button"
+                onClick={() => setSubNav('cards')}
+                className="px-4 py-2 bg-[#002142] text-white text-xs font-black rounded-xl"
+              >
+                Back to Microcycles Gallery
+              </button>
+            </div>
+          )}
+
+          {draft && (
+            <>
+              {/* EDITOR TOP CONTROL PANEL */}
+              <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSubNav('cards')}
+                        className="no-print-microcycle px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 transition-all mr-1"
+                        title="Back to all weeks"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>All Weeks</span>
+                      </button>
+
+                      <input
+                        value={draft.name}
+                        onChange={(e) => updateDraft({ ...draft, name: e.target.value })}
+                        className="w-full max-w-[420px] text-2xl md:text-3xl font-black tracking-tight text-slate-900 bg-transparent border-0 border-b-2 border-slate-200 focus:border-slate-900 focus:ring-0 px-0 py-1"
+                        placeholder="Microcycle Name..."
+                      />
+                      
+                      <select
+                        value={draft.status}
+                        onChange={(e) => updateDraft({ ...draft, status: e.target.value as any })}
+                        className="px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-extrabold uppercase tracking-wide text-slate-700"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Week</span>
+                        <input
+                          type="number"
+                          placeholder="W#"
+                          value={draft.weekNumber || ''}
+                          onChange={(e) => updateDraft({ ...draft, weekNumber: e.target.value ? Number(e.target.value) : undefined })}
+                          className="w-14 bg-transparent border-0 font-bold text-slate-800 p-0 text-xs focus:ring-0"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          type="date"
+                          value={draft.startDate}
+                          onChange={(e) => updateDraft({ ...draft, startDate: e.target.value })}
+                          className="bg-transparent border-0 font-semibold text-slate-700 p-0 text-xs focus:ring-0"
+                        />
+                        <span className="text-slate-400 font-bold">to</span>
+                        <input
+                          type="date"
+                          value={draft.endDate}
+                          onChange={(e) => updateDraft({ ...draft, endDate: e.target.value })}
+                          className="bg-transparent border-0 font-semibold text-slate-700 p-0 text-xs focus:ring-0"
+                        />
+                      </div>
+
+                      <select
+                        value={draft.teamId}
+                        onChange={(e) => {
+                          const nextTeamId = e.target.value;
+                          const selectedTeam = teams.find((team) => team.id === nextTeamId);
+                          updateDraft({
+                            ...draft,
+                            teamId: nextTeamId,
+                            teamName: selectedTeam?.name || draft.teamName
+                          });
+                        }}
+                        className="min-w-[190px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700 text-xs"
+                      >
+                        <option value="">Select team...</option>
+                        {teams.map((team) => (
+                          <option key={team.id} value={team.id}>{team.name}</option>
+                        ))}
+                      </select>
+
+                      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Squad Total</span>
+                        <input
+                          type="number"
+                          placeholder="Players"
+                          value={draft.teamTotal || ''}
+                          onChange={(e) => updateDraft({ ...draft, teamTotal: e.target.value ? Number(e.target.value) : undefined })}
+                          className="w-16 bg-transparent border-0 font-semibold text-slate-700 p-0 text-xs focus:ring-0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="no-print-microcycle flex flex-wrap items-center gap-2">
+                    {canCreateMicrocycle && (
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateModal}
+                        disabled={isLoadingCreatePermission}
+                        className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-black inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        New Week
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPreviousOrNext(1)}
+                      disabled={selectedIndex === -1 || selectedIndex >= microcycles.length - 1}
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+                      title="Previous saved microcycle"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviousOrNext(-1)}
+                      disabled={selectedIndex <= 0}
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 disabled:opacity-40 inline-flex items-center gap-1"
+                      title="Next saved microcycle"
+                    >
+                      Next
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => draft && handleDuplicateMicrocycle(draft)}
+                      disabled={!canCreateMicrocycle || isLoadingCreatePermission}
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 inline-flex items-center gap-1"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!draft) return;
+                        const next = deepClone(draft);
+                        next.days = createDaysFromRange(next.startDate, next.endDate).map((day) => {
+                          const existing = draft.days.find((item) => item.dayDate === day.dayDate);
+                          return existing
+                            ? { ...deepClone(existing), id: existing.id, microcycleId: draft.id, dayOrder: day.dayOrder, dayLabel: day.dayLabel }
+                            : { ...day, microcycleId: draft.id };
+                        });
+                        updateDraft(next);
+                      }}
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700"
+                    >
+                      Regenerate Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => draft && handleDeleteMicrocycle(draft.id, draft.name)}
+                      className="px-3 py-2 rounded-xl border border-rose-300 text-xs font-bold text-rose-700 inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!isDirty || isSaving}
+                      onClick={handleSave}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black disabled:opacity-40 inline-flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {isSaving ? 'Saving...' : 'Save Week'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportPdf}
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-black text-slate-700 inline-flex items-center gap-1"
+                    >
+                      Export PDF
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
+                  <span>Weekly board view</span>
+                  <span className="h-1 w-1 rounded-full bg-slate-300" />
+                  <span>{draft.teamName}</span>
+                  <span className="h-1 w-1 rounded-full bg-slate-300" />
+                  <span>{draft.days.length} days</span>
+                  {isDirty && <span className="text-amber-700 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">Unsaved changes</span>}
+                  {!isDirty && saveStatus === 'saved' && <span className="text-emerald-700 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
+                  {saveStatus === 'error' && <span className="text-rose-700 font-bold">Save failed: {saveError}</span>}
+                </div>
+              </div>
+
+              {/* WEEK PLANNING TABLE */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[1320px] w-full border-collapse text-xs table-fixed">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200">
+                        <th className="sticky left-0 z-20 bg-slate-100 text-left px-3 py-3 font-black uppercase tracking-wide text-slate-600 w-[220px]">
+                          Planning Category
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {DAY_FIELDS.map((row, rowIndex) => (
-                      <tr key={row.key} className={`align-top border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                        <td className="sticky left-0 z-10 bg-inherit px-3 py-2.5 font-bold text-slate-700 border-r border-slate-100 align-top">
-                          {row.label}
-                        </td>
-                        {draft.days.map((day) => {
-                          const linkedOptions = selectedLinkedSessionsByDate.get(day.id) || [];
-                          const linkedSession = selectedSessionById(day.sessionId);
+                        {draft.days.map((day) => (
+                          <th key={day.id} className="px-3 py-3 text-left border-l border-slate-200 w-[157px] align-bottom">
+                            <div className="font-black text-slate-800 text-sm">{day.dayLabel || 'Day'}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 font-medium">{day.dayDate}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DAY_FIELDS.map((row, rowIndex) => (
+                        <tr key={row.key} className={`align-top border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                          <td className="sticky left-0 z-10 bg-inherit px-3 py-2.5 font-bold text-slate-700 border-r border-slate-100 align-top">
+                            {row.label}
+                          </td>
+                          {draft.days.map((day) => {
+                            const linkedOptions = selectedLinkedSessionsByDate.get(day.id) || [];
+                            const linkedSession = selectedSessionById(day.sessionId);
 
-                          if (row.type === 'sessionLink') {
-                            return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                                <select
-                                  value={day.sessionId || ''}
-                                  onChange={(e) => setDayValue(day.id, 'sessionId', e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5"
-                                >
-                                  <option value="">No linked session</option>
-                                  {linkedOptions.map((session) => (
-                                    <option key={session.id} value={session.id}>
-                                      #{session.sessionNumber} - {session.mainObjective || 'Session'}
-                                    </option>
+                            if (row.type === 'sessionLink') {
+                              return (
+                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
+                                  <select
+                                    value={day.sessionId || ''}
+                                    onChange={(e) => setDayValue(day.id, 'sessionId', e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
+                                  >
+                                    <option value="">No linked session</option>
+                                    {linkedOptions.map((session) => (
+                                      <option key={session.id} value={session.id}>
+                                        #{session.sessionNumber} - {session.mainObjective || 'Session'}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {linkedSession && (
+                                    <div className="mt-1.5 space-y-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenSession && onOpenSession(linkedSession)}
+                                        className="text-[11px] text-emerald-700 font-bold inline-flex items-center gap-1 hover:underline"
+                                      >
+                                        <Link2 className="w-3 h-3" />
+                                        Open session #{linkedSession.sessionNumber}
+                                      </button>
+                                      {linkedSession.fitnessUpdatedAt && (
+                                        <div className="text-[10px] text-indigo-600 font-bold">
+                                          Fitness-linked session detected
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            }
+
+                            if (row.type === 'concepts') {
+                              return (
+                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
+                                  {day.concepts.map((concept) => (
+                                    <div key={concept.id} className="flex items-center gap-1.5">
+                                      <input
+                                        value={concept.concept}
+                                        onChange={(e) => setConceptField(day.id, concept.id, 'concept', e.target.value)}
+                                        placeholder="Concept"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => removeConcept(day.id, concept.id)}
+                                        className="text-rose-700 hover:text-rose-900"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   ))}
-                                </select>
-                                {linkedSession && (
-                                  <div className="mt-1.5 space-y-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => onOpenSession && onOpenSession(linkedSession)}
-                                      className="text-[11px] text-emerald-700 font-bold inline-flex items-center gap-1"
-                                    >
-                                      <Link2 className="w-3 h-3" />
-                                      Open linked session
-                                    </button>
-                                    {linkedSession.fitnessUpdatedAt && (
-                                      <div className="text-[10px] text-indigo-600 font-bold">
-                                        Fitness-linked session detected
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                            );
-                          }
+                                  <button
+                                    type="button"
+                                    onClick={() => addConcept(day.id)}
+                                    className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1 hover:underline"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    Add concept
+                                  </button>
+                                </td>
+                              );
+                            }
 
-                          if (row.type === 'concepts') {
-                            return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
-                                {day.concepts.map((concept) => (
-                                  <div key={concept.id} className="flex items-center gap-1.5">
-                                    <input
-                                      value={concept.concept}
-                                      onChange={(e) => setConceptField(day.id, concept.id, 'concept', e.target.value)}
-                                      placeholder="Concept"
-                                      className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5"
+                            if (row.type === 'objectives') {
+                              return (
+                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
+                                  {day.concepts.length === 0 && (
+                                    <div className="text-[11px] text-slate-400">Add a concept first</div>
+                                  )}
+                                  {day.concepts.map((concept) => (
+                                    <textarea
+                                      key={concept.id}
+                                      value={concept.objective}
+                                      onChange={(e) => setConceptField(day.id, concept.id, 'objective', e.target.value)}
+                                      placeholder="Objective"
+                                      rows={2}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs"
                                     />
-                                    <button
-                                      type="button"
-                                      onClick={() => removeConcept(day.id, concept.id)}
-                                      className="text-rose-700"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))}
-                                <button
-                                  type="button"
-                                  onClick={() => addConcept(day.id)}
-                                  className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  Add concept
-                                </button>
-                              </td>
-                            );
-                          }
+                                  ))}
+                                </td>
+                              );
+                            }
 
-                          if (row.type === 'objectives') {
-                            return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
-                                {day.concepts.length === 0 && (
-                                  <div className="text-[11px] text-slate-400">Add a concept first</div>
-                                )}
-                                {day.concepts.map((concept) => (
+                            if (row.type === 'textarea') {
+                              const field = row.key as keyof MicrocycleDay;
+                              return (
+                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
                                   <textarea
-                                    key={concept.id}
-                                    value={concept.objective}
-                                    onChange={(e) => setConceptField(day.id, concept.id, 'objective', e.target.value)}
-                                    placeholder="Objective"
                                     rows={2}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y"
+                                    value={String((day as any)[field] || '')}
+                                    onChange={(e) => setDayValue(day.id, field, e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs"
                                   />
-                                ))}
-                              </td>
-                            );
-                          }
+                                </td>
+                              );
+                            }
 
-                          if (row.type === 'textarea') {
                             const field = row.key as keyof MicrocycleDay;
                             return (
                               <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                                <textarea
-                                  rows={2}
+                                <input
+                                  type={field === 'dayDate' ? 'date' : 'text'}
+                                  list={row.listId}
                                   value={String((day as any)[field] || '')}
                                   onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
                                 />
                               </td>
                             );
-                          }
-
-                          const field = row.key as keyof MicrocycleDay;
-                          return (
-                            <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                              <input
-                                type={field === 'dayDate' ? 'date' : 'text'}
-                                list={row.listId}
-                                value={String((day as any)[field] || '')}
-                                onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5"
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-emerald-700" />
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Squad Availability</h3>
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {AVAILABILITY_CATEGORIES.map((category) => {
-                  const selected = draft.availability.filter((entry) => entry.category === category.key);
-                  return (
-                    <div key={category.key} className="border border-slate-200 rounded-xl p-3">
-                      <div className="text-xs font-black text-slate-700 mb-2">{category.label}</div>
-                      <div className="max-h-40 overflow-auto space-y-1">
-                        {squadPlayers.map((player) => {
-                          const fullName = playerFullName(player);
-                          const checked = selected.some((entry) => entry.playerId === player.id);
-                          return (
-                            <label key={`${category.key}-${player.id}`} className="flex items-center gap-2 text-xs text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleAvailability(category.key, player)}
-                              />
-                              <span>{fullName}</span>
-                            </label>
-                          );
-                        })}
+              {/* SQUAD AVAILABILITY */}
+              <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-700" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Squad Availability</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {AVAILABILITY_CATEGORIES.map((category) => {
+                    const selected = draft.availability.filter((entry) => entry.category === category.key);
+                    return (
+                      <div key={category.key} className="border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                        <div className="flex items-center justify-between text-xs font-black text-slate-700 mb-2">
+                          <span>{category.label}</span>
+                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full text-[10px]">
+                            {selected.length}
+                          </span>
+                        </div>
+                        <div className="max-h-40 overflow-auto space-y-1">
+                          {squadPlayers.map((player) => {
+                            const fullName = playerFullName(player);
+                            const checked = selected.some((entry) => entry.playerId === player.id);
+                            return (
+                              <label key={`${category.key}-${player.id}`} className="flex items-center gap-2 text-xs text-slate-700 hover:bg-white p-1 rounded transition-colors cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleAvailability(category.key, player)}
+                                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                <span>{fullName}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
 
-              <div className="text-xs text-slate-500 inline-flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" />
-                Team total can be edited in the header and players are always sourced from the current squad table.
+                <div className="text-xs text-slate-500 inline-flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Team total can be edited in the header and players are always sourced from the current squad table.
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* CREATE NEW MICROCYCLE MODAL */}
+      {isCreateOpen && (
+        <div className="no-print-microcycle fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">New Microcycle / Nueva Semana</h3>
+                  <p className="text-xs text-slate-500">Create an independent weekly planning record</p>
+                </div>
               </div>
             </div>
-          </>
-        )}
-      </section>
 
-      {isCreateOpen && (
-        <div className="no-print-microcycle fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
-          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
-            <h3 className="text-lg font-black text-slate-900">New Microcycle</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">Name</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <label className="space-y-1.5 md:col-span-2">
+                <span className="text-xs font-bold text-slate-700">Microcycle Name / Title</span>
                 <input
                   value={createInput.name}
                   onChange={(e) => setCreateInput((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  placeholder="e.g. Microcycle Week 2 - Pre-Competition"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">Week Number</span>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700">Week Number</span>
                 <input
                   type="number"
+                  placeholder="e.g. 1"
                   value={createInput.weekNumber || ''}
                   onChange={(e) => setCreateInput((prev) => ({ ...prev, weekNumber: e.target.value ? Number(e.target.value) : undefined }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">Start Date</span>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700">Status</span>
+                <select
+                  value={createInput.status || 'draft'}
+                  onChange={(e) => setCreateInput((prev) => ({ ...prev, status: e.target.value as any }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700">Start Date (Monday)</span>
                 <input
                   type="date"
                   value={createInput.startDate}
                   onChange={(e) => setCreateInput((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:bg-white"
                 />
               </label>
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">End Date</span>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-700">End Date (Sunday)</span>
                 <input
                   type="date"
                   value={createInput.endDate}
                   onChange={(e) => setCreateInput((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:bg-white"
                 />
               </label>
+
               {teams.length > 1 ? (
-                <label className="space-y-1">
-                  <span className="text-xs font-bold text-slate-600">Team</span>
+                <label className="space-y-1.5 md:col-span-2">
+                  <span className="text-xs font-bold text-slate-700">Team</span>
                   <select
                     value={createInput.teamId}
                     onChange={(e) => {
@@ -1068,7 +1410,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                         teamName: selectedTeam?.name || ''
                       }));
                     }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:bg-white"
                   >
                     <option value="">Select a team...</option>
                     {teams.map((team) => (
@@ -1077,49 +1419,30 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                   </select>
                 </label>
               ) : (
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-slate-600">Team</span>
-                  <div className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-sm text-slate-700">
+                <div className="space-y-1.5 md:col-span-2">
+                  <span className="text-xs font-bold text-slate-700">Team</span>
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
                     {effectiveTeam?.name || 'Single team available'}
                   </div>
                 </div>
               )}
-              <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-600">Duplicate from current</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!draft) return;
-                    setCreateInput((prev) => ({
-                      ...prev,
-                      name: `${draft.name} (Next)`,
-                      weekNumber: draft.weekNumber ? draft.weekNumber + 1 : undefined,
-                      teamName: draft.teamName,
-                      teamId: draft.teamId,
-                      teamTotal: draft.teamTotal
-                    }));
-                  }}
-                  className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-700 bg-slate-50"
-                >
-                  Use current as template metadata
-                </button>
-              </label>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
-                className="px-3 py-2 text-xs font-bold rounded-lg border border-slate-300 text-slate-700"
+                className="px-4 py-2.5 text-xs font-bold rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCreateNew}
-                className="px-3 py-2 text-xs font-black rounded-lg bg-emerald-600 text-white"
+                className="px-5 py-2.5 text-xs font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all flex items-center gap-1.5"
               >
-                Create Week
+                <Plus className="w-4 h-4" />
+                <span>Create Microcycle Record</span>
               </button>
             </div>
           </div>
