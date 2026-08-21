@@ -332,6 +332,8 @@ export interface MatchLineupEntry {
   minuteSubbedIn?: number | null;
   minuteSubbedOut?: number | null;
   notes?: string | null;
+  pitchX?: number | null;
+  pitchY?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

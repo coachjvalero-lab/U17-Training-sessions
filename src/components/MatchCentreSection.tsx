@@ -14,7 +14,9 @@ import {
   createOrUpdateOpponentAnalysis,
   getOpponentAnalysisByOpponentTeamId
 } from '../services/matches/opponentAnalysisService';
-import { getMatchLineup, removeMatchLineupEntry, upsertMatchLineupEntry } from '../services/matches/matchLineupService';
+import { getMatchLineup, removeMatchLineupEntry, upsertMatchLineupEntry, batchUpsertMatchLineupEntries } from '../services/matches/matchLineupService';
+import { MatchPitchBoard } from './MatchPitchBoard';
+import type { FormationSlot } from '../utils/formations';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
 import { getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
@@ -488,6 +490,72 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     });
   };
 
+  const handleUpdateLineupEntry = async (entry: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>) => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('lineup', 'saving');
+      const saved = await upsertMatchLineupEntry(entry);
+      setLineupEntries((current) => {
+        const filtered = current.filter((e) => e.playerId !== saved.playerId);
+        return [...filtered, saved].sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+      });
+      setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
+      setSaveState('lineup', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed updating lineup entry', error);
+      setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to update player.');
+    }
+  };
+
+  const handleBatchUpdateLineupEntries = async (entries: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>>) => {
+    if (!selectedMatch || entries.length === 0) return;
+    try {
+      setSaveState('lineup', 'saving');
+      const savedList = await batchUpsertMatchLineupEntries(entries);
+      setLineupEntries((current) => {
+        const savedMap = new Map(savedList.map((e) => [e.playerId, e]));
+        const next = current.map((e) => savedMap.get(e.playerId) || e);
+        for (const saved of savedList) {
+          if (!next.some((e) => e.playerId === saved.playerId)) {
+            next.push(saved);
+          }
+        }
+        return next.sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+      });
+      setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
+      setSaveState('lineup', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed batch updating lineup entries', error);
+      setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to save formation.');
+    }
+  };
+
+  const handleAddPlayerToMatch = async (player: CloudSquadPlayer, asStarter: boolean, slot?: FormationSlot) => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('lineup', 'saving');
+      const saved = await upsertMatchLineupEntry({
+        matchId: selectedMatch.id,
+        playerId: player.id,
+        position: slot?.position || player.position || 'UTIL',
+        starter: asStarter,
+        shirtNumber: player.number ?? null,
+        captain: false,
+        pitchX: asStarter ? (slot?.x ?? 50) : null,
+        pitchY: asStarter ? (slot?.y ?? 50) : null
+      });
+      setLineupEntries((current) => {
+        const filtered = current.filter((e) => e.playerId !== player.id);
+        return [...filtered, saved].sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+      });
+      setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
+      setSaveState('lineup', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed adding player to match', error);
+      setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to add player.');
+    }
+  };
+
   const handleSaveLineupEntry = async () => {
     if (!selectedMatch || !lineupForm.playerId.trim()) return;
 
@@ -503,7 +571,9 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         captain: lineupForm.captain,
         minuteSubbedIn: lineupForm.minuteSubbedIn === '' ? null : Number(lineupForm.minuteSubbedIn),
         minuteSubbedOut: lineupForm.minuteSubbedOut === '' ? null : Number(lineupForm.minuteSubbedOut),
-        notes: lineupForm.notes.trim() || null
+        notes: lineupForm.notes.trim() || null,
+        pitchX: editingLineupEntry?.pitchX ?? (lineupForm.starter ? 50 : null),
+        pitchY: editingLineupEntry?.pitchY ?? (lineupForm.starter ? 50 : null)
       });
       setLineupEntries((current) => {
         const filtered = current.filter((entry) => entry.playerId !== saved.playerId);
@@ -598,82 +668,169 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     if (!selectedMatch) return null;
 
     const getPlayer = (playerId: string) => squadPlayers.find((player) => player.id === playerId);
-    const getPlayerName = (playerId: string) => {
-      const player = getPlayer(playerId);
-      return player ? `${player.firstName} ${player.lastName}` : playerId;
-    };
-    const starters = lineupEntries.filter((entry) => entry.starter);
-    const substitutes = lineupEntries.filter((entry) => !entry.starter);
-    const formationRows = [
-      starters.filter((entry) => ['ST', 'LW', 'RW'].includes(entry.position.toUpperCase())),
-      starters.filter((entry) => ['CM', 'CAM', 'CDM'].includes(entry.position.toUpperCase())),
-      starters.filter((entry) => ['CB', 'LB', 'RB'].includes(entry.position.toUpperCase())),
-      starters.filter((entry) => entry.position.toUpperCase() === 'GK')
-    ];
-    const assignedIds = new Set(formationRows.flat().map((entry) => entry.id));
-    formationRows[1].push(...starters.filter((entry) => !assignedIds.has(entry.id)));
-
-    const renderPlayerToken = (entry: MatchLineupEntry) => {
-      const player = getPlayer(entry.playerId);
-      return (
-        <button key={entry.id} type="button" onClick={() => openLineupForm(entry)} className="group flex w-20 flex-col items-center text-center sm:w-24">
-          <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#002142] text-xs font-black text-white shadow-md">
-            {player?.photoUrl ? <img src={player.photoUrl} alt="" className="h-full w-full object-cover" /> : (entry.shirtNumber ?? player?.number ?? '–')}
-            {entry.captain && <span className="absolute -right-1 -top-1 rounded-full bg-amber-400 px-1 text-[8px] text-slate-950">C</span>}
-          </span>
-          <span className="mt-1 max-w-full truncate rounded bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-white">{player?.lastName || getPlayerName(entry.playerId)}</span>
-          <span className="mt-0.5 text-[8px] font-black text-emerald-100">{entry.position || '–'}</span>
-        </button>
-      );
-    };
 
     return (
       <div className="space-y-5">
-        <div className="rounded-lg border border-slate-200 bg-white">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="px-5 pt-4"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Team selection</p><h3 className="text-lg font-black text-slate-950">Matchday squad</h3></div>
-            <div className="flex items-center gap-3 px-5 pt-4">{renderSaveStatus('lineup')}<button type="button" onClick={() => openLineupForm()} className="inline-flex items-center gap-2 rounded-md bg-[#002142] px-3 py-2 text-xs font-bold text-white">
-              <Plus className="w-3.5 h-3.5" />
-              Add Player
-            </button></div>
-          </div>
+        <MatchPitchBoard
+          matchId={selectedMatch.id}
+          lineupEntries={lineupEntries}
+          squadPlayers={squadPlayers}
+          onUpdateLineupEntry={handleUpdateLineupEntry}
+          onBatchUpdateLineupEntries={handleBatchUpdateLineupEntries}
+          onRemoveLineupEntry={handleRemoveLineupEntry}
+          onAddPlayerToMatch={handleAddPlayerToMatch}
+          onOpenEditModal={openLineupForm}
+          saveStatus={saveStates.lineup}
+        />
 
-          {isLineupFormOpen && (
-            <div className="mx-5 mb-5 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        {/* Modal Editor for Detailed Lineup Entry (Shirt #, Sub Minutes, Notes) */}
+        {isLineupFormOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-black text-[#002142] font-display">
+                  {editingLineupEntry ? 'Edit Player Match Details' : 'Add Player to Match'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingLineupEntry(null);
+                    setIsLineupFormOpen(false);
+                  }}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-3">
-                <label className="text-[10px] font-black uppercase text-slate-500">Player<select value={lineupForm.playerId} disabled={Boolean(editingLineupEntry)} onChange={(event) => { const player = getPlayer(event.target.value); setLineupForm((current) => ({ ...current, playerId: event.target.value, position: player?.position ?? current.position, shirtNumber: player?.number !== undefined ? String(player.number) : current.shirtNumber })); }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"><option value="">Select squad player</option>{squadPlayers.filter((player) => editingLineupEntry?.playerId === player.id || !lineupEntries.some((entry) => entry.playerId === player.id)).map((player) => <option key={player.id} value={player.id}>{player.number ? `${player.number} · ` : ''}{player.firstName} {player.lastName}</option>)}</select></label>
-                <label className="text-[10px] font-black uppercase text-slate-500">Position<select value={lineupForm.position} onChange={(event) => setLineupForm((current) => ({ ...current, position: event.target.value }))} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"><option value="">Select position</option>{['GK','RB','CB','LB','CDM','CM','CAM','RW','LW','ST','UTIL'].map((position) => <option key={position}>{position}</option>)}</select></label>
-                <label className="text-[10px] font-black uppercase text-slate-500">Shirt number<input type="number" value={lineupForm.shirtNumber} onChange={(event) => setLineupForm((current) => ({ ...current, shirtNumber: event.target.value }))} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900" /></label>
-                <label className="text-[10px] font-black uppercase text-slate-500">Subbed in<input type="number" value={lineupForm.minuteSubbedIn} onChange={(event) => setLineupForm((current) => ({ ...current, minuteSubbedIn: event.target.value }))} placeholder="Minute" className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs normal-case" /></label>
-                <label className="text-[10px] font-black uppercase text-slate-500">Subbed out<input type="number" value={lineupForm.minuteSubbedOut} onChange={(event) => setLineupForm((current) => ({ ...current, minuteSubbedOut: event.target.value }))} placeholder="Minute" className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs normal-case" /></label>
-                <div className="flex items-end gap-4 pb-2"><label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={lineupForm.starter} onChange={(event) => setLineupForm((current) => ({ ...current, starter: event.target.checked }))} />Starter</label><label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={lineupForm.captain} onChange={(event) => setLineupForm((current) => ({ ...current, captain: event.target.checked }))} />Captain</label></div>
+                <label className="text-[10px] font-black uppercase text-slate-500">
+                  Player
+                  <select
+                    value={lineupForm.playerId}
+                    disabled={Boolean(editingLineupEntry)}
+                    onChange={(event) => {
+                      const player = getPlayer(event.target.value);
+                      setLineupForm((current) => ({
+                        ...current,
+                        playerId: event.target.value,
+                        position: player?.position ?? current.position,
+                        shirtNumber: player?.number !== undefined ? String(player.number) : current.shirtNumber
+                      }));
+                    }}
+                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"
+                  >
+                    <option value="">Select squad player</option>
+                    {squadPlayers
+                      .filter((player) => editingLineupEntry?.playerId === player.id || !lineupEntries.some((entry) => entry.playerId === player.id))
+                      .map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.number ? `${player.number} · ` : ''}{player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="text-[10px] font-black uppercase text-slate-500">
+                  Position
+                  <select
+                    value={lineupForm.position}
+                    onChange={(event) => setLineupForm((current) => ({ ...current, position: event.target.value }))}
+                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"
+                  >
+                    <option value="">Select position</option>
+                    {['GK', 'RB', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'RW', 'LW', 'ST', 'UTIL'].map((position) => (
+                      <option key={position}>{position}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-[10px] font-black uppercase text-slate-500">
+                  Shirt number
+                  <input
+                    type="number"
+                    value={lineupForm.shirtNumber}
+                    onChange={(event) => setLineupForm((current) => ({ ...current, shirtNumber: event.target.value }))}
+                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"
+                  />
+                </label>
+
+                <label className="text-[10px] font-black uppercase text-slate-500">
+                  Subbed in
+                  <input
+                    type="number"
+                    value={lineupForm.minuteSubbedIn}
+                    onChange={(event) => setLineupForm((current) => ({ ...current, minuteSubbedIn: event.target.value }))}
+                    placeholder="Minute"
+                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case"
+                  />
+                </label>
+
+                <label className="text-[10px] font-black uppercase text-slate-500">
+                  Subbed out
+                  <input
+                    type="number"
+                    value={lineupForm.minuteSubbedOut}
+                    onChange={(event) => setLineupForm((current) => ({ ...current, minuteSubbedOut: event.target.value }))}
+                    placeholder="Minute"
+                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case"
+                  />
+                </label>
+
+                <div className="flex items-end gap-4 pb-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={lineupForm.starter}
+                      onChange={(event) => setLineupForm((current) => ({ ...current, starter: event.target.checked }))}
+                    />
+                    Starter
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={lineupForm.captain}
+                      onChange={(event) => setLineupForm((current) => ({ ...current, captain: event.target.checked }))}
+                    />
+                    Captain
+                  </label>
+                </div>
               </div>
-              <textarea value={lineupForm.notes} onChange={(event) => setLineupForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Selection notes" className="min-h-[64px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs" />
-              <div className="flex items-center justify-end gap-2">
-                <button type="button" onClick={() => {
-                  setEditingLineupEntry(null);
-                  setIsLineupFormOpen(false);
-                  setLineupForm({ playerId: '', position: '', starter: true, shirtNumber: '', captain: false, minuteSubbedIn: '', minuteSubbedOut: '', notes: '' });
-                }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">Cancel</button>
-                <button type="button" disabled={!lineupForm.playerId || saveStates.lineup?.state === 'saving'} onClick={() => void handleSaveLineupEntry()} className="rounded-md bg-emerald-700 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50">Save player</button>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Tactical & Selection Notes</label>
+                <textarea
+                  value={lineupForm.notes}
+                  onChange={(event) => setLineupForm((current) => ({ ...current, notes: event.target.value }))}
+                  placeholder="Individual tactical instructions, fitness constraints, set piece responsibilities..."
+                  className="min-h-[72px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingLineupEntry(null);
+                    setIsLineupFormOpen(false);
+                    setLineupForm({ playerId: '', position: '', starter: true, shirtNumber: '', captain: false, minuteSubbedIn: '', minuteSubbedOut: '', notes: '' });
+                  }}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!lineupForm.playerId || saveStates.lineup?.state === 'saving'}
+                  onClick={() => void handleSaveLineupEntry()}
+                  className="rounded-xl bg-emerald-700 hover:bg-emerald-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {saveStates.lineup?.state === 'saving' ? 'Saving...' : 'Save Player'}
+                </button>
               </div>
             </div>
-          )}
-
-          <div className="grid gap-5 border-t border-slate-200 p-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="relative min-h-[560px] overflow-hidden rounded-lg border-4 border-white bg-emerald-700 p-4 shadow-inner">
-              <div className="pointer-events-none absolute inset-4 border-2 border-white/60"><div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/60" /><div className="absolute left-0 right-0 top-1/2 border-t-2 border-white/60" /><div className="absolute bottom-0 left-1/2 h-20 w-40 -translate-x-1/2 border-x-2 border-t-2 border-white/60" /><div className="absolute left-1/2 top-0 h-20 w-40 -translate-x-1/2 border-x-2 border-b-2 border-white/60" /></div>
-              {starters.length === 0 ? <div className="relative flex min-h-[520px] items-center justify-center text-sm font-bold text-emerald-100">Add starters to build the formation</div> : <div className="relative flex min-h-[520px] flex-col justify-between py-5">{formationRows.map((row, index) => <div key={index} className="flex min-h-16 items-center justify-around">{row.map(renderPlayerToken)}</div>)}</div>}
-            </div>
-
-            <aside>
-              <div className="mb-3 flex items-center justify-between"><h4 className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Bench</h4><span className="text-xs font-bold text-slate-400">{substitutes.length} players</span></div>
-              <div className="divide-y divide-slate-200 rounded-lg border border-slate-200">
-                {substitutes.length === 0 ? <p className="p-4 text-xs text-slate-500">No substitutes selected.</p> : substitutes.map((entry) => { const player = getPlayer(entry.playerId); return <div key={entry.id} className="flex items-center gap-3 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-[10px] font-black">{player?.photoUrl ? <img src={player.photoUrl} alt="" className="h-full w-full object-cover" /> : entry.shirtNumber ?? player?.number ?? '–'}</span><button type="button" onClick={() => openLineupForm(entry)} className="min-w-0 flex-1 text-left"><span className="block truncate text-xs font-black text-slate-900">{getPlayerName(entry.playerId)}</span><span className="text-[10px] font-bold text-slate-500">{entry.position || 'Position TBD'}</span></button><button type="button" onClick={() => void handleRemoveLineupEntry(entry.id)} title="Remove player" className="p-1 text-slate-400 hover:text-rose-600"><X className="h-4 w-4" /></button></div>; })}
-              </div>
-            </aside>
           </div>
-        </div>
+        )}
       </div>
     );
   };

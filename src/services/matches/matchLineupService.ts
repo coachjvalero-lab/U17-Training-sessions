@@ -23,7 +23,46 @@ function getClient() {
   return supabase;
 }
 
+interface LineupNotesPayload {
+  x?: number | null;
+  y?: number | null;
+  notes?: string | null;
+}
+
+export function parseLineupNotes(rawNotes: string | null): { pitchX: number | null; pitchY: number | null; notes: string | null } {
+  if (!rawNotes) return { pitchX: null, pitchY: null, notes: null };
+  const trimmed = rawNotes.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed) as LineupNotesPayload;
+      return {
+        pitchX: typeof parsed.x === 'number' ? parsed.x : null,
+        pitchY: typeof parsed.y === 'number' ? parsed.y : null,
+        notes: typeof parsed.notes === 'string' ? parsed.notes : null
+      };
+    } catch {
+      // Return raw string if JSON parse fails
+    }
+  }
+  return { pitchX: null, pitchY: null, notes: rawNotes };
+}
+
+export function serializeLineupNotes(pitchX?: number | null, pitchY?: number | null, notes?: string | null): string | null {
+  const hasCoords = typeof pitchX === 'number' || typeof pitchY === 'number';
+  const cleanNotes = notes?.trim() || null;
+  if (!hasCoords && !cleanNotes) return null;
+  if (hasCoords) {
+    return JSON.stringify({
+      x: typeof pitchX === 'number' ? Math.round(pitchX * 10) / 10 : null,
+      y: typeof pitchY === 'number' ? Math.round(pitchY * 10) / 10 : null,
+      notes: cleanNotes
+    });
+  }
+  return cleanNotes;
+}
+
 function fromRow(row: MatchLineupRow): MatchLineupEntry {
+  const parsed = parseLineupNotes(row.notes);
   return {
     id: row.id,
     matchId: row.match_id,
@@ -34,7 +73,9 @@ function fromRow(row: MatchLineupRow): MatchLineupEntry {
     captain: Boolean(row.captain),
     minuteSubbedIn: row.minute_subbed_in ?? null,
     minuteSubbedOut: row.minute_subbed_out ?? null,
-    notes: row.notes ?? null,
+    notes: parsed.notes,
+    pitchX: parsed.pitchX,
+    pitchY: parsed.pitchY,
     createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at ?? undefined
   };
@@ -53,6 +94,7 @@ export async function getMatchLineup(matchId: string): Promise<MatchLineupEntry[
 }
 
 export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>): Promise<MatchLineupEntry> {
+  const serializedNotes = serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes);
   const payload = {
     id: entry.id,
     match_id: entry.matchId,
@@ -63,7 +105,7 @@ export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & 
     captain: Boolean(entry.captain),
     minute_subbed_in: entry.minuteSubbedIn ?? null,
     minute_subbed_out: entry.minuteSubbedOut ?? null,
-    notes: entry.notes ?? null,
+    notes: serializedNotes,
     updated_at: new Date().toISOString()
   };
 
@@ -75,6 +117,31 @@ export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & 
 
   if (error) throw error;
   return fromRow(data as MatchLineupRow);
+}
+
+export async function batchUpsertMatchLineupEntries(entries: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>>): Promise<MatchLineupEntry[]> {
+  if (entries.length === 0) return [];
+  const payloads = entries.map((entry) => ({
+    id: entry.id,
+    match_id: entry.matchId,
+    player_id: entry.playerId,
+    position: entry.position ?? '',
+    starter: Boolean(entry.starter),
+    shirt_number: entry.shirtNumber ?? null,
+    captain: Boolean(entry.captain),
+    minute_subbed_in: entry.minuteSubbedIn ?? null,
+    minute_subbed_out: entry.minuteSubbedOut ?? null,
+    notes: serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes),
+    updated_at: new Date().toISOString()
+  }));
+
+  const { data, error } = await getClient()
+    .from(MATCH_LINEUP_TABLE)
+    .upsert(payloads, { onConflict: 'match_id,player_id' })
+    .select('*');
+
+  if (error) throw error;
+  return ((data || []) as MatchLineupRow[]).map(fromRow);
 }
 
 export async function removeMatchLineupEntry(entryId: string): Promise<void> {
