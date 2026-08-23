@@ -30,7 +30,10 @@
     "stepA:preflight-snapshot": "tsx scripts/stepA-preflight-snapshot.ts",
     "stepA:backfill-fitness": "tsx scripts/backfill-fitness-sessions-from-legacy.ts",
     "stepA:backfill-fitness:dry": "tsx scripts/backfill-fitness-sessions-from-legacy.ts --dry-run",
-    "stepA:validate-fitness-backfill": "tsx scripts/validate-fitness-backfill.ts"
+    "stepA:validate-fitness-backfill": "tsx scripts/validate-fitness-backfill.ts",
+    "stepB:backfill-gk": "tsx scripts/backfill-gk-sessions-from-legacy.ts",
+    "stepB:backfill-gk:dry": "tsx scripts/backfill-gk-sessions-from-legacy.ts --dry-run",
+    "stepB:validate-gk-backfill": "tsx scripts/validate-gk-backfill.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
