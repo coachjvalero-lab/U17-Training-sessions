@@ -16,7 +16,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { MatchLineupEntry } from '../types';
-import { CloudSquadPlayer } from '../services/squadPlayerService';
+import { CloudSquadPlayer } from '../services/squad/squadService';
+import { PlayerPitchAvatar } from './PlayerPitchAvatar';
 import { 
   FormationType, 
   FormationSlot, 
@@ -501,21 +502,19 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                     }`}
                   >
                     {/* Player Badge Token */}
-                    <div className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-[#002142] text-xs font-black text-white shadow-xl ring-2 ring-black/20">
-                      {player?.photoUrl ? (
-                        <img 
-                          src={player.photoUrl} 
-                          alt="" 
-                          className="h-full w-full object-cover pointer-events-none" 
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <span>{entry.shirtNumber ?? player?.number ?? index + 1}</span>
-                      )}
+                    <div className="relative flex h-11 w-11 items-center justify-center">
+                      <PlayerPitchAvatar
+                        photoUrl={player?.photoUrl}
+                        shirtNumber={entry.shirtNumber ?? player?.number}
+                        fallbackNumber={index + 1}
+                        sizeClassName="h-11 w-11"
+                        className="border-2 border-white bg-[#002142] text-xs font-black text-white shadow-xl ring-2 ring-black/20"
+                        alt={getPlayerShortName(entry.playerId)}
+                      />
 
                       {/* Captain Armband */}
                       {entry.captain && (
-                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[8px] font-black text-slate-950 shadow">
+                        <span className="absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[8px] font-black text-slate-950 shadow">
                           C
                         </span>
                       )}
@@ -637,13 +636,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                   return (
                     <div key={entry.id} className="flex items-center justify-between py-2.5 group">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-black text-slate-700 border border-slate-200">
-                          {player?.photoUrl ? (
-                            <img src={player.photoUrl} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            entry.shirtNumber ?? player?.number ?? '–'
-                          )}
-                        </span>
+                        <PlayerPitchAvatar
+                          photoUrl={player?.photoUrl}
+                          shirtNumber={entry.shirtNumber ?? player?.number}
+                          fallbackNumber="–"
+                          sizeClassName="h-8 w-8"
+                          className="shrink-0 bg-slate-100 text-xs font-black text-slate-700 border border-slate-200"
+                          alt={getPlayerName(entry.playerId)}
+                        />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-black text-slate-900">
                             {getPlayerName(entry.playerId)}
@@ -747,13 +747,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                   return (
                     <div key={player.id} className="flex items-center justify-between py-2.5 group">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-black text-slate-700 border border-slate-200">
-                          {player.photoUrl ? (
-                            <img src={player.photoUrl} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            player.number ?? '–'
-                          )}
-                        </span>
+                        <PlayerPitchAvatar
+                          photoUrl={player.photoUrl}
+                          shirtNumber={player.number}
+                          fallbackNumber="–"
+                          sizeClassName="h-8 w-8"
+                          className="shrink-0 bg-slate-100 text-xs font-black text-slate-700 border border-slate-200"
+                          alt={`${player.firstName} ${player.lastName}`}
+                        />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-slate-900">
                             {player.firstName} {player.lastName}
@@ -868,9 +869,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-black">
-                            {entry.shirtNumber ?? player?.number ?? '–'}
-                          </span>
+                          <PlayerPitchAvatar
+                            photoUrl={player?.photoUrl}
+                            shirtNumber={entry.shirtNumber ?? player?.number}
+                            fallbackNumber="–"
+                            sizeClassName="h-7 w-7"
+                            className="bg-slate-100 text-xs font-black text-slate-700"
+                            alt={getPlayerName(entry.playerId)}
+                          />
                           <span className="text-xs font-bold text-slate-900">{getPlayerName(entry.playerId)}</span>
                         </div>
                         <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
@@ -894,9 +900,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                       className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-black">
-                          {player.number ?? '–'}
-                        </span>
+                        <PlayerPitchAvatar
+                          photoUrl={player.photoUrl}
+                          shirtNumber={player.number}
+                          fallbackNumber="–"
+                          sizeClassName="h-7 w-7"
+                          className="bg-slate-100 text-xs font-black text-slate-700"
+                          alt={`${player.firstName} ${player.lastName}`}
+                        />
                         <span className="text-xs font-bold text-slate-900">{player.firstName} {player.lastName}</span>
                       </div>
                       <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">

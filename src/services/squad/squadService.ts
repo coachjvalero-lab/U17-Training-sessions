@@ -45,6 +45,8 @@ export type EditableSquadPlayerPatch = {
   heightCm?: number | null;
   weightKg?: number | null;
   photoUrl?: string | null;
+  malikaPoints?: number | null;
+  malikaHistory?: SquadPlayer['malikaHistory'] | null;
 };
 
 function getClient() {
@@ -116,6 +118,8 @@ function toEditablePatchRow(patch: EditableSquadPlayerPatch, updatedAt: number):
   if (patch.heightCm !== undefined) row.height_cm = patch.heightCm;
   if (patch.weightKg !== undefined) row.weight_kg = patch.weightKg;
   if (patch.photoUrl !== undefined) row.photo_url = normalizeSquadPhotoUrl(patch.photoUrl ?? undefined) ?? null;
+  if (patch.malikaPoints !== undefined) row.malika_points = patch.malikaPoints;
+  if (patch.malikaHistory !== undefined) row.malika_history = patch.malikaHistory ?? [];
 
   return row;
 }

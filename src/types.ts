@@ -250,6 +250,28 @@ export interface FitnessSession {
   updatedAt: number;
 }
 
+export interface GkSession {
+  id: string;
+  sessionUid: string;
+  legacySessionId?: string;
+  teamName: string;
+  date: string;
+  time: string;
+  sessionNumber: string;
+  microcycleDay: string;
+  mainObjective: string;
+  materialsNeeded: string;
+  observations?: string;
+  squadRoster: string[];
+  attendance: PlayerAttendance[];
+  gkWarmUp: TrainingBlock;
+  gkMainPart: TrainingBlock;
+  gkCoolDown: TrainingBlock;
+  gkPlayerGroups: PlayerGroup[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TrainingBlock {
   id: string;
   title: string;

@@ -534,12 +534,15 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     if (!selectedMatch) return;
     try {
       setSaveState('lineup', 'saving');
+      const shirtNum = player.number !== undefined && player.number !== null && player.number !== ''
+        ? Number(player.number)
+        : null;
       const saved = await upsertMatchLineupEntry({
         matchId: selectedMatch.id,
         playerId: player.id,
         position: slot?.position || player.position || 'UTIL',
         starter: asStarter,
-        shirtNumber: player.number ?? null,
+        shirtNumber: Number.isNaN(shirtNum) ? null : shirtNum,
         captain: false,
         pitchX: asStarter ? (slot?.x ?? 50) : null,
         pitchY: asStarter ? (slot?.y ?? 50) : null

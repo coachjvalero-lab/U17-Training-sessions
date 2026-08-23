@@ -26,6 +26,7 @@ import {
   PlayerAttendance, 
   PortalSection,
   CloudTrainingSession,
+  GkSession,
   SquadPlayer,
   VideoAnalysis
 } from './types';
@@ -80,6 +81,11 @@ import {
   saveTrainingSessionBySection,
   subscribeTrainingSessions
 } from './modules/trainingSessionPersistence';
+import {
+  deleteGkSession,
+  saveGkSession,
+  subscribeToGkSessions
+} from './services/gk/gkSessionsService';
 import {
   getDataProvider,
   getPermissionsProvider,
@@ -511,6 +517,7 @@ export default function App() {
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
+  const [gkSessions, setGkSessions] = useState<GkSession[]>([]);
   const [fitnessBySessionUid, setFitnessBySessionUid] = useState<Record<string, {
     fitnessWarmUp?: TrainingSession['fitnessWarmUp'];
     fitnessMainPart?: TrainingSession['fitnessMainPart'];
@@ -523,6 +530,44 @@ export default function App() {
   useEffect(() => {
     fitnessBySessionUidRef.current = fitnessBySessionUid;
   }, [fitnessBySessionUid]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToGkSessions(
+      (items) => {
+        setGkSessions(items);
+      },
+      (error) => {
+        console.warn('Failed loading GK sessions:', error);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const gkCloudSessions = useMemo<CloudTrainingSession[]>(() => {
+    return gkSessions.map((gk) => ({
+      id: gk.id,
+      sessionNumber: gk.sessionNumber,
+      date: gk.date,
+      time: gk.time,
+      teamName: gk.teamName,
+      microcycleDay: gk.microcycleDay,
+      mainObjective: gk.mainObjective,
+      materialsNeeded: gk.materialsNeeded,
+      observations: gk.observations,
+      squadRoster: gk.squadRoster,
+      attendance: gk.attendance,
+      warmUp: gk.gkWarmUp,
+      mainPart: gk.gkMainPart,
+      coolDown: gk.gkCoolDown,
+      playerGroups: gk.gkPlayerGroups,
+      gkWarmUp: gk.gkWarmUp,
+      gkMainPart: gk.gkMainPart,
+      gkCoolDown: gk.gkCoolDown,
+      gkPlayerGroups: gk.gkPlayerGroups,
+      updatedAt: gk.updatedAt,
+      gkUpdatedAt: gk.updatedAt
+    }));
+  }, [gkSessions]);
 
   const [libraryCount, setLibraryCount] = useState<number>(() => {
     try {
@@ -1052,6 +1097,8 @@ export default function App() {
         heightCm?: number | null;
         weightKg?: number | null;
         photoUrl?: string | null;
+        malikaPoints?: number | null;
+        malikaHistory?: SquadPlayer['malikaHistory'] | null;
       } = {};
 
       if (prevPlayer.firstName !== player.firstName) patch.firstName = player.firstName;
@@ -1069,6 +1116,10 @@ export default function App() {
       if ((prevPlayer.heightCm ?? null) !== (player.heightCm ?? null)) patch.heightCm = player.heightCm ?? null;
       if ((prevPlayer.weightKg ?? null) !== (player.weightKg ?? null)) patch.weightKg = player.weightKg ?? null;
       if ((prevPlayer.photoUrl ?? null) !== (player.photoUrl ?? null)) patch.photoUrl = player.photoUrl ?? null;
+      if ((prevPlayer.malikaPoints ?? 0) !== (player.malikaPoints ?? 0)) patch.malikaPoints = player.malikaPoints ?? 0;
+      if (JSON.stringify(prevPlayer.malikaHistory ?? []) !== JSON.stringify(player.malikaHistory ?? [])) {
+        patch.malikaHistory = player.malikaHistory ?? [];
+      }
 
       if (Object.keys(patch).length > 0) {
         persistOps.push(updateSquadPlayer(player.id, patch));
@@ -1127,7 +1178,7 @@ export default function App() {
     });
   }, [cloudSessions, session.attendance, squadPlayers, squadStatistics.players]);
 
-  const handleApplyMalikaPoints = ({
+  const handleApplyMalikaPoints = async ({
     sessionId,
     exerciseId,
     challenge,
@@ -1147,9 +1198,14 @@ export default function App() {
       awards,
       awardedAt: Date.now()
     });
-    void handleUpdateSquadPlayers(nextPlayers).catch((err) => {
-      console.warn('Cloud save failed for squad player:', err);
-    });
+    try {
+      await handleUpdateSquadPlayers(nextPlayers);
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string; details?: string; hint?: string };
+      const errMsg = errorObj?.message || errorObj?.details || 'Error updating Malika points in Supabase';
+      console.error('Failed to persist Malika Golden points to Supabase:', err);
+      alert(`Supabase save error: ${errMsg}`);
+    }
   };
 
   const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
@@ -1217,13 +1273,10 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
-    if (role === 'gk') {
-      alert('GK persistence is blocked: no independent GK storage is implemented yet.');
-      return;
-    }
 
     // Role-specific conflict check: only compare the timestamp for fields this role owns
-    const cloudCopy = cloudSessions.find(s => s.id === session.id);
+    const sessionList = role === 'gk' ? gkCloudSessions : cloudSessions;
+    const cloudCopy = sessionList.find(s => s.id === session.id);
     if (cloudCopy) {
       const cloudRoleTime = getModuleCloudUpdatedAt(cloudCopy, role);
       const localRoleTime = lastLoadedSessionTimeRef.current[role];
@@ -1292,15 +1345,16 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
-    if (role === 'gk') {
-      alert('GK session creation is blocked: no independent GK storage is implemented yet.');
-      return;
-    }
+    const isGk = role === 'gk';
 
     const empty = getEmptySession();
-    const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    const newId = isGk
+      ? 'gk-session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)
+      : 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const today = new Date().toISOString().split('T')[0];
-    const rosterFromSquad = formatSessionRosterFromSquad(squadPlayersWithStats);
+    const rosterFromSquad = isGk
+      ? goalkeeperRoster
+      : formatSessionRosterFromSquad(squadPlayersWithStats);
 
     const newSession: TrainingSession = normalizeSessionRoster({
       ...empty,
@@ -1309,7 +1363,11 @@ export default function App() {
       date: today,
       teamName: 'U17 Women Al Ula',
       squadRoster: rosterFromSquad,
-      attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
+      attendance: buildDefaultAttendanceFromRoster(rosterFromSquad),
+      gkWarmUp: { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+      gkMainPart: { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+      gkCoolDown: { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+      gkPlayerGroups: []
     });
 
     try {
@@ -1319,7 +1377,7 @@ export default function App() {
         global: optimisticTime,
         football: role === 'football' ? optimisticTime : 0,
         fitness: role === 'fitness' ? optimisticTime : 0,
-        gk: 0
+        gk: isGk ? optimisticTime : 0
       });
       setSession(newSession);
 
@@ -1327,31 +1385,33 @@ export default function App() {
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, newSession);
 
-        const cloudSession: CloudTrainingSession = {
-          ...newSession,
-          updatedAt: savedTime,
-          footballUpdatedAt: role === 'football' ? savedTime : undefined,
-          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
-          gkUpdatedAt: undefined,
-        };
+        if (!isGk) {
+          const cloudSession: CloudTrainingSession = {
+            ...newSession,
+            updatedAt: savedTime,
+            footballUpdatedAt: role === 'football' ? savedTime : undefined,
+            fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
+            gkUpdatedAt: undefined,
+          };
 
-        setCloudSessions((prev) => {
-          const withoutCurrent = prev.filter((item) => item.id !== cloudSession.id);
-          return [cloudSession, ...withoutCurrent];
-        });
+          setCloudSessions((prev) => {
+            const withoutCurrent = prev.filter((item) => item.id !== cloudSession.id);
+            return [cloudSession, ...withoutCurrent];
+          });
 
-        try {
-          localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
-            cloudSession,
-            ...cloudSessions.filter((item) => item.id !== cloudSession.id)
-          ]));
-        } catch (e) {}
+          try {
+            localStorage.setItem(CLOUD_SESSIONS_CACHE_KEY, JSON.stringify([
+              cloudSession,
+              ...cloudSessions.filter((item) => item.id !== cloudSession.id)
+            ]));
+          } catch (e) {}
+        }
 
         initializeSessionSyncState(newSession, {
           global: savedTime,
           football: role === 'football' ? savedTime : 0,
           fitness: role === 'fitness' ? savedTime : 0,
-          gk: 0
+          gk: isGk ? savedTime : 0
         });
       } catch (cloudErr) {
         const errorCode = cloudErr && typeof cloudErr === 'object' && 'code' in cloudErr ? String((cloudErr as { code?: unknown }).code) : 'unknown';
@@ -1405,27 +1465,33 @@ export default function App() {
 
   const handleDeleteCloudSession = async (sessionId: string, sessionNum: string, event: React.MouseEvent) => {
     event.stopPropagation(); // prevent loading when clicking delete
-    if (activeSection === 'gk') {
-      alert('GK deletion is blocked: no independent GK storage is implemented yet.');
-      return;
-    }
+    const isGk = activeSection === 'gk';
     if (confirm(`Are you absolutely sure you want to delete session #${sessionNum} from the cloud database? This cannot be undone.`)) {
       try {
         setIsCloudSaving(true);
-        await deleteTrainingSession(sessionId);
+        if (isGk) {
+          await deleteGkSession(sessionId);
+        } else {
+          await deleteTrainingSession(sessionId);
+        }
 
         // If the deleted session is currently active in React state:
         if (session.id === sessionId) {
-          const remaining = cloudSessions.filter(s => s.id !== sessionId);
+          const sessionList = isGk ? gkCloudSessions : cloudSessions;
+          const remaining = sessionList.filter(s => s.id !== sessionId);
           if (remaining.length > 0) {
             const nextSession = remaining[0];
             applyCloudSessionToState(nextSession);
           } else {
             // No sessions left in cloud, create a fresh session
             const empty = getEmptySession();
-            const newId = 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+            const newId = isGk
+              ? 'gk-session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)
+              : 'session-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
             const today = new Date().toISOString().split('T')[0];
-            const rosterFromSquad = formatSessionRosterFromSquad(squadPlayersWithStats);
+            const rosterFromSquad = isGk
+              ? goalkeeperRoster
+              : formatSessionRosterFromSquad(squadPlayersWithStats);
 
             const newSession: TrainingSession = {
               ...empty,
@@ -1434,7 +1500,11 @@ export default function App() {
               date: today,
               teamName: 'U17 Women Al Ula',
               squadRoster: rosterFromSquad,
-              attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
+              attendance: buildDefaultAttendanceFromRoster(rosterFromSquad),
+              gkWarmUp: { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
+              gkMainPart: { id: 'main-block-gk', title: 'Main Part', exercises: [] },
+              gkCoolDown: { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
+              gkPlayerGroups: []
             };
 
             const optimisticTime = Date.now();
@@ -1469,10 +1539,6 @@ export default function App() {
     }
 
     const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
-    if (role === 'gk') {
-      alert('GK share/save is blocked: no independent GK storage is implemented yet.');
-      return;
-    }
 
     try {
       setIsCloudSaving(true);
@@ -1488,7 +1554,7 @@ export default function App() {
       markActiveSessionSyncProgress(role, optimisticTime, getSessionSyncSignature(sessionToSave));
       setCloudSyncStatus({ status: 'saving' });
 
-      // 3. Try Cloud Firestore save (only save fields for current role)
+      // 3. Try Cloud Firestore / Supabase save (only save fields for current role)
       try {
         const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, sessionToSave);
         markActiveSessionSyncProgress(role, savedTime, getSessionSyncSignature(sessionToSave));
@@ -1533,9 +1599,12 @@ export default function App() {
 
   const sharedHeader = getSharedSessionHeader(session, lastLoadedSessionTimeRef.current.global);
   const fullSquadRoster = session.squadRoster || squadPlayersWithStats.map(p => `${p.firstName} ${p.lastName}`);
-  const goalkeeperRoster = squadPlayersWithStats
-    .filter((player) => player.position === 'GK')
-    .map((player) => `${player.firstName} (GK)`);
+  const goalkeeperSquadPlayers = useMemo(() => {
+    return squadPlayersWithStats.filter((player) => player.position === 'GK');
+  }, [squadPlayersWithStats]);
+  const goalkeeperRoster = useMemo(() => {
+    return goalkeeperSquadPlayers.map((player) => `${player.firstName} (GK)`);
+  }, [goalkeeperSquadPlayers]);
 
   const renderThemeToggle = () => (
     <div className="fixed top-4 right-4 z-[90] print:hidden">
@@ -1825,13 +1894,13 @@ export default function App() {
         ) : activeSection === 'gk' ? (
           <FootballHubSection
             session={session}
-            cloudSessions={cloudSessions}
+            cloudSessions={gkCloudSessions}
             onChangeSession={handleUpdateSession}
             onAddExerciseToSession={handleAddExerciseFromLibrary}
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
             onNewSession={handleCreateNewCloudSession}
-            squadPlayers={squadPlayersWithStats}
+            squadPlayers={goalkeeperSquadPlayers}
             squadRoster={goalkeeperRoster}
             role="gk"
             currentLogo={teamLogo}
@@ -1842,7 +1911,7 @@ export default function App() {
                 sharedHeader={sharedHeader}
                 planningRoster={goalkeeperRoster}
                 currentLogo={teamLogo}
-                squadPlayers={squadPlayersWithStats}
+                squadPlayers={goalkeeperSquadPlayers}
                 isSaving={isCloudSaving}
                 expandedExercises={expandedExercises}
                 excludedPlayers={excludedPlayers}

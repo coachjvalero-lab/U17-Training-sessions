@@ -58,23 +58,43 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   onApplyMalikaPoints
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
-  const isHeaderReadOnly = moduleId === 'gk';
-  const isSharedDataReadOnly = moduleId !== 'football';
-  const sessionAttendance = Array.isArray(session.attendance) ? session.attendance : [];
+  const isGk = moduleId === 'gk';
+  const isHeaderReadOnly = false;
+  const isSharedDataReadOnly = moduleId !== 'football' && !isGk;
+
+  const rawAttendance = Array.isArray(session.attendance) ? session.attendance : [];
+  const sessionAttendance = isGk
+    ? rawAttendance.filter((entry) => {
+        const name = (entry.playerName || '').trim();
+        if (!name) return false;
+        // In GK module, only retain attendance entries matching Goalkeepers
+        return squadPlayers.some((sp) => {
+          if (sp.position !== 'GK') return false;
+          const first = sp.firstName.toLowerCase();
+          const full = `${sp.firstName} ${sp.lastName}`.toLowerCase().trim();
+          const gkTag = `${sp.firstName} (gk)`.toLowerCase();
+          const lowerName = name.toLowerCase();
+          return lowerName === first || lowerName === full || lowerName === gkTag || lowerName.includes('(gk)');
+        });
+      })
+    : rawAttendance;
+
   const attendanceOnlyPlayers = sessionAttendance
     .map((entry) => entry.playerName?.trim())
     .filter((name): name is string => Boolean(name));
   const rosterForAttendance = Array.from(new Set([...planningRoster, ...attendanceOnlyPlayers]));
 
-  const sessionWithSharedHeader: TrainingSession = {
-    ...session,
-    id: sharedHeader.id,
-    sessionNumber: sharedHeader.sessionNumber,
-    date: sharedHeader.date,
-    time: sharedHeader.time,
-    teamName: sharedHeader.teamName,
-    microcycleDay: sharedHeader.microcycleDay
-  };
+  const sessionWithSharedHeader: TrainingSession = isGk
+    ? session
+    : {
+        ...session,
+        id: sharedHeader.id,
+        sessionNumber: sharedHeader.sessionNumber,
+        date: sharedHeader.date,
+        time: sharedHeader.time,
+        teamName: sharedHeader.teamName,
+        microcycleDay: sharedHeader.microcycleDay
+      };
 
   const updateHeaderFields = isHeaderReadOnly ? (() => {}) : onUpdateHeader;
   const updateAttendance = isSharedDataReadOnly ? (() => {}) : onUpdateAttendance;

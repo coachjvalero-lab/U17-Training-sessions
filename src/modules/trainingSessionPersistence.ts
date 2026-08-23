@@ -4,7 +4,8 @@ import {
   subscribeToSessionsSupabase
 } from '../supabaseSessions';
 import { saveFitnessSession } from '../services/fitness/fitnessSessionsService';
-import { CloudTrainingSession, FitnessSession, PortalSection, TrainingSession } from '../types';
+import { deleteGkSession, saveGkSession } from '../services/gk/gkSessionsService';
+import { CloudTrainingSession, FitnessSession, GkSession, PortalSection, TrainingSession } from '../types';
 import { DEFAULT_MODULE_ID, getModuleIdFromSection } from './trainingModules';
 
 function toFitnessSessionRecord(session: TrainingSession): FitnessSession {
@@ -32,6 +33,43 @@ function toFitnessSessionRecord(session: TrainingSession): FitnessSession {
     fitnessMainPart: session.fitnessMainPart,
     fitnessCoolDown: session.fitnessCoolDown,
     fitnessPlayerGroups: session.fitnessPlayerGroups || [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function toGkSessionRecord(session: TrainingSession): GkSession {
+  const normalizedSessionUid = (session.id || '').trim();
+  if (!normalizedSessionUid || normalizedSessionUid.startsWith('empty-session-')) {
+    throw new Error('Goalkeeper persistence requires a valid session UID.');
+  }
+
+  const now = Date.now();
+  const recordId = normalizedSessionUid.startsWith('gk-') ? normalizedSessionUid : `gk-${normalizedSessionUid}`;
+  
+  const gkWarmUp = session.gkWarmUp || session.warmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] };
+  const gkMainPart = session.gkMainPart || session.mainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] };
+  const gkCoolDown = session.gkCoolDown || session.coolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] };
+  const gkPlayerGroups = session.gkPlayerGroups || session.playerGroups || [];
+
+  return {
+    id: recordId,
+    sessionUid: normalizedSessionUid,
+    legacySessionId: normalizedSessionUid,
+    teamName: session.teamName,
+    date: session.date,
+    time: session.time,
+    sessionNumber: session.sessionNumber,
+    microcycleDay: session.microcycleDay,
+    mainObjective: session.mainObjective,
+    materialsNeeded: session.materialsNeeded,
+    observations: session.observations,
+    squadRoster: session.squadRoster || [],
+    attendance: session.attendance || [],
+    gkWarmUp,
+    gkMainPart,
+    gkCoolDown,
+    gkPlayerGroups,
     createdAt: now,
     updatedAt: now
   };
@@ -85,5 +123,11 @@ export async function saveTrainingSessionBySection(
     return { moduleId, savedAt };
   }
 
-  throw new Error('GK module has no independent persistence model yet. Writes are blocked by design.');
+  if (moduleId === 'gk') {
+    const payload = toGkSessionRecord(session);
+    const savedAt = await saveGkSession(payload);
+    return { moduleId, savedAt };
+  }
+
+  throw new Error(`Unsupported module for saving: ${moduleId}`);
 }
