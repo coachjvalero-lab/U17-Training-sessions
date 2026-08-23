@@ -80,7 +80,7 @@ create policy gk_sessions_section_gk
   );
 
 -- -----------------------------------------------------------------------------
--- 3) Backfill historical GK sessions from legacy sessions if any exist
+-- 3) Backfill historical GK sessions from legacy sessions (only sessions with GK content)
 -- -----------------------------------------------------------------------------
 insert into public.session_catalog (
   session_uid,
@@ -100,10 +100,10 @@ select
 from public.sessions s
 where
   s.gk_updated_at is not null
-  or s.gk_warm_up is not null
-  or s.gk_main_part is not null
-  or s.gk_cool_down is not null
-  or s.gk_player_groups is not null
+  or (s.gk_warm_up is not null and s.gk_warm_up != 'null'::jsonb and s.gk_warm_up != '{}'::jsonb)
+  or (s.gk_main_part is not null and s.gk_main_part != 'null'::jsonb and s.gk_main_part != '{}'::jsonb)
+  or (s.gk_cool_down is not null and s.gk_cool_down != 'null'::jsonb and s.gk_cool_down != '{}'::jsonb)
+  or (s.gk_player_groups is not null and s.gk_player_groups != 'null'::jsonb and s.gk_player_groups != '[]'::jsonb and s.gk_player_groups != '{}'::jsonb)
 on conflict (session_uid) do update
 set
   session_number = excluded.session_number,
@@ -154,10 +154,10 @@ select
 from public.sessions s
 where
   s.gk_updated_at is not null
-  or s.gk_warm_up is not null
-  or s.gk_main_part is not null
-  or s.gk_cool_down is not null
-  or s.gk_player_groups is not null
+  or (s.gk_warm_up is not null and s.gk_warm_up != 'null'::jsonb and s.gk_warm_up != '{}'::jsonb)
+  or (s.gk_main_part is not null and s.gk_main_part != 'null'::jsonb and s.gk_main_part != '{}'::jsonb)
+  or (s.gk_cool_down is not null and s.gk_cool_down != 'null'::jsonb and s.gk_cool_down != '{}'::jsonb)
+  or (s.gk_player_groups is not null and s.gk_player_groups != 'null'::jsonb and s.gk_player_groups != '[]'::jsonb and s.gk_player_groups != '{}'::jsonb)
 on conflict (id) do update
 set
   session_uid = excluded.session_uid,

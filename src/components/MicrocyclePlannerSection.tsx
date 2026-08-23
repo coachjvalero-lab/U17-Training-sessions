@@ -75,25 +75,43 @@ const AVAILABILITY_CATEGORIES: { key: MicrocycleAvailabilityCategory; label: str
   { key: 'national_team_u17', label: 'National Team U17' }
 ];
 
-const DAY_FIELDS: { key: string; label: string; type: 'text' | 'textarea' | 'datalist' | 'sessionLink' | 'concepts' | 'objectives'; listId?: string }[] = [
-  { key: 'dayDate', label: 'Date', type: 'text' },
-  { key: 'dayLabel', label: 'Day', type: 'text' },
-  { key: 'trainingSession', label: 'Training Session', type: 'text' },
-  { key: 'sessionType', label: 'Session Type', type: 'datalist', listId: 'session-type-list' },
-  { key: 'mdLabel', label: 'MD', type: 'datalist', listId: 'md-list' },
-  { key: 'duration', label: 'Duration', type: 'text' },
-  { key: 'load', label: 'Load', type: 'datalist', listId: 'load-list' },
-  { key: 'stage', label: 'Stage', type: 'text' },
-  { key: 'before', label: 'Before', type: 'textarea' },
-  { key: 'preTrainingSession', label: 'Pre-training Session', type: 'textarea' },
-  { key: 'warmUp', label: 'Warm-up', type: 'textarea' },
-  { key: 'pitch', label: 'Pitch', type: 'textarea' },
-  { key: 'concepts', label: 'Main Concepts', type: 'concepts' },
-  { key: 'objectives', label: 'Objectives', type: 'objectives' },
-  { key: 'postTrainingSession', label: 'Post-training Session', type: 'textarea' },
-  { key: 'after', label: 'After', type: 'textarea' },
-  { key: 'notes', label: 'Notes', type: 'textarea' },
-  { key: 'sessionLink', label: 'Linked Session', type: 'sessionLink' }
+type PlannerPhase = 'header' | 'preparation' | 'main' | 'post' | 'final';
+
+const DAY_FIELDS: {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'datalist' | 'sessionLink' | 'concepts' | 'objectives';
+  listId?: string;
+  phase: PlannerPhase;
+  subLabel?: string;
+}[] = [
+  // 1. MICROCYCLE HEADER
+  { key: 'dayDate', label: 'Date', type: 'text', phase: 'header', subLabel: 'Fecha' },
+  { key: 'dayLabel', label: 'Day', type: 'text', phase: 'header', subLabel: 'Día' },
+  { key: 'trainingSession', label: 'Training Session', type: 'text', phase: 'header', subLabel: 'Nº Sesión' },
+  { key: 'sessionType', label: 'Session Type', type: 'datalist', listId: 'session-type-list', phase: 'header', subLabel: 'Tipo de Sesión' },
+  { key: 'mdLabel', label: 'MD', type: 'datalist', listId: 'md-list', phase: 'header', subLabel: 'Match Day' },
+  { key: 'duration', label: 'Duration', type: 'text', phase: 'header', subLabel: 'Duración (min)' },
+  { key: 'load', label: 'Load', type: 'datalist', listId: 'load-list', phase: 'header', subLabel: 'Carga' },
+  { key: 'stage', label: 'Stage', type: 'text', phase: 'header', subLabel: 'Etapa / Momento' },
+
+  // 2. PREPARATION PHASE
+  { key: 'before', label: 'Before', type: 'textarea', phase: 'preparation', subLabel: 'Antes / Activación' },
+  { key: 'preTrainingSession', label: 'Pre-training Session', type: 'textarea', phase: 'preparation', subLabel: 'Pre-entreno' },
+  { key: 'warmUp', label: 'Warm-up', type: 'textarea', phase: 'preparation', subLabel: 'Calentamiento' },
+
+  // 3. MAIN TRAINING PHASE (DOMINANT VISUAL BLOCK)
+  { key: 'pitch', label: 'Pitch', type: 'textarea', phase: 'main', subLabel: 'Campo / Tarea Principal' },
+  { key: 'concepts', label: 'Main Concepts', type: 'concepts', phase: 'main', subLabel: 'Conceptos Tácticos' },
+  { key: 'objectives', label: 'Objectives', type: 'objectives', phase: 'main', subLabel: 'Objetivos Específicos' },
+
+  // 4. POST-TRAINING PHASE
+  { key: 'postTrainingSession', label: 'Post-training Session', type: 'textarea', phase: 'post', subLabel: 'Post-entreno' },
+  { key: 'after', label: 'After', type: 'textarea', phase: 'post', subLabel: 'Después / Vuelta a la calma' },
+
+  // 5. FINAL INFORMATION
+  { key: 'notes', label: 'Notes', type: 'textarea', phase: 'final', subLabel: 'Observaciones' },
+  { key: 'sessionLink', label: 'Linked Session', type: 'sessionLink', phase: 'final', subLabel: 'Sesión Vinculada' }
 ];
 
 function isoDateFromToday(offsetDays = 0): string {
@@ -1131,145 +1149,364 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                 <div className="overflow-x-auto">
                   <table className="min-w-[1320px] w-full border-collapse text-xs table-fixed">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200">
-                        <th className="sticky left-0 z-20 bg-slate-100 text-left px-3 py-3 font-black uppercase tracking-wide text-slate-600 w-[220px]">
-                          Planning Category
+                      <tr className="bg-[#002142] text-white border-b border-slate-800">
+                        <th className="sticky left-0 z-20 bg-[#002142] text-left px-3.5 py-3.5 font-black uppercase tracking-wider text-white w-[230px] border-r border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.15)]">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <div>
+                              <div className="font-black text-white text-xs tracking-wider">MICROCYCLE</div>
+                              <div className="text-[10px] text-slate-300 font-semibold normal-case tracking-normal">Category / Planning Phase</div>
+                            </div>
+                          </div>
                         </th>
                         {draft.days.map((day) => (
-                          <th key={day.id} className="px-3 py-3 text-left border-l border-slate-200 w-[157px] align-bottom">
-                            <div className="font-black text-slate-800 text-sm">{day.dayLabel || 'Day'}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 font-medium">{day.dayDate}</div>
+                          <th key={day.id} className="px-3 py-3 text-left border-l border-slate-700/80 w-[157px] align-bottom bg-[#002142] hover:bg-[#002b56] transition-colors">
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-white text-sm tracking-tight">{day.dayLabel || 'Day'}</span>
+                              {day.mdLabel && (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono font-black">
+                                  {day.mdLabel}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-300 font-bold mt-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400 inline" />
+                              <span>{day.dayDate}</span>
+                            </div>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {DAY_FIELDS.map((row, rowIndex) => (
-                        <tr key={row.key} className={`align-top border-b border-slate-100 ${rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="sticky left-0 z-10 bg-inherit px-3 py-2.5 font-bold text-slate-700 border-r border-slate-100 align-top">
-                            {row.label}
-                          </td>
-                          {draft.days.map((day) => {
-                            const linkedOptions = selectedLinkedSessionsByDate.get(day.id) || [];
-                            const linkedSession = selectedSessionById(day.sessionId);
+                      {DAY_FIELDS.map((row, rowIndex) => {
+                        const prevPhase = rowIndex > 0 ? DAY_FIELDS[rowIndex - 1].phase : null;
+                        const isFirstInPhase = prevPhase !== row.phase;
 
-                            if (row.type === 'sessionLink') {
+                        const renderPhaseBanner = () => {
+                          if (!isFirstInPhase) return null;
+                          switch (row.phase) {
+                            case 'header':
                               return (
-                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                                  <select
-                                    value={day.sessionId || ''}
-                                    onChange={(e) => setDayValue(day.id, 'sessionId', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
-                                  >
-                                    <option value="">No linked session</option>
-                                    {linkedOptions.map((session) => (
-                                      <option key={session.id} value={session.id}>
-                                        #{session.sessionNumber} - {session.mainObjective || 'Session'}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  {linkedSession && (
-                                    <div className="mt-1.5 space-y-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => onOpenSession && onOpenSession(linkedSession)}
-                                        className="text-[11px] text-emerald-700 font-bold inline-flex items-center gap-1 hover:underline"
+                                <tr key="phase-banner-header" className="bg-slate-100 border-y-2 border-slate-300 select-none">
+                                  <td className="sticky left-0 z-20 bg-slate-200 px-3.5 py-2 font-black text-[11px] uppercase tracking-wider text-slate-800 border-r border-slate-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                                      <span>Microcycle Header</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={draft.days.length} className="px-3.5 py-2 bg-slate-100 text-[11px] font-bold text-slate-600 border-l border-slate-200">
+                                    <div className="flex items-center justify-between">
+                                      <span>Date, Match Day (MD), Session Type, Duration & Load Parameters</span>
+                                      <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300">
+                                        Phase A · Header
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+
+                            case 'preparation':
+                              return (
+                                <tr key="phase-banner-prep" className="bg-amber-100/90 border-t-2 border-b border-amber-300 select-none">
+                                  <td className="sticky left-0 z-20 bg-amber-100 px-3.5 py-2 font-black text-[11px] uppercase tracking-wider text-amber-950 border-r border-amber-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                      <span>Preparation Phase</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={draft.days.length} className="px-3.5 py-2 bg-amber-50 text-[11px] font-bold text-amber-900 border-l border-amber-200">
+                                    <div className="flex items-center justify-between">
+                                      <span>Before, Pre-training Session Protocols & Warm-up Routines</span>
+                                      <span className="text-[10px] font-mono uppercase tracking-widest text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded border border-amber-300">
+                                        Phase B · Prep
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+
+                            case 'main':
+                              return (
+                                <tr key="phase-banner-main" className="bg-[#002142] text-white border-y-2 border-emerald-500 shadow-md select-none">
+                                  <td className="sticky left-0 z-20 bg-[#002142] px-3.5 py-3 font-black text-xs uppercase tracking-widest text-emerald-300 border-r border-slate-800">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-emerald-400/30 animate-pulse shrink-0" />
+                                      <span className="font-extrabold text-sm tracking-wider text-white">MAIN TRAINING</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={draft.days.length} className="px-4 py-3 bg-[#002142] text-xs font-bold text-white border-l border-slate-800">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-emerald-400 text-sm font-black">★</span>
+                                        <span className="text-white font-extrabold tracking-wide">Core Pitch Work, Tactical Concepts & Microcycle Objectives</span>
+                                      </div>
+                                      <span className="text-[11px] font-mono font-black uppercase tracking-widest text-emerald-300 bg-emerald-950/90 px-2.5 py-1 rounded-md border border-emerald-500/60 shadow-xs">
+                                        Phase C · Dominant Block
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+
+                            case 'post':
+                              return (
+                                <tr key="phase-banner-post" className="bg-sky-100/90 border-t-2 border-b border-sky-300 select-none">
+                                  <td className="sticky left-0 z-20 bg-sky-100 px-3.5 py-2 font-black text-[11px] uppercase tracking-wider text-sky-950 border-r border-sky-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-sky-700 shrink-0" />
+                                      <span>Post-Training Phase</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={draft.days.length} className="px-3.5 py-2 bg-sky-50 text-[11px] font-bold text-sky-900 border-l border-sky-200">
+                                    <div className="flex items-center justify-between">
+                                      <span>Post-training Protocols & Regeneration / Cool-down</span>
+                                      <span className="text-[10px] font-mono uppercase tracking-widest text-sky-800 bg-sky-200/70 px-2 py-0.5 rounded border border-sky-300">
+                                        Phase D · Post-Training
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+
+                            case 'final':
+                              return (
+                                <tr key="phase-banner-final" className="bg-slate-200/90 border-t-2 border-b border-slate-300 select-none">
+                                  <td className="sticky left-0 z-20 bg-slate-200 px-3.5 py-2 font-black text-[11px] uppercase tracking-wider text-slate-800 border-r border-slate-300">
+                                    <div className="flex items-center gap-1.5">
+                                      <Link2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                      <span>Final Information</span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={draft.days.length} className="px-3.5 py-2 bg-slate-100 text-[11px] font-bold text-slate-700 border-l border-slate-200">
+                                    <div className="flex items-center justify-between">
+                                      <span>Coaching Notes & Linked Full Training Session Plans</span>
+                                      <span className="text-[10px] font-mono uppercase tracking-widest text-slate-600 bg-slate-200 px-2 py-0.5 rounded border border-slate-300">
+                                        Phase E · Notes & Links
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                          }
+                        };
+
+                        // Styling per phase for the left label column
+                        const getLeftCellClass = () => {
+                          switch (row.phase) {
+                            case 'header':
+                              return 'sticky left-0 z-10 bg-slate-50 border-r border-slate-200 border-l-3 border-l-slate-400 px-3.5 py-2 text-left align-middle font-bold text-slate-800 text-xs';
+                            case 'preparation':
+                              return 'sticky left-0 z-10 bg-amber-50/90 border-r border-amber-200 border-l-3 border-l-amber-500 px-3.5 py-2.5 text-left align-top font-bold text-amber-950 text-xs';
+                            case 'main':
+                              return 'sticky left-0 z-10 bg-emerald-50 border-r border-emerald-200 border-l-4 border-l-emerald-600 px-3.5 py-3 text-left align-top font-black text-slate-900 text-xs shadow-[inset_-2px_0_0_rgba(16,185,129,0.2)]';
+                            case 'post':
+                              return 'sticky left-0 z-10 bg-sky-50/90 border-r border-sky-200 border-l-3 border-l-sky-500 px-3.5 py-2.5 text-left align-top font-bold text-sky-950 text-xs';
+                            case 'final':
+                              return 'sticky left-0 z-10 bg-slate-50 border-r border-slate-200 border-l-3 border-l-slate-400 px-3.5 py-2.5 text-left align-top font-bold text-slate-800 text-xs';
+                          }
+                        };
+
+                        // Styling per phase for the day content cells
+                        const getDayCellClass = () => {
+                          switch (row.phase) {
+                            case 'header':
+                              return 'border-l border-slate-200 bg-white hover:bg-slate-50/70 transition-colors px-2 py-1.5 align-middle';
+                            case 'preparation':
+                              return 'border-l border-amber-100 bg-amber-50/[0.08] hover:bg-amber-50/[0.22] transition-colors px-2.5 py-2 align-top';
+                            case 'main':
+                              return 'border-l border-emerald-100 bg-emerald-50/[0.15] hover:bg-emerald-50/[0.30] transition-colors px-2.5 py-3 align-top';
+                            case 'post':
+                              return 'border-l border-sky-100 bg-sky-50/[0.08] hover:bg-sky-50/[0.22] transition-colors px-2.5 py-2 align-top';
+                            case 'final':
+                              return 'border-l border-slate-200 bg-slate-50/[0.15] hover:bg-slate-50/[0.30] transition-colors px-2.5 py-2.5 align-top';
+                          }
+                        };
+
+                        return (
+                          <React.Fragment key={row.key}>
+                            {renderPhaseBanner()}
+                            <tr className={`align-top border-b ${row.phase === 'main' ? 'border-emerald-200' : 'border-slate-100'}`}>
+                              <td className={getLeftCellClass()}>
+                                <div className="space-y-0.5">
+                                  <div className="leading-tight">{row.label}</div>
+                                  {row.subLabel && (
+                                    <div className="text-[10px] text-slate-400 font-medium">{row.subLabel}</div>
+                                  )}
+                                </div>
+                              </td>
+                              {draft.days.map((day) => {
+                                const linkedOptions = selectedLinkedSessionsByDate.get(day.id) || [];
+                                const linkedSession = selectedSessionById(day.sessionId);
+
+                                if (row.type === 'sessionLink') {
+                                  return (
+                                    <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
+                                      <select
+                                        value={day.sessionId || ''}
+                                        onChange={(e) => setDayValue(day.id, 'sessionId', e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                                       >
-                                        <Link2 className="w-3 h-3" />
-                                        Open session #{linkedSession.sessionNumber}
-                                      </button>
-                                      {linkedSession.fitnessUpdatedAt && (
-                                        <div className="text-[10px] text-indigo-600 font-bold">
-                                          Fitness-linked session detected
+                                        <option value="">No linked session</option>
+                                        {linkedOptions.map((session) => (
+                                          <option key={session.id} value={session.id}>
+                                            #{session.sessionNumber} - {session.mainObjective || 'Session'}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {linkedSession && (
+                                        <div className="mt-2 p-2.5 bg-emerald-50/90 border border-emerald-300/80 rounded-xl space-y-1 shadow-xs">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase text-emerald-900 font-mono bg-emerald-200/70 px-1.5 py-0.5 rounded">
+                                              #{linkedSession.sessionNumber}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-500">
+                                              {linkedSession.date}
+                                            </span>
+                                          </div>
+                                          <p className="text-xs font-bold text-slate-900 line-clamp-1">
+                                            {linkedSession.mainObjective || 'Training Session'}
+                                          </p>
+                                          <div className="pt-1 flex items-center justify-between">
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenSession && onOpenSession(linkedSession)}
+                                              className="text-[11px] text-emerald-800 hover:text-emerald-950 font-black inline-flex items-center gap-1 hover:underline cursor-pointer"
+                                            >
+                                              <Link2 className="w-3.5 h-3.5" />
+                                              Open Session Plan
+                                            </button>
+                                            {linkedSession.fitnessUpdatedAt && (
+                                              <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                                                Fitness Linked
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
                                       )}
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            }
+                                    </td>
+                                  );
+                                }
 
-                            if (row.type === 'concepts') {
-                              return (
-                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
-                                  {day.concepts.map((concept) => (
-                                    <div key={concept.id} className="flex items-center gap-1.5">
-                                      <input
-                                        value={concept.concept}
-                                        onChange={(e) => setConceptField(day.id, concept.id, 'concept', e.target.value)}
-                                        placeholder="Concept"
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
+                                if (row.type === 'concepts') {
+                                  return (
+                                    <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
+                                      <div className="space-y-2">
+                                        {day.concepts.map((concept, cIndex) => (
+                                          <div key={concept.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-emerald-300/90 shadow-2xs">
+                                            <span className="w-4 h-4 rounded bg-emerald-100 text-emerald-900 font-mono font-black text-[10px] flex items-center justify-center shrink-0">
+                                              {cIndex + 1}
+                                            </span>
+                                            <input
+                                              value={concept.concept}
+                                              onChange={(e) => setConceptField(day.id, concept.id, 'concept', e.target.value)}
+                                              placeholder="Concept / Concepto"
+                                              className="w-full bg-transparent border-0 font-bold text-slate-900 text-xs px-1 py-0.5 focus:ring-0"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => removeConcept(day.id, concept.id)}
+                                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                              title="Remove concept"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button
+                                          type="button"
+                                          onClick={() => addConcept(day.id)}
+                                          className="w-full py-1.5 text-[11px] font-black text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 text-center rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors border border-emerald-300 shadow-2xs cursor-pointer"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                          <span>Add Concept</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+
+                                if (row.type === 'objectives') {
+                                  return (
+                                    <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
+                                      <div className="space-y-2">
+                                        {day.concepts.length === 0 && (
+                                          <div className="text-[11px] text-slate-400 italic py-2 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                                            Add a concept above first
+                                          </div>
+                                        )}
+                                        {day.concepts.map((concept, cIndex) => (
+                                          <div key={concept.id} className="space-y-1 bg-white p-2 rounded-lg border border-emerald-200 shadow-2xs">
+                                            <div className="flex items-center justify-between text-[10px] font-black text-emerald-900">
+                                              <span>Objective #{cIndex + 1}</span>
+                                              {concept.concept && (
+                                                <span className="truncate max-w-[110px] text-slate-500 font-medium">
+                                                  ({concept.concept})
+                                                </span>
+                                              )}
+                                            </div>
+                                            <textarea
+                                              value={concept.objective}
+                                              onChange={(e) => setConceptField(day.id, concept.id, 'objective', e.target.value)}
+                                              placeholder="Objective / Objetivo"
+                                              rows={2}
+                                              className="w-full bg-slate-50/60 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs text-slate-800 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/20"
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </td>
+                                  );
+                                }
+
+                                if (row.type === 'textarea') {
+                                  const field = row.key as keyof MicrocycleDay;
+                                  const isPitch = row.key === 'pitch';
+                                  return (
+                                    <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
+                                      <textarea
+                                        rows={isPitch ? 3 : 2}
+                                        value={String((day as any)[field] || '')}
+                                        onChange={(e) => setDayValue(day.id, field, e.target.value)}
+                                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs text-slate-900 resize-y transition-all ${
+                                          isPitch
+                                            ? 'bg-white border border-emerald-200 hover:border-emerald-300 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 shadow-2xs font-medium'
+                                            : row.phase === 'preparation'
+                                            ? 'bg-white border border-amber-200/80 hover:border-amber-300 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20'
+                                            : row.phase === 'post'
+                                            ? 'bg-white border border-sky-200/80 hover:border-sky-300 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20'
+                                            : 'bg-white border border-slate-200 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-300/20'
+                                        }`}
                                       />
-                                      <button
-                                        type="button"
-                                        onClick={() => removeConcept(day.id, concept.id)}
-                                        className="text-rose-700 hover:text-rose-900"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    onClick={() => addConcept(day.id)}
-                                    className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1 hover:underline"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                    Add concept
-                                  </button>
-                                </td>
-                              );
-                            }
+                                    </td>
+                                  );
+                                }
 
-                            if (row.type === 'objectives') {
-                              return (
-                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 space-y-1.5 bg-inherit">
-                                  {day.concepts.length === 0 && (
-                                    <div className="text-[11px] text-slate-400">Add a concept first</div>
-                                  )}
-                                  {day.concepts.map((concept) => (
-                                    <textarea
-                                      key={concept.id}
-                                      value={concept.objective}
-                                      onChange={(e) => setConceptField(day.id, concept.id, 'objective', e.target.value)}
-                                      placeholder="Objective"
-                                      rows={2}
-                                      className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs"
+                                const field = row.key as keyof MicrocycleDay;
+                                const isMd = row.key === 'mdLabel';
+                                const isLoad = row.key === 'load';
+
+                                return (
+                                  <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
+                                    <input
+                                      type={field === 'dayDate' ? 'date' : 'text'}
+                                      list={row.listId}
+                                      value={String((day as any)[field] || '')}
+                                      onChange={(e) => setDayValue(day.id, field, e.target.value)}
+                                      className={`w-full rounded-lg px-2 py-1.5 text-xs transition-all ${
+                                        isMd
+                                          ? 'bg-sky-50/80 border border-sky-200 font-black text-sky-950 text-center focus:bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-400'
+                                          : isLoad
+                                          ? 'bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400'
+                                          : 'bg-slate-50 border border-slate-200 font-semibold text-slate-800 focus:bg-white focus:border-slate-400'
+                                      }`}
                                     />
-                                  ))}
-                                </td>
-                              );
-                            }
-
-                            if (row.type === 'textarea') {
-                              const field = row.key as keyof MicrocycleDay;
-                              return (
-                                <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                                  <textarea
-                                    rows={2}
-                                    value={String((day as any)[field] || '')}
-                                    onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs"
-                                  />
-                                </td>
-                              );
-                            }
-
-                            const field = row.key as keyof MicrocycleDay;
-                            return (
-                              <td key={`${row.key}-${day.id}`} className="px-2 py-2 border-l border-slate-100 bg-inherit">
-                                <input
-                                  type={field === 'dayDate' ? 'date' : 'text'}
-                                  list={row.listId}
-                                  value={String((day as any)[field] || '')}
-                                  onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 text-xs"
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
