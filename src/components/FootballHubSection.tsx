@@ -21,7 +21,7 @@ import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/
 
 export interface DrillCard {
   id: string;
-  sessionNumber: number;
+  sessionNumber: string;
   title: string;
   coachName?: string;
   coachAvatar?: string;
@@ -127,7 +127,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
     return cloudSessions
       .map((sess) => ({
         id: sess.id,
-        sessionNumber: Number(sess.sessionNumber || 0) || 0,
+        sessionNumber: sess.sessionNumber || '',
         title: sess.mainObjective || `Session #${sess.sessionNumber || '?'}`,
         date: sess.date || new Date().toLocaleDateString('en-CA'),
         category: 'Tactical' as const,
@@ -152,7 +152,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       const search = searchTerm.toLowerCase();
       const matchesSearch =
         sess.title?.toLowerCase().includes(search) ||
-        String(sess.sessionNumber).includes(search) ||
+        sess.sessionNumber.toLowerCase().includes(search) ||
         `session #${sess.sessionNumber}`.toLowerCase().includes(search);
       return matchesSearch;
     })

@@ -549,7 +549,7 @@ export interface MicrocycleSearchFilters {
 
 export interface SessionCardDocument {
   id: string;
-  sessionNumber: number;
+  sessionNumber: string;
   title: string;
   description: string;
   category: string;

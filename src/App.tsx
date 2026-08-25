@@ -17,6 +17,7 @@ import { VideoAnalysisSection } from './components/VideoAnalysisSection';
 import { MatchCentreSection } from './components/MatchCentreSection';
 import { FootballHubSection } from './components/FootballHubSection';
 import { FitnessHubSection } from './components/FitnessHubSection';
+import { GkHubSection } from './components/GkHubSection';
 import { ModuleSessionEditor } from './components/ModuleSessionEditor';
 import { MeetingsSection } from './components/MeetingsSection';
 import { 
@@ -1892,42 +1893,13 @@ export default function App() {
             />
           )
         ) : activeSection === 'gk' ? (
-          <FootballHubSection
-            session={session}
-            cloudSessions={gkCloudSessions}
-            onChangeSession={handleUpdateSession}
-            onAddExerciseToSession={handleAddExerciseFromLibrary}
-            onLoadCloudSession={handleLoadCloudSession}
-            onDeleteCloudSession={handleDeleteCloudSession}
-            onNewSession={handleCreateNewCloudSession}
-            squadPlayers={goalkeeperSquadPlayers}
-            squadRoster={goalkeeperRoster}
-            role="gk"
+          <GkHubSection
             currentLogo={teamLogo}
-            renderActiveSessionEditor={() => (
-              <ModuleSessionEditor
-                moduleId="gk"
-                session={session}
-                sharedHeader={sharedHeader}
-                planningRoster={goalkeeperRoster}
-                currentLogo={teamLogo}
-                squadPlayers={goalkeeperSquadPlayers}
-                isSaving={isCloudSaving}
-                expandedExercises={expandedExercises}
-                excludedPlayers={excludedPlayers}
-                onUpdateHeader={handleUpdateSession}
-                onSave={handleSaveActiveToCloud}
-                onUpdateAttendance={handleUpdateAttendance}
-                onUpdateRoster={handleUpdateRoster}
-                onUpdateGroups={handleUpdateGroups}
-                onUpdateExercises={handleUpdateExercises}
-                onToggleExpand={toggleExpand}
-                onExcludePlayer={handleExcludePlayer}
-                onIncludePlayer={handleIncludePlayer}
-                onUpdateLogo={handleUpdateTeamLogo}
-                onApplyMalikaPoints={handleApplyMalikaPoints}
-              />
-            )}
+            squadPlayers={squadPlayersWithStats}
+            excludedPlayers={excludedPlayers}
+            onExcludePlayer={handleExcludePlayer}
+            onIncludePlayer={handleIncludePlayer}
+            onUpdateLogo={handleUpdateTeamLogo}
           />
         ) : (
           <main className="space-y-6 md:space-y-8 print:space-y-1.5">

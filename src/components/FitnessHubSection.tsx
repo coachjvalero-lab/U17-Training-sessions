@@ -373,11 +373,15 @@ function createEmptyFitnessSession(
   };
 }
 
-function parseSessionNumberValue(value: string): number | null {
-  const normalized = value.trim();
-  if (!/^\d+$/.test(normalized)) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+function compareSessionNumbers(leftSessionNumber: string, rightSessionNumber: string): number {
+  const left = leftSessionNumber.trim();
+  const right = rightSessionNumber.trim();
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  const numCompare = left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+  if (numCompare !== 0) return numCompare;
+  return left.localeCompare(right);
 }
 
 export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
@@ -559,24 +563,10 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
         );
       })
       .sort((left, right) => {
-        const leftNumber = parseSessionNumberValue(left.sessionNumber);
-        const rightNumber = parseSessionNumberValue(right.sessionNumber);
-        const leftHasNumber = leftNumber !== null;
-        const rightHasNumber = rightNumber !== null;
-
-        if (leftHasNumber && rightHasNumber) {
-          if (leftNumber !== rightNumber) {
-            return leftNumber - rightNumber;
-          }
-          if (left.updatedAt !== right.updatedAt) {
-            return right.updatedAt - left.updatedAt;
-          }
-          return left.id.localeCompare(right.id);
+        const numComparison = compareSessionNumbers(left.sessionNumber, right.sessionNumber);
+        if (numComparison !== 0) {
+          return numComparison;
         }
-
-        if (leftHasNumber && !rightHasNumber) return -1;
-        if (!leftHasNumber && rightHasNumber) return 1;
-
         if (left.updatedAt !== right.updatedAt) {
           return right.updatedAt - left.updatedAt;
         }

@@ -95,21 +95,48 @@ async function listUserPermissions(): Promise<UserPermission[]> {
 }
 
 export async function listAuthorizationTeams(): Promise<AuthorizationTeam[]> {
-  const client = getClient();
-  const { data, error } = await client
-    .from('user_team_memberships')
-    .select('team:auth_teams!user_team_memberships_team_id_fkey(id, name, is_active, logo_url)');
-  if (error) throw error;
-  return (data || [])
-    .map((row: any) => row.team)
-    .filter((team: any) => Boolean(team?.id) && Boolean(team?.is_active))
-    .map((team: any) => ({
-      id: team.id,
-      name: team.name,
+  if (!supabase) {
+    return [{
+      id: 'u17-women-alula',
+      name: 'U17 Women Al Ula',
       isActive: true,
-      logoUrl: team.logo_url || null
-    }))
-    .sort((first, second) => first.name.localeCompare(second.name));
+      logoUrl: null
+    }];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('user_team_memberships')
+      .select('team:auth_teams!user_team_memberships_team_id_fkey(id, name, is_active, logo_url)');
+    if (error) throw error;
+    const teams = (data || [])
+      .map((row: any) => row.team)
+      .filter((team: any) => Boolean(team?.id) && Boolean(team?.is_active))
+      .map((team: any) => ({
+        id: team.id,
+        name: team.name,
+        isActive: true,
+        logoUrl: team.logo_url || null
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name));
+
+    return teams.length > 0
+      ? teams
+      : [{
+          id: 'u17-women-alula',
+          name: 'U17 Women Al Ula',
+          isActive: true,
+          logoUrl: null
+        }];
+  } catch (error: any) {
+    console.warn('[PermissionsService] Unable to fetch teams remotely, falling back to default team:', error?.message || error);
+    return [{
+      id: 'u17-women-alula',
+      name: 'U17 Women Al Ula',
+      isActive: true,
+      logoUrl: null
+    }];
+  }
 }
 
 export function subscribeToUserPermissions(

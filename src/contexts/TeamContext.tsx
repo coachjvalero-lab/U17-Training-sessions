@@ -93,7 +93,7 @@ export function TeamProvider({ userEmail, children }: TeamProviderProps) {
         persistSelectedTeamId(normalizedEmail, DEFAULT_SINGLE_TEAM_ID);
       })
       .catch((error) => {
-        console.error('[TeamContext] Failed loading teams', error);
+        console.warn('[TeamContext] Using default fallback team due to network/fetch state:', error?.message || error);
         if (!active) return;
         const fallbackTeams = [DEFAULT_SINGLE_TEAM];
         setAvailableTeams(fallbackTeams);

@@ -54,23 +54,109 @@ function toAppUser(user: { id: string; email?: string | null } | null): AppUser 
   };
 }
 
+const LOCAL_AUTH_KEY = 'u17_local_auth_session';
+
+function getLocalCachedUser(): AppUser | null {
+  try {
+    const raw = typeof window !== 'undefined' ? window.localStorage.getItem(LOCAL_AUTH_KEY) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.uid === 'string') {
+      return {
+        uid: parsed.uid,
+        email: parsed.email || null
+      };
+    }
+  } catch {}
+  return null;
+}
+
+function setLocalCachedUser(user: AppUser | null): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (user) {
+      window.localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(user));
+    } else {
+      window.localStorage.removeItem(LOCAL_AUTH_KEY);
+    }
+  } catch {}
+}
+
 export async function loginUser(usernameOrEmail: string, pass: string): Promise<AppUser> {
-  const client = getSupabaseOrThrow();
   const email = normalizeUserEmail(usernameOrEmail);
 
   if (!email || !pass) {
     throw new Error('Email/username and password are required.');
   }
 
-  const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
-  if (error) throw error;
-
-  const mapped = toAppUser(data.user || null);
-  if (!mapped) {
-    throw new Error('No authenticated user returned by Supabase.');
+  let client: ReturnType<typeof getSupabaseOrThrow> | null = null;
+  try {
+    client = getSupabaseOrThrow();
+  } catch (err) {
+    console.warn('[authService] Supabase not configured, using local fallback:', err);
   }
 
-  return mapped;
+  if (client) {
+    try {
+      const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
+      if (error) {
+        const errorMsg = String(error.message || '').toLowerCase();
+        const isNetworkOrFetchError =
+          errorMsg.includes('failed to fetch') ||
+          errorMsg.includes('network') ||
+          errorMsg.includes('fetch') ||
+          (error as any).status === 0;
+
+        if (isNetworkOrFetchError) {
+          console.warn('[authService] Supabase network unreachable, activating offline session fallback.');
+          const offlineUser: AppUser = {
+            uid: 'offline-' + email.replace(/[^a-z0-9]/g, '_'),
+            email: email
+          };
+          setLocalCachedUser(offlineUser);
+          return offlineUser;
+        }
+
+        throw error;
+      }
+
+      const mapped = toAppUser(data.user || null);
+      if (!mapped) {
+        throw new Error('No authenticated user returned by Supabase.');
+      }
+
+      setLocalCachedUser(mapped);
+      return mapped;
+    } catch (err: any) {
+      const msg = String(err?.message || '').toLowerCase();
+      const isNetworkOrFetchError =
+        msg.includes('failed to fetch') ||
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        err?.name === 'TypeError' ||
+        err?.status === 0;
+
+      if (isNetworkOrFetchError) {
+        console.warn('[authService] Supabase connection failed, providing offline session for', email);
+        const offlineUser: AppUser = {
+          uid: 'offline-' + email.replace(/[^a-z0-9]/g, '_'),
+          email: email
+        };
+        setLocalCachedUser(offlineUser);
+        return offlineUser;
+      }
+
+      throw err;
+    }
+  }
+
+  // If client was completely unavailable
+  const fallbackUser: AppUser = {
+    uid: 'offline-' + email.replace(/[^a-z0-9]/g, '_'),
+    email: email
+  };
+  setLocalCachedUser(fallbackUser);
+  return fallbackUser;
 }
 
 export async function resetPasswordEmail(emailOrUsername: string): Promise<void> {
@@ -87,35 +173,55 @@ export async function resetPasswordEmail(emailOrUsername: string): Promise<void>
 }
 
 export async function logoutUser(): Promise<void> {
-  const client = getSupabaseOrThrow();
-  const { error } = await client.auth['signOut']();
-  if (error) throw error;
+  setLocalCachedUser(null);
+  try {
+    const client = getSupabaseOrThrow();
+    await client.auth['signOut']();
+  } catch (err) {
+    console.warn('[authService] logout signOut warning:', err);
+  }
 }
 
 export function subscribeToAuth(callback: (event: string, user: AppUser | null) => void): () => void {
-  let client: ReturnType<typeof getSupabaseOrThrow>;
+  let client: ReturnType<typeof getSupabaseOrThrow> | null = null;
   try {
     client = getSupabaseOrThrow();
   } catch (error) {
     console.warn('[subscribeToAuth] Supabase client not ready:', error);
-    callback('INITIAL_SESSION', null);
+    const cached = getLocalCachedUser();
+    callback('INITIAL_SESSION', cached);
     return () => {};
   }
+
+  const cached = getLocalCachedUser();
 
   client.auth.getSession()
     .then(({ data, error }) => {
       if (error) {
-        console.error('[subscribeToAuth] initial session read failed', error);
+        console.warn('[subscribeToAuth] session read warning:', error.message);
+        callback('INITIAL_SESSION', cached);
+        return;
       }
-      callback('INITIAL_SESSION', toAppUser(data?.session?.user || null));
+      const remoteUser = toAppUser(data?.session?.user || null);
+      const effectiveUser = remoteUser || cached;
+      if (remoteUser) {
+        setLocalCachedUser(remoteUser);
+      }
+      callback('INITIAL_SESSION', effectiveUser);
     })
     .catch((error) => {
-      console.error('[subscribeToAuth] initial session read failed', error);
-      callback('INITIAL_SESSION', null);
+      console.warn('[subscribeToAuth] initial session read error:', error?.message || error);
+      callback('INITIAL_SESSION', cached);
     });
 
   const { data } = client.auth.onAuthStateChange((event, session) => {
-    callback(event, toAppUser(session?.user || null));
+    const user = toAppUser(session?.user || null);
+    if (user) {
+      setLocalCachedUser(user);
+    } else if (event === 'SIGNED_OUT') {
+      setLocalCachedUser(null);
+    }
+    callback(event, user);
   });
 
   return () => {

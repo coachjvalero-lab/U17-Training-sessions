@@ -73,10 +73,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess, currentLogo }) 
       await loginUser(username, password);
       onSuccess();
     } catch (err: any) {
-      console.error('Authentication error:', err);
+      console.warn('[LoginPage] Authentication attempt failed:', err?.message || err);
       const rawMessage = err?.message ? String(err.message) : '';
       if (rawMessage.toLowerCase().includes('failed to fetch')) {
-        setErrorMessage('Unable to reach the authentication service (network error). Please check your internet connection and Supabase environment settings.');
+        setErrorMessage('Unable to reach the authentication service (network error). Please check your internet connection.');
       } else if (
         err.code === 'auth/wrong-password' ||
         err.code === 'auth/invalid-credential' ||

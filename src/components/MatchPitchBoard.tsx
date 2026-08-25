@@ -93,7 +93,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const getPlayerShortName = useCallback((playerId: string) => {
     const p = getPlayer(playerId);
     if (!p) return 'Player';
-    return p.lastName || p.firstName;
+    return p.firstName || p.lastName;
   }, [getPlayer]);
 
   // Formation slots calculation

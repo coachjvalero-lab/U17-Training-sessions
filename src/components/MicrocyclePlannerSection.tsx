@@ -283,14 +283,29 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   );
 
   useEffect(() => {
-    const cleanup = () => {
-      document.body.classList.remove('print-microcycle-mode');
+    const handleBeforePrint = () => {
+      document.body.classList.add('print-microcycle-mode');
+      let styleEl = document.getElementById('microcycle-landscape-style');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'microcycle-landscape-style';
+        styleEl.innerHTML = `@page { size: A4 landscape !important; margin: 3mm 4mm 3mm 4mm !important; }`;
+        document.head.appendChild(styleEl);
+      }
     };
 
-    window.addEventListener('afterprint', cleanup);
+    const handleAfterPrint = () => {
+      document.body.classList.remove('print-microcycle-mode');
+      const el = document.getElementById('microcycle-landscape-style');
+      if (el) el.remove();
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
     return () => {
-      window.removeEventListener('afterprint', cleanup);
-      cleanup();
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+      handleAfterPrint();
     };
   }, []);
 
@@ -656,6 +671,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const handleExportPdf = () => {
     document.body.classList.add('print-microcycle-mode');
+    let styleEl = document.getElementById('microcycle-landscape-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'microcycle-landscape-style';
+      styleEl.innerHTML = `@page { size: A4 landscape !important; margin: 3mm 4mm 3mm 4mm !important; }`;
+      document.head.appendChild(styleEl);
+    }
     window.requestAnimationFrame(() => {
       window.print();
     });
@@ -954,7 +976,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
           {draft && (
             <>
               {/* EDITOR TOP CONTROL PANEL */}
-              <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-4">
+              <div className="no-print-microcycle bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-4">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1144,33 +1166,59 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                 </div>
               </div>
 
+              {/* PRINT-ONLY MICROCYCLE HEADER (A4 LANDSCAPE) */}
+              <div className="hidden print:flex items-center justify-between bg-white border border-slate-300 rounded-lg p-2.5 mb-2 print-avoid-break">
+                <div className="flex items-center gap-3">
+                  <div className="bg-[#002142] text-white px-3 py-1.5 rounded text-xs font-black uppercase tracking-wider">
+                    Al Ula FC
+                  </div>
+                  <div>
+                    <h1 className="text-sm font-black text-slate-900 leading-none">
+                      {draft.name || 'Weekly Microcycle Plan'}
+                    </h1>
+                    <p className="text-[9px] font-bold text-slate-600 mt-0.5">
+                      {draft.teamName} {draft.weekNumber ? `· Week ${draft.weekNumber}` : ''} ({formatDateRange(draft.startDate, draft.endDate)})
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-right">
+                  <div className="bg-slate-100 border border-slate-200 rounded px-2.5 py-1 text-[9px] font-bold text-slate-700">
+                    <span>Squad Total: </span>
+                    <span className="font-black text-slate-900">{draft.teamTotal || squadPlayers.length} players</span>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-300 rounded px-2.5 py-1 text-[9px] font-black text-emerald-800 uppercase tracking-wide">
+                    Phases A–D
+                  </div>
+                </div>
+              </div>
+
               {/* WEEK PLANNING TABLE */}
-              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-[1320px] w-full border-collapse text-xs table-fixed">
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:border-0 print:shadow-none">
+                <div className="overflow-x-auto print:overflow-visible">
+                  <table className="min-w-[1320px] print:min-w-0 w-full border-collapse text-xs table-fixed">
                     <thead>
                       <tr className="bg-[#002142] text-white border-b border-slate-800">
-                        <th className="sticky left-0 z-20 bg-[#002142] text-left px-3.5 py-3.5 font-black uppercase tracking-wider text-white w-[230px] border-r border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.15)]">
+                        <th className="sticky left-0 z-20 bg-[#002142] text-left px-3.5 py-3.5 print:px-2 print:py-1.5 font-black uppercase tracking-wider text-white w-[230px] print:w-[16%] border-r border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.15)]">
                           <div className="flex items-center gap-2">
-                            <CalendarDays className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <CalendarDays className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />
                             <div>
                               <div className="font-black text-white text-xs tracking-wider">MICROCYCLE</div>
-                              <div className="text-[10px] text-slate-300 font-semibold normal-case tracking-normal">Category / Planning Phase</div>
+                              <div className="text-[10px] text-slate-300 font-semibold normal-case tracking-normal print:hidden">Category / Planning Phase</div>
                             </div>
                           </div>
                         </th>
                         {draft.days.map((day) => (
-                          <th key={day.id} className="px-3 py-3 text-left border-l border-slate-700/80 w-[157px] align-bottom bg-[#002142] hover:bg-[#002b56] transition-colors">
+                          <th key={day.id} className="px-3 py-3 print:px-1.5 print:py-1 text-left border-l border-slate-700/80 w-[157px] print:w-[12%] align-bottom bg-[#002142] hover:bg-[#002b56] transition-colors">
                             <div className="flex items-center justify-between">
-                              <span className="font-black text-white text-sm tracking-tight">{day.dayLabel || 'Day'}</span>
+                              <span className="font-black text-white text-sm print:text-xs tracking-tight">{day.dayLabel || 'Day'}</span>
                               {day.mdLabel && (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono font-black">
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] print:text-[8px] font-mono font-black">
                                   {day.mdLabel}
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-300 font-bold mt-1 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400 inline" />
+                            <div className="text-[11px] print:text-[8px] text-slate-300 font-bold mt-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400 inline print:hidden" />
                               <span>{day.dayDate}</span>
                             </div>
                           </th>
@@ -1270,7 +1318,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
                             case 'final':
                               return (
-                                <tr key="phase-banner-final" className="bg-slate-200/90 border-t-2 border-b border-slate-300 select-none">
+                                <tr key="phase-banner-final" className="bg-slate-200/90 border-t-2 border-b border-slate-300 select-none no-print-microcycle print:hidden">
                                   <td className="sticky left-0 z-20 bg-slate-200 px-3.5 py-2 font-black text-[11px] uppercase tracking-wider text-slate-800 border-r border-slate-300">
                                     <div className="flex items-center gap-1.5">
                                       <Link2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />
@@ -1294,13 +1342,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                         const getLeftCellClass = () => {
                           switch (row.phase) {
                             case 'header':
-                              return 'sticky left-0 z-10 bg-slate-50 border-r border-slate-200 border-l-3 border-l-slate-400 px-3.5 py-2 text-left align-middle font-bold text-slate-800 text-xs';
+                              return 'sticky left-0 z-10 bg-slate-50 border-r border-slate-200 border-l-3 border-l-slate-400 px-3.5 py-2 print:px-1.5 print:py-1 text-left align-middle font-bold text-slate-800 text-xs print:text-[8px]';
                             case 'preparation':
-                              return 'sticky left-0 z-10 bg-amber-50/90 border-r border-amber-200 border-l-3 border-l-amber-500 px-3.5 py-2.5 text-left align-top font-bold text-amber-950 text-xs';
+                              return 'sticky left-0 z-10 bg-amber-50/90 border-r border-amber-200 border-l-3 border-l-amber-500 px-3.5 py-2.5 print:px-1.5 print:py-1 text-left align-top font-bold text-amber-950 text-xs print:text-[8px]';
                             case 'main':
-                              return 'sticky left-0 z-10 bg-emerald-50 border-r border-emerald-200 border-l-4 border-l-emerald-600 px-3.5 py-3 text-left align-top font-black text-slate-900 text-xs shadow-[inset_-2px_0_0_rgba(16,185,129,0.2)]';
+                              return 'sticky left-0 z-10 bg-emerald-50 border-r border-emerald-200 border-l-4 border-l-emerald-600 px-3.5 py-3 print:px-1.5 print:py-1 text-left align-top font-black text-slate-900 text-xs print:text-[8px] shadow-[inset_-2px_0_0_rgba(16,185,129,0.2)]';
                             case 'post':
-                              return 'sticky left-0 z-10 bg-sky-50/90 border-r border-sky-200 border-l-3 border-l-sky-500 px-3.5 py-2.5 text-left align-top font-bold text-sky-950 text-xs';
+                              return 'sticky left-0 z-10 bg-sky-50/90 border-r border-sky-200 border-l-3 border-l-sky-500 px-3.5 py-2.5 print:px-1.5 print:py-1 text-left align-top font-bold text-sky-950 text-xs print:text-[8px]';
                             case 'final':
                               return 'sticky left-0 z-10 bg-slate-50 border-r border-slate-200 border-l-3 border-l-slate-400 px-3.5 py-2.5 text-left align-top font-bold text-slate-800 text-xs';
                           }
@@ -1310,13 +1358,13 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                         const getDayCellClass = () => {
                           switch (row.phase) {
                             case 'header':
-                              return 'border-l border-slate-200 bg-white hover:bg-slate-50/70 transition-colors px-2 py-1.5 align-middle';
+                              return 'border-l border-slate-200 bg-white hover:bg-slate-50/70 transition-colors px-2 py-1.5 print:px-1 print:py-0.5 align-middle';
                             case 'preparation':
-                              return 'border-l border-amber-100 bg-amber-50/[0.08] hover:bg-amber-50/[0.22] transition-colors px-2.5 py-2 align-top';
+                              return 'border-l border-amber-100 bg-amber-50/[0.08] hover:bg-amber-50/[0.22] transition-colors px-2.5 py-2 print:px-1 print:py-0.5 align-top';
                             case 'main':
-                              return 'border-l border-emerald-100 bg-emerald-50/[0.15] hover:bg-emerald-50/[0.30] transition-colors px-2.5 py-3 align-top';
+                              return 'border-l border-emerald-100 bg-emerald-50/[0.15] hover:bg-emerald-50/[0.30] transition-colors px-2.5 py-3 print:px-1 print:py-1 align-top';
                             case 'post':
-                              return 'border-l border-sky-100 bg-sky-50/[0.08] hover:bg-sky-50/[0.22] transition-colors px-2.5 py-2 align-top';
+                              return 'border-l border-sky-100 bg-sky-50/[0.08] hover:bg-sky-50/[0.22] transition-colors px-2.5 py-2 print:px-1 print:py-0.5 align-top';
                             case 'final':
                               return 'border-l border-slate-200 bg-slate-50/[0.15] hover:bg-slate-50/[0.30] transition-colors px-2.5 py-2.5 align-top';
                           }
@@ -1325,12 +1373,12 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                         return (
                           <React.Fragment key={row.key}>
                             {renderPhaseBanner()}
-                            <tr className={`align-top border-b ${row.phase === 'main' ? 'border-emerald-200' : 'border-slate-100'}`}>
+                            <tr className={`align-top border-b ${row.phase === 'main' ? 'border-emerald-200' : 'border-slate-100'} ${row.phase === 'final' ? 'no-print-microcycle print:hidden' : ''}`}>
                               <td className={getLeftCellClass()}>
                                 <div className="space-y-0.5">
                                   <div className="leading-tight">{row.label}</div>
                                   {row.subLabel && (
-                                    <div className="text-[10px] text-slate-400 font-medium">{row.subLabel}</div>
+                                    <div className="text-[10px] print:hidden text-slate-400 font-medium">{row.subLabel}</div>
                                   )}
                                 </div>
                               </td>
@@ -1390,22 +1438,22 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                 if (row.type === 'concepts') {
                                   return (
                                     <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
-                                      <div className="space-y-2">
+                                      <div className="space-y-2 print:space-y-1">
                                         {day.concepts.map((concept, cIndex) => (
-                                          <div key={concept.id} className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-emerald-300/90 shadow-2xs">
-                                            <span className="w-4 h-4 rounded bg-emerald-100 text-emerald-900 font-mono font-black text-[10px] flex items-center justify-center shrink-0">
+                                          <div key={concept.id} className="flex items-center gap-1.5 bg-white p-1.5 print:p-1 rounded-lg border border-emerald-300/90 shadow-2xs">
+                                            <span className="w-4 h-4 print:w-3.5 print:h-3.5 rounded bg-emerald-100 text-emerald-900 font-mono font-black text-[10px] print:text-[8px] flex items-center justify-center shrink-0">
                                               {cIndex + 1}
                                             </span>
                                             <input
                                               value={concept.concept}
                                               onChange={(e) => setConceptField(day.id, concept.id, 'concept', e.target.value)}
                                               placeholder="Concept / Concepto"
-                                              className="w-full bg-transparent border-0 font-bold text-slate-900 text-xs px-1 py-0.5 focus:ring-0"
+                                              className="w-full bg-transparent border-0 font-bold text-slate-900 text-xs print:text-[8px] px-1 py-0.5 focus:ring-0"
                                             />
                                             <button
                                               type="button"
                                               onClick={() => removeConcept(day.id, concept.id)}
-                                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors no-print-microcycle print:hidden"
                                               title="Remove concept"
                                             >
                                               <Trash2 className="w-3.5 h-3.5" />
@@ -1415,7 +1463,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                         <button
                                           type="button"
                                           onClick={() => addConcept(day.id)}
-                                          className="w-full py-1.5 text-[11px] font-black text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 text-center rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors border border-emerald-300 shadow-2xs cursor-pointer"
+                                          className="w-full py-1.5 text-[11px] font-black text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 text-center rounded-lg inline-flex items-center justify-center gap-1.5 transition-colors border border-emerald-300 shadow-2xs cursor-pointer no-print-microcycle print:hidden"
                                         >
                                           <Plus className="w-3.5 h-3.5" />
                                           <span>Add Concept</span>
@@ -1428,15 +1476,15 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                 if (row.type === 'objectives') {
                                   return (
                                     <td key={`${row.key}-${day.id}`} className={getDayCellClass()}>
-                                      <div className="space-y-2">
+                                      <div className="space-y-2 print:space-y-1">
                                         {day.concepts.length === 0 && (
-                                          <div className="text-[11px] text-slate-400 italic py-2 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                                          <div className="text-[11px] print:text-[8px] text-slate-400 italic py-2 print:py-0.5 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
                                             Add a concept above first
                                           </div>
                                         )}
                                         {day.concepts.map((concept, cIndex) => (
-                                          <div key={concept.id} className="space-y-1 bg-white p-2 rounded-lg border border-emerald-200 shadow-2xs">
-                                            <div className="flex items-center justify-between text-[10px] font-black text-emerald-900">
+                                          <div key={concept.id} className="space-y-1 bg-white p-2 print:p-1 rounded-lg border border-emerald-200 shadow-2xs">
+                                            <div className="flex items-center justify-between text-[10px] print:text-[8px] font-black text-emerald-900">
                                               <span>Objective #{cIndex + 1}</span>
                                               {concept.concept && (
                                                 <span className="truncate max-w-[110px] text-slate-500 font-medium">
@@ -1449,7 +1497,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                               onChange={(e) => setConceptField(day.id, concept.id, 'objective', e.target.value)}
                                               placeholder="Objective / Objetivo"
                                               rows={2}
-                                              className="w-full bg-slate-50/60 border border-slate-200 rounded-md px-2 py-1.5 resize-y text-xs text-slate-800 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/20"
+                                              className="w-full bg-slate-50/60 border border-slate-200 rounded-md px-2 py-1.5 print:px-1 print:py-0.5 resize-y text-xs print:text-[8px] text-slate-800 focus:bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/20"
                                             />
                                           </div>
                                         ))}
@@ -1467,7 +1515,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                         rows={isPitch ? 3 : 2}
                                         value={String((day as any)[field] || '')}
                                         onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                        className={`w-full rounded-lg px-2.5 py-1.5 text-xs text-slate-900 resize-y transition-all ${
+                                        className={`w-full rounded-lg px-2.5 py-1.5 print:px-1 print:py-0.5 text-xs print:text-[8px] text-slate-900 resize-y transition-all ${
                                           isPitch
                                             ? 'bg-white border border-emerald-200 hover:border-emerald-300 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 shadow-2xs font-medium'
                                             : row.phase === 'preparation'
@@ -1492,7 +1540,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                                       list={row.listId}
                                       value={String((day as any)[field] || '')}
                                       onChange={(e) => setDayValue(day.id, field, e.target.value)}
-                                      className={`w-full rounded-lg px-2 py-1.5 text-xs transition-all ${
+                                      className={`w-full rounded-lg px-2 py-1.5 print:px-1 print:py-0.5 text-xs print:text-[8px] transition-all ${
                                         isMd
                                           ? 'bg-sky-50/80 border border-sky-200 font-black text-sky-950 text-center focus:bg-white focus:border-sky-500 focus:ring-1 focus:ring-sky-400'
                                           : isLoad
@@ -1513,7 +1561,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
               </div>
 
               {/* SQUAD AVAILABILITY */}
-              <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
+              <div className="no-print-microcycle print:hidden bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-sm space-y-3">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-emerald-700" />
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Squad Availability</h3>

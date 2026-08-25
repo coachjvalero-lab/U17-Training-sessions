@@ -102,13 +102,40 @@ export async function addInjuryFollowUp(input: Omit<InjuryFollowUp, 'id' | 'crea
 }
 
 export async function getPhysioContext(teamId: string): Promise<{ players: PhysioPlayerContext[]; sessions: PhysioTrainingContext[]; matches: PhysioMatchContext[] }> {
+  const normalizedTeamId = (teamId || '').trim();
   const [players, sessions, matches] = await Promise.all([
-    client().rpc('physio_player_context', { target_team_id: teamId }), client().rpc('physio_training_context', { target_team_id: teamId }), client().rpc('physio_match_context', { target_team_id: teamId })
+    client().rpc('physio_player_context', { target_team_id: normalizedTeamId }),
+    client().rpc('physio_training_context', { target_team_id: normalizedTeamId }),
+    client().rpc('physio_match_context', { target_team_id: normalizedTeamId })
   ]);
-  if (players.error) throw players.error; if (sessions.error) throw sessions.error; if (matches.error) throw matches.error;
+  if (players.error) throw players.error;
+  if (sessions.error) throw sessions.error;
+
+  let matchRows: any[] = matches.data || [];
+  if ((matches.error || !matchRows.length) && normalizedTeamId) {
+    try {
+      const { data: directMatches } = await client()
+        .from('matches')
+        .select('id, date, status, opponent_team:auth_teams!matches_opponent_team_id_fkey(name)')
+        .eq('team_id', normalizedTeamId)
+        .order('date', { ascending: false });
+
+      if (directMatches && directMatches.length > 0) {
+        matchRows = directMatches.map((row: any) => ({
+          match_id: row.id,
+          match_date: row.date,
+          opponent_name: row.opponent_team?.name || 'Match',
+          match_status: row.status
+        }));
+      }
+    } catch {
+      // Ignore fallback failure
+    }
+  }
+
   return {
     players: (players.data || []).map((row: any) => ({ playerId: row.player_id, playerName: row.player_name, shirtNumber: row.shirt_number, position: row.position, currentStatus: row.current_status })),
     sessions: (sessions.data || []).map((row: any) => ({ sessionId: row.session_id, sessionDate: row.session_date, sessionTime: row.session_time, sessionNumber: row.session_number, durationMinutes: row.duration_minutes })),
-    matches: (matches.data || []).map((row: any) => ({ matchId: row.match_id, matchDate: row.match_date, opponentName: row.opponent_name, matchStatus: row.match_status }))
+    matches: matchRows.map((row: any) => ({ matchId: row.match_id || row.id, matchDate: row.match_date || row.date, opponentName: row.opponent_name || 'Match', matchStatus: row.match_status || row.status }))
   };
 }

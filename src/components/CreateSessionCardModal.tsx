@@ -127,11 +127,11 @@ export const CreateSessionCardModal: React.FC<CreateSessionCardModalProps> = ({
             <label className="block text-sm font-semibold text-slate-300">
               <span className="mb-1 block">Session number</span>
               <input
-                type="number"
-                min="1"
+                type="text"
                 value={form.sessionNumber}
                 onChange={(e) => setForm({ ...form, sessionNumber: e.target.value })}
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-white outline-none ring-0"
+                placeholder="e.g. 020, 1"
               />
             </label>
 

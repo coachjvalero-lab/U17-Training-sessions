@@ -42,3 +42,22 @@ test('preserves a cloud session when the active draft shares the same session nu
   assert.equal(result[0].id, 'cloud-1');
   assert.equal(result[0].sessionNumber, '10');
 });
+
+test('preserves session numbers with leading zeros exactly and keeps 020 distinct from 20', () => {
+  const session020 = createSession({ id: 'fit-020', sessionNumber: '020', mainObjective: 'Session 020' });
+  const session20 = createSession({ id: 'fit-20', sessionNumber: '20', mainObjective: 'Session 20' });
+  const activeDraft = createSession({ id: '', sessionNumber: '020', mainObjective: 'Active 020' });
+
+  const result = mergeSessionsForDisplay([session020, session20], activeDraft);
+
+  assert.equal(result.length, 2);
+  const found020 = result.find((s) => s.id === 'fit-020');
+  const found20 = result.find((s) => s.id === 'fit-20');
+
+  assert.ok(found020);
+  assert.ok(found20);
+  assert.equal(found020.sessionNumber, '020');
+  assert.equal(found20.sessionNumber, '20');
+  assert.notEqual(found020.sessionNumber, found20.sessionNumber);
+});
+

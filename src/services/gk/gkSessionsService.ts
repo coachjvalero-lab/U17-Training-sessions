@@ -4,9 +4,29 @@ import type { GkSession, PlayerGroup, TrainingBlock } from '../../types';
 import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamSelectionStore';
 
 const GK_SESSIONS_TABLE = 'gk_sessions';
+const GK_SESSIONS_CACHE_KEY = 'u17_gk_sessions_cache';
 const GK_READ_RETRY_DELAY_MS = 1500;
 const GK_MAX_READ_RETRIES = 1;
 const DEFAULT_GK_TEAM_NAME = 'U17 Women Al Ula';
+
+export function readCachedGkSessions(): GkSession[] {
+  try {
+    const raw = localStorage.getItem(GK_SESSIONS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function writeCachedGkSessions(sessions: GkSession[]): void {
+  try {
+    localStorage.setItem(GK_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
+  } catch (e) {
+    console.warn('Failed to cache GK sessions:', e);
+  }
+}
 
 function createGkRealtimeChannelName(): string {
   return `u17-gk-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -140,6 +160,37 @@ function fromRow(row: GkSessionRow): GkSession {
   };
 }
 
+function fromLegacySessionRow(s: any): GkSession {
+  const sessionUid = s.id;
+  const recordId = s.id.startsWith('gk-') ? s.id : `gk-${s.id}`;
+  const gkWarmUp = s.gk_warm_up || s.warm_up || defaultBlock('warmup-block-gk', 'Warm Up');
+  const gkMainPart = s.gk_main_part || s.main_part || defaultBlock('main-block-gk', 'Main Part');
+  const gkCoolDown = s.gk_cool_down || s.cool_down || defaultBlock('cooldown-block-gk', 'Cool Down');
+  const gkPlayerGroups = s.gk_player_groups || s.player_groups || [];
+
+  return {
+    id: recordId,
+    sessionUid,
+    legacySessionId: s.id,
+    teamName: s.team_name || 'U17 Women Al Ula',
+    date: s.date || new Date().toISOString().slice(0, 10),
+    time: s.time || '18:30 - 20:00',
+    sessionNumber: s.session_number || '',
+    microcycleDay: s.microcycle_day || 'MD-3',
+    mainObjective: s.main_objective || '',
+    materialsNeeded: s.materials_needed || '',
+    observations: s.observations || '',
+    squadRoster: s.squad_roster || [],
+    attendance: s.attendance || [],
+    gkWarmUp,
+    gkMainPart,
+    gkCoolDown,
+    gkPlayerGroups,
+    createdAt: s.gk_updated_at || s.updated_at || Date.now(),
+    updatedAt: s.gk_updated_at || s.updated_at || 0
+  };
+}
+
 function toRow(session: GkSession, updatedAt: number): GkSessionRow {
   const teamName = resolveTeamNameForGkWrite(session);
   return {
@@ -184,19 +235,97 @@ async function ensureSessionCatalogIdentity(session: GkSession, updatedAt: numbe
     .from('session_catalog')
     .upsert(sessionCatalogPayload, { onConflict: 'session_uid' });
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[gkSessionsService] session_catalog upsert notice:', error);
+  }
 }
 
 export async function listGkSessions(): Promise<GkSession[]> {
-  const query = getClient()
-    .from(GK_SESSIONS_TABLE)
-    .select('*')
-    .order('updated_at', { ascending: false });
+  const client = getClient();
+  
+  // 1. Read existing rows in gk_sessions
+  let gkRows: GkSessionRow[] = [];
+  let fetchError: unknown = null;
+  try {
+    const { data, error } = await client
+      .from(GK_SESSIONS_TABLE)
+      .select('*')
+      .order('updated_at', { ascending: false });
 
-  const { data, error } = await query;
+    if (error) {
+      fetchError = error;
+    } else {
+      gkRows = (data || []) as GkSessionRow[];
+    }
+  } catch (err) {
+    fetchError = err;
+  }
 
-  if (error) throw error;
-  return ((data || []) as GkSessionRow[]).map(fromRow);
+  let mappedGk = gkRows.map(fromRow);
+
+  // 2. Check for legacy sessions in public.sessions that should be recovered
+  try {
+    const { data: legacyData, error: legacyErr } = await client
+      .from('sessions')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (!legacyErr && Array.isArray(legacyData) && legacyData.length > 0) {
+      const knownUids = new Set(mappedGk.map((s) => s.sessionUid));
+      const knownIds = new Set(mappedGk.map((s) => s.id));
+
+      const missingLegacySessions = legacyData.filter((legacy) => {
+        const potentialId = legacy.id.startsWith('gk-') ? legacy.id : `gk-${legacy.id}`;
+        return !knownUids.has(legacy.id) && !knownIds.has(potentialId) && !knownIds.has(legacy.id);
+      });
+
+      if (missingLegacySessions.length > 0) {
+        const recovered = missingLegacySessions.map(fromLegacySessionRow);
+        mappedGk = [...mappedGk, ...recovered];
+
+        // Background auto-heal: persist recovered legacy sessions to gk_sessions table
+        void Promise.allSettled(
+          recovered.map(async (rec) => {
+            const updatedAt = rec.updatedAt || Date.now();
+            await ensureSessionCatalogIdentity(rec, updatedAt);
+            const rowPayload = toRow(rec, updatedAt);
+            await client.from(GK_SESSIONS_TABLE).upsert(rowPayload, { onConflict: 'id' });
+          })
+        ).catch((healErr) => {
+          console.warn('[gkSessionsService] Background recovery sync notice:', healErr);
+        });
+      }
+    }
+  } catch (legacyCatchErr) {
+    console.warn('[gkSessionsService] Legacy sessions query check notice:', legacyCatchErr);
+  }
+
+  // If both queries failed or returned nothing, check cache
+  if (mappedGk.length === 0) {
+    const cached = readCachedGkSessions();
+    if (cached.length > 0) {
+      return cached;
+    }
+    // Also check cloud sessions cache if available
+    try {
+      const cloudRaw = localStorage.getItem('u17_cloud_sessions_cache');
+      if (cloudRaw) {
+        const cloudParsed = JSON.parse(cloudRaw);
+        if (Array.isArray(cloudParsed) && cloudParsed.length > 0) {
+          const fromCloudCache = cloudParsed.map(fromLegacySessionRow);
+          writeCachedGkSessions(fromCloudCache);
+          return fromCloudCache;
+        }
+      }
+    } catch {}
+  }
+
+  if (fetchError && mappedGk.length === 0) {
+    throw fetchError;
+  }
+
+  writeCachedGkSessions(mappedGk);
+  return mappedGk;
 }
 
 export function subscribeToGkSessions(
@@ -207,6 +336,12 @@ export function subscribeToGkSessions(
   let active = true;
   let channel: RealtimeChannel | null = null;
   let hasLoadedAtLeastOnce = false;
+
+  // Emit cached immediately to avoid blank flash
+  const initialCached = readCachedGkSessions();
+  if (initialCached.length > 0) {
+    callback(initialCached);
+  }
 
   const loadAndEmit = async (attempt = 0) => {
     try {
@@ -266,6 +401,18 @@ export async function saveGkSession(session: GkSession): Promise<number> {
     .upsert(payload, { onConflict: 'id' });
 
   if (error) throw error;
+
+  // Update local cache
+  const cached = readCachedGkSessions();
+  const existingIdx = cached.findIndex((s) => s.id === session.id);
+  const updatedSession = { ...session, updatedAt };
+  if (existingIdx >= 0) {
+    cached[existingIdx] = updatedSession;
+  } else {
+    cached.unshift(updatedSession);
+  }
+  writeCachedGkSessions(cached);
+
   return updatedAt;
 }
 
@@ -276,4 +423,9 @@ export async function deleteGkSession(gkSessionId: string): Promise<void> {
     .eq('id', gkSessionId);
 
   if (error) throw error;
+
+  const cached = readCachedGkSessions();
+  const remaining = cached.filter((s) => s.id !== gkSessionId);
+  writeCachedGkSessions(remaining);
 }
+
