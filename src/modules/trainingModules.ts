@@ -1,5 +1,5 @@
 import { getEmptySession } from '../defaultSession';
-import { CloudTrainingSession, Exercise, GameMoment, PortalSection, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingBlock, TrainingSession } from '../types';
+import { CloudTrainingSession, Exercise, FitnessSession, GameMoment, PortalSection, PlayerAttendance, PlayerGroup, SharedSessionHeader, TrainingBlock, TrainingSession } from '../types';
 
 export type TrainingModuleId = 'football' | 'fitness' | 'gk';
 export type SessionBlockKey = 'warmUp' | 'mainPart' | 'coolDown';
@@ -370,6 +370,82 @@ export function updateSessionGroupsByModule(
 
 export function getModuleCloudUpdatedAt(session: CloudTrainingSession, moduleId: TrainingModuleId): number {
   return TRAINING_MODULES[moduleId].getCloudUpdatedAt(session);
+}
+
+export function findMatchingFitnessSession(
+  footballSession: {
+    sessionNumber?: string | null;
+    teamName?: string | null;
+    date?: string | null;
+    id?: string | null;
+  },
+  fitnessSessions: FitnessSession[]
+): FitnessSession | null {
+  const targetSessionNumber = (footballSession.sessionNumber || '').trim();
+  if (!targetSessionNumber) return null;
+
+  const targetTeam = (footballSession.teamName || '').trim().toLowerCase();
+  const targetDate = (footballSession.date || '').trim();
+
+  // 1. Strict canonical session number matching (preserves leading zeros: "020" !== "20")
+  const numberMatches = fitnessSessions.filter((f) => {
+    const fNumber = (f.sessionNumber || '').trim();
+    return fNumber === targetSessionNumber;
+  });
+
+  if (numberMatches.length === 0) return null;
+  if (numberMatches.length === 1) return numberMatches[0];
+
+  // 2. If multiple candidates share the same session number, narrow by team name when specified
+  let candidates = numberMatches;
+  if (targetTeam) {
+    const teamMatches = candidates.filter((f) => {
+      const fTeam = (f.teamName || '').trim().toLowerCase();
+      return !fTeam || fTeam === targetTeam;
+    });
+    if (teamMatches.length > 0) {
+      candidates = teamMatches;
+    }
+  }
+
+  if (candidates.length === 1) return candidates[0];
+
+  // 3. Narrow by date when specified
+  if (targetDate) {
+    const dateMatches = candidates.filter((f) => (f.date || '').trim() === targetDate);
+    if (dateMatches.length > 0) {
+      candidates = dateMatches;
+    }
+  }
+
+  if (candidates.length === 1) return candidates[0];
+
+  // 4. Deterministic tie-breaker: select the most recently updated session
+  return candidates.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
+}
+
+export function resolveLinkedFitnessForFootballSession(
+  footballSession: {
+    sessionNumber?: string | null;
+    teamName?: string | null;
+    date?: string | null;
+    id?: string | null;
+  },
+  fitnessSessions: FitnessSession[]
+): {
+  fitnessWarmUp?: TrainingBlock;
+  fitnessMainPart?: TrainingBlock;
+  fitnessCoolDown?: TrainingBlock;
+  fitnessPlayerGroups?: PlayerGroup[];
+} | null {
+  const match = findMatchingFitnessSession(footballSession, fitnessSessions);
+  if (!match) return null;
+  return {
+    fitnessWarmUp: match.fitnessWarmUp,
+    fitnessMainPart: match.fitnessMainPart,
+    fitnessCoolDown: match.fitnessCoolDown,
+    fitnessPlayerGroups: match.fitnessPlayerGroups
+  };
 }
 
 export function mergeFootballSessionWithFitnessSource(

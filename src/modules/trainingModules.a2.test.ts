@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getEmptySession } from '../defaultSession';
-import type { Exercise, TrainingSession } from '../types';
+import type { Exercise, FitnessSession, TrainingSession } from '../types';
 import {
+  findMatchingFitnessSession,
   getModuleSessionView,
   mergeFootballSessionWithFitnessSource,
+  resolveLinkedFitnessForFootballSession,
   updateSessionExercisesByModule
 } from './trainingModules';
 
@@ -205,4 +207,179 @@ test('gk view remains isolated from fitness overlay bindings', () => {
 
   const gkView = getModuleSessionView(session, 'gk');
   assert.deepEqual(gkView.warmUp.exercises.map((exercise) => exercise.id), ['gk-a']);
+});
+
+function makeFitnessSession(overrides: Partial<FitnessSession> = {}): FitnessSession {
+  return {
+    id: 'fit-session-fit123',
+    sessionUid: 'session-fit123',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25',
+    time: '18:30 - 20:00',
+    sessionNumber: '020',
+    microcycleDay: 'MD-3',
+    mainObjective: 'Fitness Core',
+    materialsNeeded: 'Cones, bibs',
+    squadRoster: [],
+    attendance: [],
+    fitnessWarmUp: {
+      id: 'fwu-1',
+      title: 'Warm Up',
+      exercises: [makeExercise('fit-ex-1', 'Activation Drill', { isFitness: true })]
+    },
+    fitnessMainPart: {
+      id: 'fmp-1',
+      title: 'Main Part',
+      exercises: [makeExercise('fit-ex-2', 'Endurance Shuttle', { isFitness: true })]
+    },
+    fitnessCoolDown: {
+      id: 'fcd-1',
+      title: 'Cool Down',
+      exercises: [makeExercise('fit-ex-3', 'Hamstring Stretch', { isFitness: true })]
+    },
+    fitnessPlayerGroups: [],
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000,
+    ...overrides
+  };
+}
+
+test('cross-module lookup matches "020" with "020" preserving independent IDs', () => {
+  const footballSession: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-session-abc999', // Independent Football ID
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25'
+  };
+
+  const fitness020 = makeFitnessSession({
+    id: 'fit-record-xyz888', // Independent Fitness ID
+    sessionUid: 'session-independent-777', // Independent Fitness sessionUid
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula'
+  });
+
+  const match = findMatchingFitnessSession(footballSession, [fitness020]);
+  assert.ok(match, 'Expected a match for session number "020"');
+  assert.equal(match.id, 'fit-record-xyz888');
+  assert.equal(match.sessionNumber, '020');
+
+  // Verify resolveLinkedFitnessForFootballSession resolves overlay data
+  const linked = resolveLinkedFitnessForFootballSession(footballSession, [fitness020]);
+  assert.ok(linked);
+  assert.equal(linked.fitnessWarmUp?.exercises[0].name, 'Activation Drill');
+
+  // Merge into football view and verify exercises are rendered in football view
+  const mergedFootball = mergeFootballSessionWithFitnessSource(footballSession, linked);
+  assert.equal(mergedFootball.id, 'fb-session-abc999', 'Football ID must not be modified');
+  const view = getModuleSessionView(mergedFootball, 'football');
+  assert.equal(view.warmUp.exercises[0].id, 'fit-ex-1');
+  assert.equal(view.warmUp.exercises[1].id, 'fit-ex-2');
+  assert.equal(view.coolDown.exercises[0].id, 'fit-ex-3');
+});
+
+test('cross-module lookup strictly separates "020" from "20" (leading zeros preserved)', () => {
+  const footballSession020: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-session-020',
+    sessionNumber: '020'
+  };
+
+  const fitnessSession20 = makeFitnessSession({
+    id: 'fit-session-20',
+    sessionNumber: '20'
+  });
+
+  // "020" must NOT match "20"
+  const matchA = findMatchingFitnessSession(footballSession020, [fitnessSession20]);
+  assert.equal(matchA, null, '"020" must not match "20"');
+
+  const footballSession20: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-session-20',
+    sessionNumber: '20'
+  };
+
+  const fitnessSession020 = makeFitnessSession({
+    id: 'fit-session-020',
+    sessionNumber: '020'
+  });
+
+  // "20" must NOT match "020"
+  const matchB = findMatchingFitnessSession(footballSession20, [fitnessSession020]);
+  assert.equal(matchB, null, '"20" must not match "020"');
+});
+
+test('cross-module lookup disambiguates by team and date when multiple fitness sessions exist', () => {
+  const footballSession: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-020',
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25'
+  };
+
+  const fitnessTeamA = makeFitnessSession({
+    id: 'fit-team-a',
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25',
+    updatedAt: 100
+  });
+
+  const fitnessTeamB = makeFitnessSession({
+    id: 'fit-team-b',
+    sessionNumber: '020',
+    teamName: 'First Team Men',
+    date: '2026-08-25',
+    updatedAt: 200
+  });
+
+  const match = findMatchingFitnessSession(footballSession, [fitnessTeamB, fitnessTeamA]);
+  assert.equal(match?.id, 'fit-team-a');
+});
+
+test('cross-module lookup uses latest updatedAt as deterministic tie-breaker', () => {
+  const footballSession: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-020',
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25'
+  };
+
+  const fitnessOlder = makeFitnessSession({
+    id: 'fit-older',
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25',
+    updatedAt: 1000
+  });
+
+  const fitnessNewer = makeFitnessSession({
+    id: 'fit-newer',
+    sessionNumber: '020',
+    teamName: 'U17 Women Al Ula',
+    date: '2026-08-25',
+    updatedAt: 2000
+  });
+
+  const match = findMatchingFitnessSession(footballSession, [fitnessOlder, fitnessNewer]);
+  assert.equal(match?.id, 'fit-newer');
+});
+
+test('cross-module lookup returns null for empty or unnumbered sessions', () => {
+  const footballBlank: TrainingSession = {
+    ...makeSession(),
+    id: 'fb-blank',
+    sessionNumber: ''
+  };
+
+  const fitness020 = makeFitnessSession({
+    id: 'fit-020',
+    sessionNumber: '020'
+  });
+
+  assert.equal(findMatchingFitnessSession(footballBlank, [fitness020]), null);
 });

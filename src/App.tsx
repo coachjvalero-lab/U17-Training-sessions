@@ -27,6 +27,7 @@ import {
   PlayerAttendance, 
   PortalSection,
   CloudTrainingSession,
+  FitnessSession,
   GkSession,
   SquadPlayer,
   VideoAnalysis
@@ -69,6 +70,7 @@ import {
   getModuleIdFromSection,
   getModuleRoleLabel,
   mergeFootballSessionWithFitnessSource,
+  resolveLinkedFitnessForFootballSession,
   getSharedSessionHeader,
   getModuleSessionView,
   hydrateTrainingSession,
@@ -519,18 +521,13 @@ export default function App() {
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
   const [gkSessions, setGkSessions] = useState<GkSession[]>([]);
-  const [fitnessBySessionUid, setFitnessBySessionUid] = useState<Record<string, {
-    fitnessWarmUp?: TrainingSession['fitnessWarmUp'];
-    fitnessMainPart?: TrainingSession['fitnessMainPart'];
-    fitnessCoolDown?: TrainingSession['fitnessCoolDown'];
-    fitnessPlayerGroups?: TrainingSession['fitnessPlayerGroups'];
-  }>>({});
-  const fitnessBySessionUidRef = useRef(fitnessBySessionUid);
+  const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>([]);
+  const fitnessSessionsRef = useRef<FitnessSession[]>([]);
   const [footballFitnessLoadError, setFootballFitnessLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fitnessBySessionUidRef.current = fitnessBySessionUid;
-  }, [fitnessBySessionUid]);
+    fitnessSessionsRef.current = fitnessSessions;
+  }, [fitnessSessions]);
 
   useEffect(() => {
     const unsubscribe = subscribeToGkSessions(
@@ -616,31 +613,14 @@ export default function App() {
 
     const unsubscribe = subscribeToFitnessSessions(
       (items) => {
-        const byUid: Record<string, {
-          fitnessWarmUp?: TrainingSession['fitnessWarmUp'];
-          fitnessMainPart?: TrainingSession['fitnessMainPart'];
-          fitnessCoolDown?: TrainingSession['fitnessCoolDown'];
-          fitnessPlayerGroups?: TrainingSession['fitnessPlayerGroups'];
-        }> = {};
-
-        items.forEach((item) => {
-          if (!item.sessionUid) return;
-          byUid[item.sessionUid] = {
-            fitnessWarmUp: item.fitnessWarmUp,
-            fitnessMainPart: item.fitnessMainPart,
-            fitnessCoolDown: item.fitnessCoolDown,
-            fitnessPlayerGroups: item.fitnessPlayerGroups
-          };
-        });
-
+        setFitnessSessions(items);
         setFootballFitnessLoadError(null);
-        setFitnessBySessionUid(byUid);
       },
       (error) => {
         console.warn('Failed loading linked fitness sessions for football view:', error);
         const err = error as { kind?: unknown; message?: unknown };
         const kind = typeof err?.kind === 'string' ? err.kind : '';
-        const hasLoadedFitnessData = Object.keys(fitnessBySessionUidRef.current).length > 0;
+        const hasLoadedFitnessData = fitnessSessionsRef.current.length > 0;
 
         if (kind === 'realtime' && hasLoadedFitnessData) {
           setFootballFitnessLoadError('Fitness live updates are temporarily unavailable. Showing last loaded Fitness data.');
@@ -1046,9 +1026,9 @@ export default function App() {
 
   const footballSessionView = useMemo(() => {
     if (!FITNESS_V2_ENABLED) return session;
-    const linkedFitness = fitnessBySessionUid[session.id] || null;
+    const linkedFitness = resolveLinkedFitnessForFootballSession(session, fitnessSessions);
     return mergeFootballSessionWithFitnessSource(session, linkedFitness);
-  }, [fitnessBySessionUid, session]);
+  }, [fitnessSessions, session]);
 
   const handleUpdateRoster = (squadRoster: string[]) => {
     setSession(prev => ({
@@ -1453,7 +1433,10 @@ export default function App() {
       const expanded: Record<string, boolean> = {};
       const moduleId = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
       const sessionForView = moduleId === 'football'
-        ? mergeFootballSessionWithFitnessSource(unifiedSession, fitnessBySessionUid[unifiedSession.id] || null)
+        ? mergeFootballSessionWithFitnessSource(
+            unifiedSession,
+            resolveLinkedFitnessForFootballSession(unifiedSession, fitnessSessions)
+          )
         : unifiedSession;
       const moduleSessionView = getModuleSessionView(sessionForView, moduleId);
 
