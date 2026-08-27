@@ -134,78 +134,8 @@ function defaultBlock(id: string, title: string): TrainingBlock {
   };
 }
 
-function hasExercises(block: any): boolean {
-  return Array.isArray(block?.exercises) && block.exercises.length > 0;
-}
-
-function fromLegacySessionRow(s: any): FitnessSession {
-  const sessionUid = s.id || `session-${Date.now()}`;
-  const recordId = typeof s.id === 'string' && s.id.startsWith('fitness-') ? s.id : `fitness-${sessionUid}`;
-
-  const fitnessWarmUp = hasExercises(s.fitness_warm_up)
-    ? s.fitness_warm_up
-    : (hasExercises(s.warm_up) ? s.warm_up : (s.fitness_warm_up || s.warm_up || defaultBlock('warmup-block-fitness', 'Warm Up')));
-
-  const fitnessMainPart = hasExercises(s.fitness_main_part)
-    ? s.fitness_main_part
-    : (hasExercises(s.main_part) ? s.main_part : (s.fitness_main_part || s.main_part || defaultBlock('main-block-fitness', 'Main Part')));
-
-  const fitnessCoolDown = hasExercises(s.fitness_cool_down)
-    ? s.fitness_cool_down
-    : (hasExercises(s.cool_down) ? s.cool_down : (s.fitness_cool_down || s.cool_down || defaultBlock('cooldown-block-fitness', 'Cool Down')));
-
-  const fitnessPlayerGroups = (Array.isArray(s.fitness_player_groups) && s.fitness_player_groups.length > 0)
-    ? s.fitness_player_groups
-    : (Array.isArray(s.player_groups) ? s.player_groups : []);
-
-  return {
-    id: recordId,
-    sessionUid,
-    legacySessionId: s.id,
-    teamName: s.team_name || s.teamName || '',
-    date: s.date || new Date().toISOString().slice(0, 10),
-    time: s.time || '18:30 - 20:00',
-    sessionNumber: s.session_number || s.sessionNumber || '',
-    microcycleDay: s.microcycle_day || s.microcycleDay || 'MD-3',
-    mainObjective: s.main_objective || s.mainObjective || '',
-    materialsNeeded: s.materials_needed || s.materialsNeeded || '',
-    observations: s.observations || '',
-    squadRoster: s.squad_roster || s.squadRoster || [],
-    attendance: s.attendance || [],
-    fitnessWarmUp,
-    fitnessMainPart,
-    fitnessCoolDown,
-    fitnessPlayerGroups,
-    createdAt: s.created_at || s.createdAt || Date.now(),
-    updatedAt: s.fitness_updated_at || s.updated_at || s.updatedAt || 0
-  };
-}
-
 function readAllPossibleCachedFitnessSessions(): FitnessSession[] {
-  const cachedFitness = readCachedFitnessSessions();
-  if (cachedFitness.length > 0) return cachedFitness;
-
-  try {
-    const rawCloud = localStorage.getItem('u17_cloud_sessions_cache');
-    if (rawCloud) {
-      const parsed = JSON.parse(rawCloud);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(fromLegacySessionRow);
-      }
-    }
-  } catch {}
-
-  try {
-    const rawLocal = localStorage.getItem('u17_training_sessions') || localStorage.getItem('u17_local_sessions');
-    if (rawLocal) {
-      const parsed = JSON.parse(rawLocal);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(fromLegacySessionRow);
-      }
-    }
-  } catch {}
-
-  return [];
+  return readCachedFitnessSessions();
 }
 
 function fromRow(row: FitnessSessionRow): FitnessSession {
@@ -302,41 +232,10 @@ async function listFitnessSessions(): Promise<FitnessSession[]> {
 
   let mapped = rows.map(fromRow);
 
-  // Check legacy sessions table fallback if fitness_sessions is empty
-  try {
-    const { data: legacyData, error: legacyErr } = await client
-      .from('sessions')
-      .select('*')
-      .order('updated_at', { ascending: false });
-
-    if (!legacyErr && Array.isArray(legacyData) && legacyData.length > 0) {
-      const knownUids = new Set(mapped.map((s) => s.sessionUid));
-      const knownIds = new Set(mapped.map((s) => s.id));
-
-      const recovered: FitnessSession[] = [];
-      legacyData.forEach((row) => {
-        if (!row || !row.id) return;
-        const asFitness = fromLegacySessionRow(row);
-        if (!knownUids.has(asFitness.sessionUid) && !knownIds.has(asFitness.id)) {
-          recovered.push(asFitness);
-          knownUids.add(asFitness.sessionUid);
-          knownIds.add(asFitness.id);
-        }
-      });
-
-      if (recovered.length > 0) {
-        mapped = [...mapped, ...recovered].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-      }
-    }
-  } catch (legacyCatchErr) {
-    console.warn('[fitnessSessionsService] Legacy sessions query check notice:', legacyCatchErr);
-  }
-
-  // If both queries returned nothing or errored, check all available local storage caches
+  // If query errored and nothing in memory, fallback to local cache
   if (mapped.length === 0) {
-    const fallbackCached = readAllPossibleCachedFitnessSessions();
+    const fallbackCached = readCachedFitnessSessions();
     if (fallbackCached.length > 0) {
-      writeCachedFitnessSessions(fallbackCached);
       return fallbackCached;
     }
   }
@@ -345,9 +244,7 @@ async function listFitnessSessions(): Promise<FitnessSession[]> {
     throw fetchError;
   }
 
-  if (mapped.length > 0) {
-    writeCachedFitnessSessions(mapped);
-  }
+  writeCachedFitnessSessions(mapped);
 
   return mapped;
 }

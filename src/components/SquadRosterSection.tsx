@@ -36,7 +36,7 @@ import { useTeamContext } from '../contexts/TeamContext';
 import { getPlayerMatchStatisticsSummary, getAvailableCompetitions } from '../modules/squadStatisticsService';
 import { listMatches } from '../services/matches/matchService';
 import { subscribeToInjuries } from '../services/physio/injuriesService';
-import { getActiveInjuryForPlayer, syncSquadPlayersWithInjuries } from '../services/physio/squadInjurySync';
+import { determineSquadStatusFromPlayerInjuries, getActiveInjuryForPlayer, syncSquadPlayersWithInjuries } from '../services/physio/squadInjurySync';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -1236,6 +1236,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
                   {group.players.map((player) => {
                     const activeInjury = getActiveInjuryForPlayer(player, physioInjuries);
+                    const effectiveStatus = activeInjury ? determineSquadStatusFromPlayerInjuries([activeInjury], player.status) : player.status;
                     return (
                     <div 
                       key={player.id}
@@ -1250,7 +1251,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                     <div className="w-8 h-8 rounded-xl bg-[#002142] text-white font-mono font-black text-sm flex items-center justify-center shadow-sm">
                       #{player.number || '0'}
                     </div>
-                    {getStatusBadge(player.status)}
+                    {getStatusBadge(effectiveStatus)}
                   </div>
 
                   {/* Player Avatar & Name Block */}
@@ -1327,7 +1328,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 {/* Card Footer Actions */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <select
-                    value={player.status}
+                    value={effectiveStatus}
                     onChange={(e) => handleQuickStatusChange(player.id, e.target.value as SquadPlayer['status'])}
                     className="text-[10px] font-bold bg-slate-100 text-slate-700 rounded-lg px-2 py-1 border border-slate-200 focus:outline-none"
                   >
@@ -1391,6 +1392,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 ) : (
                   filteredPlayers.map((player) => {
                     const activeInjury = getActiveInjuryForPlayer(player, physioInjuries);
+                    const effectiveStatus = activeInjury ? determineSquadStatusFromPlayerInjuries([activeInjury], player.status) : player.status;
                     return (
                     <tr key={player.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3 px-4 text-center font-mono font-bold text-[#002142] bg-slate-50/40">
@@ -1432,9 +1434,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
-                          {getStatusBadge(player.status)}
+                          {getStatusBadge(effectiveStatus)}
                           <select
-                            value={player.status}
+                            value={effectiveStatus}
                             onChange={(e) => handleQuickStatusChange(player.id, e.target.value as SquadPlayer['status'])}
                             className="text-[10px] font-semibold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 border border-slate-200 focus:outline-none"
                           >

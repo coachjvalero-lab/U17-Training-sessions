@@ -28,17 +28,21 @@ function normalizeEmail(email?: string | null): string | null {
   return clean || null;
 }
 
-function normalizeContext(raw: any): AuthorizationContext {
+function normalizeContext(raw: any, email?: string | null): AuthorizationContext {
   const sections = Array.isArray(raw?.sections)
     ? raw.sections.filter((section: unknown): section is PortalSection => {
       return typeof section === 'string' && section.trim().length > 0;
     })
     : [];
 
+  const isAdmin = Boolean(raw?.isAdmin);
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const isCoach = normalizedEmail.includes('coach') || ['shouq', 'javi', 'wilian', 'marta', 'joao', 'mariana'].some(name => normalizedEmail.includes(name));
+
   return {
     userId: raw?.userId ? String(raw.userId) : null,
-    isAdmin: Boolean(raw?.isAdmin),
-    sections
+    isAdmin,
+    sections: sections.length > 0 ? sections : (isCoach ? ALL_DEFAULT_SECTIONS : sections)
   };
 }
 
@@ -86,7 +90,7 @@ async function loadAuthorizationContext(userEmail?: string | null): Promise<Auth
     try {
       const { data, error } = await supabase.rpc('get_my_allowed_sections');
       if (error) throw error;
-      cachedContext = normalizeContext(data);
+      cachedContext = normalizeContext(data, normalizedEmail);
       cachedForEmail = normalizedEmail;
       return cachedContext;
     } catch (err: any) {
