@@ -49,19 +49,54 @@ export function determineSquadStatusFromPlayerInjuries(
 }
 
 /**
+ * Retrieves all injuries associated with a squad player, robustly matching by
+ * ID or name variations (case-insensitive, trims, positions, gk tags).
+ */
+export function getInjuriesForPlayer(
+  player: SquadPlayer,
+  injuries: Injury[]
+): Injury[] {
+  if (!player || !injuries || injuries.length === 0) return [];
+
+  const playerId = (player.id || '').trim().toLowerCase();
+  const fullName = `${player.firstName || ''} ${player.lastName || ''}`.trim().toLowerCase();
+  const firstName = (player.firstName || '').trim().toLowerCase();
+  const lastName = (player.lastName || '').trim().toLowerCase();
+
+  return injuries.filter((inj) => {
+    if (!inj.playerId) return false;
+    const target = inj.playerId.trim().toLowerCase();
+    if (!target) return false;
+
+    // Exact ID match
+    if (playerId && target === playerId) return true;
+
+    // Direct name variations
+    if (fullName && (target === fullName || target === `${fullName} (gk)`)) return true;
+    if (firstName && (target === firstName || target === `${firstName} (gk)`)) return true;
+    if (lastName && target === lastName) return true;
+
+    // Inverted or partial substring matches
+    if (fullName && target.length >= 3 && (fullName.includes(target) || target.includes(fullName))) {
+      return true;
+    }
+    if (firstName && firstName.length >= 3 && (target.includes(firstName) || firstName.includes(target))) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+/**
  * Finds the primary active injury for a given player, if any exists.
  */
 export function getActiveInjuryForPlayer(
   player: SquadPlayer,
   injuries: Injury[]
 ): Injury | undefined {
-  const activeInjuries = injuries.filter(
-    (inj) =>
-      inj.currentStatus !== 'closed' &&
-      (inj.playerId === player.id ||
-        inj.playerId === player.firstName ||
-        `${player.firstName} ${player.lastName}`.toLowerCase().includes(inj.playerId.toLowerCase()))
-  );
+  const playerInjuries = getInjuriesForPlayer(player, injuries);
+  const activeInjuries = playerInjuries.filter((inj) => inj.currentStatus !== 'closed');
 
   if (activeInjuries.length === 0) return undefined;
 
@@ -79,19 +114,11 @@ export function syncSquadPlayersWithInjuries(
   players: SquadPlayer[],
   injuries: Injury[]
 ): SquadPlayer[] {
-  if (!injuries.length && !players.length) return players;
-
-  const injuriesByPlayerId = new Map<string, Injury[]>();
-  for (const inj of injuries) {
-    if (!inj.playerId) continue;
-    const existing = injuriesByPlayerId.get(inj.playerId) || [];
-    existing.push(inj);
-    injuriesByPlayerId.set(inj.playerId, existing);
-  }
+  if (!players.length) return players;
 
   let hasChanges = false;
   const synchronized = players.map((player) => {
-    const playerInjuries = injuriesByPlayerId.get(player.id) || [];
+    const playerInjuries = getInjuriesForPlayer(player, injuries);
     const targetStatus = determineSquadStatusFromPlayerInjuries(playerInjuries, player.status);
 
     if (player.status !== targetStatus) {

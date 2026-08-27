@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -36,7 +36,7 @@ import { useTeamContext } from '../contexts/TeamContext';
 import { getPlayerMatchStatisticsSummary, getAvailableCompetitions } from '../modules/squadStatisticsService';
 import { listMatches } from '../services/matches/matchService';
 import { subscribeToInjuries } from '../services/physio/injuriesService';
-import { getActiveInjuryForPlayer } from '../services/physio/squadInjurySync';
+import { getActiveInjuryForPlayer, syncSquadPlayersWithInjuries } from '../services/physio/squadInjurySync';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -163,6 +163,10 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     return () => unsubscribe();
   }, [selectedTeamId]);
 
+  const effectivePlayers = useMemo(() => {
+    return syncSquadPlayersWithInjuries(players, physioInjuries);
+  }, [players, physioInjuries]);
+
   const dataUrlToBlob = (dataUrl: string): Blob => {
     const parts = dataUrl.split(',');
     if (parts.length !== 2) throw new Error('Invalid data URL');
@@ -204,7 +208,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     let cancelled = false;
     const uniquePaths = Array.from(
       new Set(
-        players
+        effectivePlayers
           .map((player) => getPhotoPath(player))
           .filter((path): path is string => Boolean(path))
       )
@@ -239,7 +243,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [players, signedPhotoUrls]);
+  }, [effectivePlayers, signedPhotoUrls]);
 
   const handleEditorPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -351,7 +355,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     setFormData({
       firstName: '',
       lastName: '',
-      number: String(players.length + 1),
+      number: String(effectivePlayers.length + 1),
       position: 'CM',
       status: 'Active',
       notes: '',
@@ -395,7 +399,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
     try {
       if (editingPlayer) {
-        const updated = players.map(p => 
+        const updated = effectivePlayers.map(p => 
           p.id === editingPlayer.id 
             ? {
                 ...p,
@@ -430,7 +434,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           weightKg: formData.weightKg ? Number(formData.weightKg) : 56,
           joinedDate: new Date().toISOString().split('T')[0]
         };
-        await onUpdatePlayers([...players, newPlayer]);
+        await onUpdatePlayers([...effectivePlayers, newPlayer]);
       }
 
       setIsModalOpen(false);
@@ -451,7 +455,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
   const handleDeletePlayer = (id: string, name: string) => {
     if (confirm(`Are you sure you want to remove ${name} from the squad roster?`)) {
-      void onUpdatePlayers(players.filter(p => p.id !== id)).catch((err) => {
+      void onUpdatePlayers(effectivePlayers.filter(p => p.id !== id)).catch((err) => {
         const error = err as { message?: unknown };
         alert(typeof error?.message === 'string' ? error.message : 'Could not delete player. Please try again.');
       });
@@ -459,7 +463,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   };
 
   const handleQuickStatusChange = (id: string, newStatus: SquadPlayer['status']) => {
-    const updated = players.map(p => p.id === id ? { ...p, status: newStatus } : p);
+    const updated = effectivePlayers.map(p => p.id === id ? { ...p, status: newStatus } : p);
     void onUpdatePlayers(updated).catch((err) => {
       const error = err as { message?: unknown };
       alert(typeof error?.message === 'string' ? error.message : 'Could not update player status. Please try again.');
@@ -467,7 +471,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   };
 
   // Filter Logic
-  const filteredPlayers = players.filter(p => {
+  const filteredPlayers = effectivePlayers.filter(p => {
     const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
     const matchesSearch = fullName.includes(searchTerm.toLowerCase()) || 
                           String(p.number || '').includes(searchTerm) ||
@@ -532,7 +536,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     );
   };
 
-  const malikaRanking = [...players]
+  const malikaRanking = [...effectivePlayers]
     .map((player, index) => {
       const points = player.malikaPoints || 0;
       const previousPoints = player.malikaHistory && player.malikaHistory.length > 0
@@ -580,7 +584,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
           <div className="flex items-center space-x-2">
             <span className="text-[11px] font-mono font-bold text-amber-300 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-xl">
-              {players.length} Registered Athletes
+              {effectivePlayers.length} Registered Athletes
             </span>
           </div>
         </div>
@@ -637,7 +641,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
               <span className="text-[11px] font-mono text-slate-400">
-                {players.length} Players Active
+                {effectivePlayers.length} Players Active
               </span>
               <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
                 <span>Ver Plantilla</span>
@@ -753,7 +757,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
               <span className="text-[11px] font-mono text-slate-400">
-                {players.filter((player) => (player.malikaPoints || 0) > 0).length} Players Scored
+                {effectivePlayers.filter((player) => (player.malikaPoints || 0) > 0).length} Players Scored
               </span>
               <div className="flex items-center space-x-1 text-amber-400 font-bold group-hover:translate-x-1 transition-transform">
                 <span>View Ranking</span>
@@ -984,8 +988,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
         <AttendanceSection
           session={session}
           cloudSessions={cloudSessions}
-          squadPlayers={players}
-          squadRoster={session.squadRoster || players.map(p => `${p.firstName} ${p.lastName}`)}
+          squadPlayers={effectivePlayers}
+          squadRoster={session.squadRoster || effectivePlayers.map(p => `${p.firstName} ${p.lastName}`)}
           onChangeSession={onChangeSession}
           onChangeRoster={onChangeRoster}
           excludedPlayers={excludedPlayers}
@@ -1476,7 +1480,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
 
       {/* Summary Footer */}
       <div className="bg-white px-5 py-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-500 flex justify-between items-center">
-        <span>Showing {filteredPlayers.length} of {players.length} registered squad members</span>
+        <span>Showing {filteredPlayers.length} of {effectivePlayers.length} registered squad members</span>
         <span className="text-[11px] font-mono text-slate-400">Al Ula Women U17 Technical Database</span>
       </div>
 

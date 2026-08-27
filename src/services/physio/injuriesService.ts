@@ -14,28 +14,68 @@ function client() {
 export async function syncPlayerSquadStatusInDb(playerId: string): Promise<void> {
   if (!playerId) return;
   try {
-    const { data: playerInjuries } = await client()
+    const trimmedId = playerId.trim();
+    // Retrieve all injuries for this player (matching by id or name)
+    const { data: allInjuries } = await client()
       .from(INJURIES_TABLE)
-      .select('*')
-      .eq('player_id', playerId);
+      .select('*');
 
-    const injuries = (playerInjuries || []).map(injuryFromRow);
-    const calculatedStatus = determineSquadStatusFromPlayerInjuries(injuries);
+    const mappedInjuries = (allInjuries || []).map(injuryFromRow);
 
-    const { data: playerRow } = await client()
+    // Try finding squad player by exact id
+    let { data: playerRow } = await client()
       .from('squad_players')
-      .select('id, status')
-      .eq('id', playerId)
+      .select('id, status, first_name, last_name')
+      .eq('id', trimmedId)
       .maybeSingle();
 
-    if (playerRow && playerRow.status !== calculatedStatus) {
+    // If not found by id, try finding by name
+    if (!playerRow) {
+      const { data: playersList } = await client()
+        .from('squad_players')
+        .select('id, status, first_name, last_name');
+
+      const found = (playersList || []).find((p) => {
+        const full = `${p.first_name || ''} ${p.last_name || ''}`.trim().toLowerCase();
+        const first = (p.first_name || '').trim().toLowerCase();
+        const target = trimmedId.toLowerCase();
+        return full === target || first === target || target.includes(first) || full.includes(target);
+      });
+
+      if (found) {
+        playerRow = found;
+      }
+    }
+
+    if (!playerRow) return;
+
+    // Filter injuries for this specific player
+    const playerSquadObj = {
+      id: playerRow.id,
+      firstName: playerRow.first_name,
+      lastName: playerRow.last_name,
+      position: 'CM' as const,
+      status: playerRow.status
+    };
+
+    const targetInjuries = mappedInjuries.filter((inj) => {
+      const target = (inj.playerId || '').trim().toLowerCase();
+      const pId = playerRow.id.toLowerCase();
+      const pFirst = (playerRow.first_name || '').trim().toLowerCase();
+      const pFull = `${playerRow.first_name || ''} ${playerRow.last_name || ''}`.trim().toLowerCase();
+      return target === pId || target === pFirst || target === pFull || pFull.includes(target) || target.includes(pFirst);
+    });
+
+    const calculatedStatus = determineSquadStatusFromPlayerInjuries(targetInjuries, playerSquadObj.status);
+
+    if (playerRow.status !== calculatedStatus) {
       if (playerRow.status === 'Absent' && calculatedStatus === 'Active') {
         return;
       }
       await client()
         .from('squad_players')
         .update({ status: calculatedStatus, updated_at: Date.now() })
-        .eq('id', playerId);
+        .eq('id', playerRow.id);
     }
   } catch (err) {
     console.warn('[injuriesService] syncPlayerSquadStatusInDb warning:', err);
