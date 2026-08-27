@@ -137,6 +137,16 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   // Synchronize attendance list with squad roster
   const effectiveAttendance: PlayerAttendance[] = cleanRoster.map(player => {
     const playerResolution = resolver.resolveName(player);
+    const matchedSquadPlayer = playerResolution.kind === 'matched'
+      ? squadPlayers.find((p) => p.id === playerResolution.playerId)
+      : squadPlayers.find(
+          (p) =>
+            `${p.firstName} ${p.lastName}`.toLowerCase() === player.toLowerCase() ||
+            p.firstName.toLowerCase() === player.toLowerCase() ||
+            `${p.firstName} (gk)`.toLowerCase() === player.toLowerCase()
+        );
+    const isSquadInjured = matchedSquadPlayer?.status === 'Injured';
+
     const existing = attendance.find((entry) => {
       const entryResolution = resolver.resolveName(entry.playerName);
       if (playerResolution.kind === 'matched' && entryResolution.kind === 'matched') {
@@ -148,7 +158,8 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
     if (existing) return existing;
     return {
       playerName: player,
-      status: 'Attending'
+      status: isSquadInjured ? ('Absent' as const) : ('Attending' as const),
+      absenceReason: isSquadInjured ? ('Injury' as const) : undefined
     };
   });
 
@@ -213,11 +224,30 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
   const handleMarkAllAttending = () => {
     if (readOnly) return;
-    const updated = effectiveAttendance.map(a => ({
-      ...a,
-      status: 'Attending' as const,
-      absenceReason: undefined
-    }));
+    const updated = effectiveAttendance.map(a => {
+      const playerResolution = resolver.resolveName(a.playerName);
+      const matchedSquadPlayer = playerResolution.kind === 'matched'
+        ? squadPlayers.find((p) => p.id === playerResolution.playerId)
+        : squadPlayers.find(
+            (p) =>
+              `${p.firstName} ${p.lastName}`.toLowerCase() === a.playerName.toLowerCase() ||
+              p.firstName.toLowerCase() === a.playerName.toLowerCase() ||
+              `${p.firstName} (gk)`.toLowerCase() === a.playerName.toLowerCase()
+          );
+      const isInjured = matchedSquadPlayer?.status === 'Injured';
+      if (isInjured) {
+        return {
+          ...a,
+          status: 'Absent' as const,
+          absenceReason: 'Injury' as const
+        };
+      }
+      return {
+        ...a,
+        status: 'Attending' as const,
+        absenceReason: undefined
+      };
+    });
     onChangeAttendance(updated);
   };
 
@@ -535,6 +565,18 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                 }
               }
 
+              const playerResolution = resolver.resolveName(record.playerName);
+              const matchedSquadPlayer = playerResolution.kind === 'matched'
+                ? squadPlayers.find((p) => p.id === playerResolution.playerId)
+                : squadPlayers.find(
+                    (p) =>
+                      `${p.firstName} ${p.lastName}`.toLowerCase() === record.playerName.toLowerCase() ||
+                      p.firstName.toLowerCase() === record.playerName.toLowerCase() ||
+                      `${p.firstName} (gk)`.toLowerCase() === record.playerName.toLowerCase()
+                  );
+              const isPhysioInjured = matchedSquadPlayer?.status === 'Injured';
+              const isPhysioRecovering = matchedSquadPlayer?.status === 'Recovering';
+
               return (
                 <div
                   key={record.playerName}
@@ -547,9 +589,22 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                         {record.playerName.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="truncate min-w-0 flex-1">
-                        <span className="text-xs font-black text-slate-900 block truncate">
-                          {record.playerName}
-                        </span>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="text-xs font-black text-slate-900 block truncate">
+                            {record.playerName}
+                          </span>
+                          {isPhysioInjured && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-200 shrink-0" title="Flagged as Injured in Physiotherapy / Squad">
+                              <Stethoscope className="w-2.5 h-2.5" />
+                              <span>Injured</span>
+                            </span>
+                          )}
+                          {isPhysioRecovering && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200 shrink-0" title="In Rehab / Recovering">
+                              <span>Rehab</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {onChangeRoster && !readOnly && (
@@ -563,6 +618,20 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                       </button>
                     )}
                   </div>
+
+                  {/* Physio status reminder if marked attending while registered injured */}
+                  {isPhysioInjured && record.status === 'Attending' && !readOnly && (
+                    <div className="flex items-center justify-between px-2 py-1 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-800 font-semibold">
+                      <span>Reported injured in Physio</span>
+                      <button
+                        type="button"
+                        onClick={() => handleAttendanceStateChange(record.playerName, 'Injury')}
+                        className="font-bold underline text-rose-700 hover:text-rose-900 ml-1 cursor-pointer"
+                      >
+                        Set Absent
+                      </button>
+                    </div>
+                  )}
 
                   {/* Attendance State Dropdown Select */}
                   <div className="space-y-1">

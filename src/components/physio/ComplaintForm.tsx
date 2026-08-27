@@ -3,20 +3,43 @@ import { useEffect, useState } from 'react';
 import type { Injury, PhysioComplaint, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
 import { BodyMap } from './BodyMap';
-import { BODY_REGION_SUBLOCATIONS, buildBodyLocation, type BodyRegionKey } from './bodyMapModel';
+import { BODY_REGION_SUBLOCATIONS, buildBodyLocation, parseBodyLocation, type BodyRegionKey } from './bodyMapModel';
 
 type ComplaintInput = Omit<PhysioComplaint, 'id' | 'createdAt' | 'updatedAt'>;
-type ComplaintFormProps = { teamId: string; players: PhysioPlayerContext[]; sessions: PhysioTrainingContext[]; matches: PhysioMatchContext[]; injuries: Injury[]; onCancel: () => void; onSave: (input: ComplaintInput) => Promise<void> };
+type ComplaintFormProps = {
+  teamId: string;
+  players: PhysioPlayerContext[];
+  sessions: PhysioTrainingContext[];
+  matches: PhysioMatchContext[];
+  injuries: Injury[];
+  complaint?: PhysioComplaint;
+  onCancel: () => void;
+  onSave: (input: ComplaintInput) => Promise<void>;
+};
 const today = () => new Date().toISOString().slice(0, 10);
 const label = (value: string) => value.replaceAll('_', ' ');
 const fieldClass = 'mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100';
 
-export function ComplaintForm({ teamId, players, sessions, matches, injuries, onCancel, onSave }: ComplaintFormProps) {
-  const [region, setRegion] = useState<BodyRegionKey | null>(null);
-  const [subLocation, setSubLocation] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [draft, setDraft] = useState<ComplaintInput>({
+function getInitialDraft(teamId: string, players: PhysioPlayerContext[], complaint?: PhysioComplaint): ComplaintInput {
+  if (complaint) {
+    return {
+      teamId: complaint.teamId,
+      playerId: complaint.playerId,
+      occurrenceDate: complaint.occurrenceDate,
+      context: complaint.context,
+      trainingSessionId: complaint.trainingSessionId ?? null,
+      matchId: complaint.matchId ?? null,
+      complaintType: complaint.complaintType,
+      location: complaint.location || '',
+      affectedSide: complaint.affectedSide,
+      leftActivity: Boolean(complaint.leftActivity),
+      durationBand: complaint.durationBand,
+      outcome: complaint.outcome,
+      resultingInjuryId: complaint.resultingInjuryId ?? null,
+      notes: complaint.notes || ''
+    };
+  }
+  return {
     teamId,
     playerId: players[0]?.playerId || '',
     occurrenceDate: today(),
@@ -31,16 +54,26 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, on
     outcome: 'ongoing',
     resultingInjuryId: null,
     notes: ''
-  });
+  };
+}
+
+export function ComplaintForm({ teamId, players, sessions, matches, injuries, complaint, onCancel, onSave }: ComplaintFormProps) {
+  const isEditing = Boolean(complaint);
+  const initialParsed = parseBodyLocation(complaint?.location);
+  const [region, setRegion] = useState<BodyRegionKey | null>(initialParsed.region);
+  const [subLocation, setSubLocation] = useState(initialParsed.subLocation);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [draft, setDraft] = useState<ComplaintInput>(() => getInitialDraft(teamId, players, complaint));
 
   useEffect(() => {
-    if (!draft.playerId && players.length > 0) {
+    if (!draft.playerId && players.length > 0 && !isEditing) {
       setDraft((current) => ({
         ...current,
         playerId: current.playerId || players[0].playerId
       }));
     }
-  }, [players, draft.playerId]);
+  }, [players, draft.playerId, isEditing]);
 
   const patch = (next: Partial<ComplaintInput>) => setDraft((current) => ({ ...current, ...next }));
 
@@ -88,14 +121,16 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, on
 
   return (
     <div className="space-y-6">
-      <button type="button" onClick={onCancel} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-slate-600">
-        <ArrowLeft className="h-4 w-4" /> Back to complaints
+      <button type="button" onClick={onCancel} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-slate-600 hover:text-[#08233d]">
+        <ArrowLeft className="h-4 w-4" /> {isEditing ? 'Back to complaint' : 'Back to complaints'}
       </button>
       <form onSubmit={(event) => void submit(event)} className="border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <div>
-          <p className="text-xs font-bold uppercase text-sky-700">New event</p>
-          <h1 className="text-2xl font-black text-[#08233d]">Record complaint</h1>
-          <p className="mt-1 text-sm text-slate-500">Capture a symptom or event that does not yet meet the injury definition.</p>
+          <p className="text-xs font-bold uppercase text-sky-700">{isEditing ? 'Edit event' : 'New event'}</p>
+          <h1 className="text-2xl font-black text-[#08233d]">{isEditing ? 'Edit complaint' : 'Record complaint'}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {isEditing ? 'Update clinical symptom or reported event.' : 'Capture a symptom or event that does not yet meet the injury definition.'}
+          </p>
         </div>
 
         <div className="mt-7 grid gap-5 md:grid-cols-2">
@@ -190,24 +225,28 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, on
             }}
           />
           <div className="space-y-5 lg:border-l lg:border-slate-200 lg:pl-8">
-            {region && BODY_REGION_SUBLOCATIONS[region] && (
-              <Field label="Specific location">
-                <select
-                  className={fieldClass}
-                  value={subLocation}
-                  onChange={(event) => {
-                    const detail = event.target.value;
-                    setSubLocation(detail);
+            <Field label="Specific location">
+              <select
+                disabled={!region}
+                className={`${fieldClass} ${!region ? 'cursor-not-allowed bg-slate-50 text-slate-400' : ''}`}
+                value={subLocation}
+                onChange={(event) => {
+                  const detail = event.target.value;
+                  setSubLocation(detail);
+                  if (region) {
                     patch({ location: buildBodyLocation(region, detail || undefined) });
-                  }}
-                >
-                  <option value="">General area</option>
-                  {BODY_REGION_SUBLOCATIONS[region]?.map((item) => (
-                    <option key={item} value={item}>{label(item)}</option>
+                  }
+                }}
+              >
+                <option value="">{region ? 'General area' : 'Select area on body map first'}</option>
+                {region &&
+                  (BODY_REGION_SUBLOCATIONS[region] || []).map((item) => (
+                    <option key={item} value={item}>
+                      {label(item)}
+                    </option>
                   ))}
-                </select>
-              </Field>
-            )}
+              </select>
+            </Field>
             <Field label="Affected side">
               <select className={fieldClass} value={draft.affectedSide} onChange={(event) => patch({ affectedSide: event.target.value as ComplaintInput['affectedSide'] })}>
                 {['left', 'right', 'bilateral', 'not_applicable', 'unknown'].map((item) => (
@@ -284,7 +323,7 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, on
           </button>
           <button disabled={saving} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-700 px-5 text-sm font-bold text-white disabled:opacity-50">
             {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
-            {saving ? 'Saving…' : 'Save complaint'}
+            {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Save complaint'}
           </button>
         </div>
       </form>

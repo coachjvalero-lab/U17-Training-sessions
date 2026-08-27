@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { Injury, InjuryFollowUp, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
+import { determineSquadStatusFromPlayerInjuries } from './squadInjurySync';
 
 const INJURIES_TABLE = 'injuries';
 const FOLLOW_UPS_TABLE = 'injury_follow_ups';
@@ -8,6 +9,37 @@ const FOLLOW_UPS_TABLE = 'injury_follow_ups';
 function client() {
   if (!supabase) throw new Error('Supabase client is not configured');
   return supabase;
+}
+
+export async function syncPlayerSquadStatusInDb(playerId: string): Promise<void> {
+  if (!playerId) return;
+  try {
+    const { data: playerInjuries } = await client()
+      .from(INJURIES_TABLE)
+      .select('*')
+      .eq('player_id', playerId);
+
+    const injuries = (playerInjuries || []).map(injuryFromRow);
+    const calculatedStatus = determineSquadStatusFromPlayerInjuries(injuries);
+
+    const { data: playerRow } = await client()
+      .from('squad_players')
+      .select('id, status')
+      .eq('id', playerId)
+      .maybeSingle();
+
+    if (playerRow && playerRow.status !== calculatedStatus) {
+      if (playerRow.status === 'Absent' && calculatedStatus === 'Active') {
+        return;
+      }
+      await client()
+        .from('squad_players')
+        .update({ status: calculatedStatus, updated_at: Date.now() })
+        .eq('id', playerId);
+    }
+  } catch (err) {
+    console.warn('[injuriesService] syncPlayerSquadStatusInDb warning:', err);
+  }
 }
 
 const injuryFromRow = (row: any): Injury => ({
@@ -63,14 +95,21 @@ export async function listInjuries(teamId: string): Promise<Injury[]> {
 export async function createInjury(input: Omit<Injury, 'id' | 'createdAt' | 'updatedAt'>): Promise<Injury> {
   const { data, error } = await client().from(INJURIES_TABLE).insert(injuryToRow(input)).select('*').single();
   if (error) throw error;
-  return injuryFromRow(data);
+  const created = injuryFromRow(data);
+  void syncPlayerSquadStatusInDb(created.playerId);
+  return created;
 }
 export async function updateInjury(id: string, patch: Partial<Injury>): Promise<Injury> {
   const { data, error } = await client().from(INJURIES_TABLE).update(injuryToRow(patch)).eq('id', id).select('*').single();
   if (error) throw error;
-  return injuryFromRow(data);
+  const updated = injuryFromRow(data);
+  void syncPlayerSquadStatusInDb(updated.playerId);
+  return updated;
 }
 export async function deleteInjury(id: string, teamId: string): Promise<void> {
+  const { data: existing } = await client().from(INJURIES_TABLE).select('player_id').eq('id', id).maybeSingle();
+  const playerId = existing?.player_id;
+
   const { data, error } = await client()
     .from(INJURIES_TABLE)
     .delete()
@@ -81,6 +120,9 @@ export async function deleteInjury(id: string, teamId: string): Promise<void> {
   if (error) throw error;
   if (!data) {
     throw { code: '42501', message: 'The injury was not deleted. It may not exist or you may not have clinical delete permission for its team.' };
+  }
+  if (playerId) {
+    void syncPlayerSquadStatusInDb(playerId);
   }
 }
 export function subscribeToInjuries(teamId: string, callback: (items: Injury[]) => void, onError?: (error: unknown) => void): () => void {
@@ -98,7 +140,21 @@ export async function listInjuryFollowUps(injuryId: string): Promise<InjuryFollo
 }
 export async function addInjuryFollowUp(input: Omit<InjuryFollowUp, 'id' | 'createdAt' | 'updatedAt'>): Promise<InjuryFollowUp> {
   const { data, error } = await client().from(FOLLOW_UPS_TABLE).insert({ injury_id: input.injuryId, follow_up_date: input.followUpDate, treatment_phase: input.treatmentPhase, treatment_performed: input.treatmentPerformed, response_to_treatment: input.responseToTreatment ?? null, injury_progression: input.injuryProgression ?? null, status: input.status, next_review_date: input.nextReviewDate ?? null }).select('*').single();
-  if (error) throw error; return followUpFromRow(data);
+  if (error) throw error;
+  if (input.status) {
+    try {
+      const { data: updatedInjury } = await client()
+        .from(INJURIES_TABLE)
+        .update({ current_status: input.status, updated_at: new Date().toISOString() })
+        .eq('id', input.injuryId)
+        .select('player_id')
+        .single();
+      if (updatedInjury?.player_id) {
+        void syncPlayerSquadStatusInDb(updatedInjury.player_id);
+      }
+    } catch {}
+  }
+  return followUpFromRow(data);
 }
 
 export async function getPhysioContext(teamId: string): Promise<{ players: PhysioPlayerContext[]; sessions: PhysioTrainingContext[]; matches: PhysioMatchContext[] }> {

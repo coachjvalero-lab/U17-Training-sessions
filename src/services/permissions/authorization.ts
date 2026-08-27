@@ -156,8 +156,13 @@ export function useSectionActionAuthorization(
   useEffect(() => {
     let active = true;
 
-    if (!teamId || !supabase) {
+    if (!teamId) {
       setAllowed(false);
+      return;
+    }
+
+    if (!supabase) {
+      setAllowed(canFromContext(cachedContext, section));
       return;
     }
 
@@ -172,9 +177,9 @@ export function useSectionActionAuthorization(
         });
         if (error) throw error;
         if (active) setAllowed(data === true);
-      } catch (error) {
-        console.error(`[Authorization] failed checking ${section}:${action}`, error);
-        if (active) setAllowed(false);
+      } catch (error: any) {
+        console.warn(`[Authorization] RPC check unavailable for ${section}:${action}, using context fallback:`, error?.message || error);
+        if (active) setAllowed(canFromContext(cachedContext, section));
       } finally {
         if (active) setLoading(false);
       }
@@ -207,8 +212,8 @@ export function useAuthorization(userEmail?: string | null) {
         if (!active) return;
         setContext(ctx);
       })
-      .catch((error) => {
-        console.error('[Authorization] failed loading authorization context', error);
+      .catch((error: any) => {
+        console.warn('[Authorization] failed loading authorization context, using empty:', error?.message || error);
         if (!active) return;
         setContext(EMPTY_CONTEXT);
       })

@@ -189,7 +189,28 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
                 <BodyMap value={region} onChange={selectRegion} />
                 <div className="space-y-6 lg:border-l lg:border-slate-200 lg:pl-8">
                   <div><p className={labelClass}>Selected area</p><p className="mt-2 text-lg font-black text-[#08233d]">{region ? BODY_REGION_LABELS[region] : 'No area selected'}</p></div>
-                  {region && BODY_REGION_SUBLOCATIONS[region] && <Field label="Specific location"><select className={fieldClass} value={subLocation} onChange={(event) => { const detail = event.target.value; setSubLocation(detail); patch({ location: buildBodyLocation(region, detail || undefined) }); }}><option value="">General area</option>{BODY_REGION_SUBLOCATIONS[region]?.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></Field>}
+                  <Field label="Specific location">
+                    <select
+                      disabled={!region}
+                      className={`${fieldClass} ${!region ? 'cursor-not-allowed bg-slate-50 text-slate-400' : ''}`}
+                      value={subLocation}
+                      onChange={(event) => {
+                        const detail = event.target.value;
+                        setSubLocation(detail);
+                        if (region) {
+                          patch({ location: buildBodyLocation(region, detail || undefined) });
+                        }
+                      }}
+                    >
+                      <option value="">{region ? 'General area' : 'Select area on body map first'}</option>
+                      {region &&
+                        (BODY_REGION_SUBLOCATIONS[region] || []).map((item) => (
+                          <option key={item} value={item}>
+                            {label(item)}
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
                   <fieldset><legend className={labelClass}>Affected side</legend><ChoiceGrid values={['left', 'right', 'bilateral', 'not_applicable', 'unknown']} selected={draft.affectedSide} onChange={(affectedSide) => patch({ affectedSide: affectedSide as InjuryInput['affectedSide'] })} /></fieldset>
                 </div>
               </div>

@@ -160,13 +160,38 @@ function fromRow(row: GkSessionRow): GkSession {
   };
 }
 
+function hasExercises(block: any): boolean {
+  return Array.isArray(block?.exercises) && block.exercises.length > 0;
+}
+
+function countExercises(session: GkSession): number {
+  return (
+    (session.gkWarmUp?.exercises?.length || 0) +
+    (session.gkMainPart?.exercises?.length || 0) +
+    (session.gkCoolDown?.exercises?.length || 0)
+  );
+}
+
 function fromLegacySessionRow(s: any): GkSession {
-  const sessionUid = s.id;
-  const recordId = s.id.startsWith('gk-') ? s.id : `gk-${s.id}`;
-  const gkWarmUp = s.gk_warm_up || s.warm_up || defaultBlock('warmup-block-gk', 'Warm Up');
-  const gkMainPart = s.gk_main_part || s.main_part || defaultBlock('main-block-gk', 'Main Part');
-  const gkCoolDown = s.gk_cool_down || s.cool_down || defaultBlock('cooldown-block-gk', 'Cool Down');
-  const gkPlayerGroups = s.gk_player_groups || s.player_groups || [];
+  const sessionUid = s.id || `session-${Date.now()}`;
+  const recordId = typeof s.id === 'string' && s.id.startsWith('gk-') ? s.id : `gk-${sessionUid}`;
+  
+  // Prefer explicit gk_* blocks if they have content; otherwise fall back to warm_up / main_part / cool_down if available or defaultBlock
+  const gkWarmUp = hasExercises(s.gk_warm_up)
+    ? s.gk_warm_up
+    : (hasExercises(s.warm_up) ? s.warm_up : (s.gk_warm_up || s.warm_up || defaultBlock('warmup-block-gk', 'Warm Up')));
+
+  const gkMainPart = hasExercises(s.gk_main_part)
+    ? s.gk_main_part
+    : (hasExercises(s.main_part) ? s.main_part : (s.gk_main_part || s.main_part || defaultBlock('main-block-gk', 'Main Part')));
+
+  const gkCoolDown = hasExercises(s.gk_cool_down)
+    ? s.gk_cool_down
+    : (hasExercises(s.cool_down) ? s.cool_down : (s.gk_cool_down || s.cool_down || defaultBlock('cooldown-block-gk', 'Cool Down')));
+
+  const gkPlayerGroups = (Array.isArray(s.gk_player_groups) && s.gk_player_groups.length > 0)
+    ? s.gk_player_groups
+    : (Array.isArray(s.player_groups) ? s.player_groups : []);
 
   return {
     id: recordId,
@@ -189,6 +214,68 @@ function fromLegacySessionRow(s: any): GkSession {
     createdAt: s.gk_updated_at || s.updated_at || Date.now(),
     updatedAt: s.gk_updated_at || s.updated_at || 0
   };
+}
+
+function mergeGkSessionWithLegacy(existingGk: GkSession, legacyRow: any): GkSession {
+  // If existing GK session already has exercises, keep it intact
+  if (countExercises(existingGk) > 0) {
+    return existingGk;
+  }
+
+  // Otherwise, check if legacyRow has exercises to restore
+  const legacyGk = fromLegacySessionRow(legacyRow);
+  if (countExercises(legacyGk) > 0) {
+    return {
+      ...existingGk,
+      gkWarmUp: hasExercises(existingGk.gkWarmUp) ? existingGk.gkWarmUp : legacyGk.gkWarmUp,
+      gkMainPart: hasExercises(existingGk.gkMainPart) ? existingGk.gkMainPart : legacyGk.gkMainPart,
+      gkCoolDown: hasExercises(existingGk.gkCoolDown) ? existingGk.gkCoolDown : legacyGk.gkCoolDown,
+      gkPlayerGroups: (existingGk.gkPlayerGroups && existingGk.gkPlayerGroups.length > 0)
+        ? existingGk.gkPlayerGroups
+        : legacyGk.gkPlayerGroups,
+      mainObjective: existingGk.mainObjective || legacyGk.mainObjective,
+      materialsNeeded: existingGk.materialsNeeded || legacyGk.materialsNeeded,
+      observations: existingGk.observations || legacyGk.observations,
+      squadRoster: (existingGk.squadRoster && existingGk.squadRoster.length > 0)
+        ? existingGk.squadRoster
+        : legacyGk.squadRoster,
+      attendance: (existingGk.attendance && existingGk.attendance.length > 0)
+        ? existingGk.attendance
+        : legacyGk.attendance
+    };
+  }
+
+  return existingGk;
+}
+
+function readAllPossibleCachedSessions(): GkSession[] {
+  // 1. Direct GK cache
+  const cachedGk = readCachedGkSessions();
+  if (cachedGk.length > 0) return cachedGk;
+
+  // 2. Cloud sessions cache
+  try {
+    const rawCloud = localStorage.getItem('u17_cloud_sessions_cache');
+    if (rawCloud) {
+      const parsed = JSON.parse(rawCloud);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(fromLegacySessionRow);
+      }
+    }
+  } catch {}
+
+  // 3. Local training sessions cache
+  try {
+    const rawLocal = localStorage.getItem('u17_training_sessions') || localStorage.getItem('u17_local_sessions');
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(fromLegacySessionRow);
+      }
+    }
+  } catch {}
+
+  return [];
 }
 
 function toRow(session: GkSession, updatedAt: number): GkSessionRow {
@@ -245,7 +332,7 @@ export async function listGkSessions(): Promise<GkSession[]> {
   
   // 1. Read existing rows in gk_sessions
   let gkRows: GkSessionRow[] = [];
-  let fetchError: unknown = null;
+  let gkFetchError: unknown = null;
   try {
     const { data, error } = await client
       .from(GK_SESSIONS_TABLE)
@@ -253,17 +340,17 @@ export async function listGkSessions(): Promise<GkSession[]> {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      fetchError = error;
+      gkFetchError = error;
     } else {
       gkRows = (data || []) as GkSessionRow[];
     }
   } catch (err) {
-    fetchError = err;
+    gkFetchError = err;
   }
 
   let mappedGk = gkRows.map(fromRow);
 
-  // 2. Check for legacy sessions in public.sessions that should be recovered
+  // 2. Check for legacy sessions in public.sessions table to recover any missing or enriched GK data
   try {
     const { data: legacyData, error: legacyErr } = await client
       .from('sessions')
@@ -271,6 +358,26 @@ export async function listGkSessions(): Promise<GkSession[]> {
       .order('updated_at', { ascending: false });
 
     if (!legacyErr && Array.isArray(legacyData) && legacyData.length > 0) {
+      const legacyMap = new Map<string, any>();
+      legacyData.forEach((row) => {
+        if (row?.id) {
+          legacyMap.set(row.id, row);
+          legacyMap.set(`gk-${row.id}`, row);
+        }
+      });
+
+      // 2a. Enrich existing GK sessions if they have empty exercises but legacy row has data
+      mappedGk = mappedGk.map((gkItem) => {
+        const matchingLegacy = legacyMap.get(gkItem.sessionUid) 
+          || legacyMap.get(gkItem.id) 
+          || legacyMap.get(gkItem.legacySessionId || '');
+        if (matchingLegacy) {
+          return mergeGkSessionWithLegacy(gkItem, matchingLegacy);
+        }
+        return gkItem;
+      });
+
+      // 2b. Add any sessions from public.sessions that are not yet in mappedGk
       const knownUids = new Set(mappedGk.map((s) => s.sessionUid));
       const knownIds = new Set(mappedGk.map((s) => s.id));
 
@@ -300,28 +407,17 @@ export async function listGkSessions(): Promise<GkSession[]> {
     console.warn('[gkSessionsService] Legacy sessions query check notice:', legacyCatchErr);
   }
 
-  // If both queries failed or returned nothing, check cache
+  // 3. If both queries returned nothing or errored, check all available local storage caches
   if (mappedGk.length === 0) {
-    const cached = readCachedGkSessions();
-    if (cached.length > 0) {
-      return cached;
+    const fallbackCached = readAllPossibleCachedSessions();
+    if (fallbackCached.length > 0) {
+      writeCachedGkSessions(fallbackCached);
+      return fallbackCached;
     }
-    // Also check cloud sessions cache if available
-    try {
-      const cloudRaw = localStorage.getItem('u17_cloud_sessions_cache');
-      if (cloudRaw) {
-        const cloudParsed = JSON.parse(cloudRaw);
-        if (Array.isArray(cloudParsed) && cloudParsed.length > 0) {
-          const fromCloudCache = cloudParsed.map(fromLegacySessionRow);
-          writeCachedGkSessions(fromCloudCache);
-          return fromCloudCache;
-        }
-      }
-    } catch {}
   }
 
-  if (fetchError && mappedGk.length === 0) {
-    throw fetchError;
+  if (gkFetchError && mappedGk.length === 0) {
+    throw gkFetchError;
   }
 
   writeCachedGkSessions(mappedGk);

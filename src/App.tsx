@@ -30,7 +30,8 @@ import {
   FitnessSession,
   GkSession,
   SquadPlayer,
-  VideoAnalysis
+  VideoAnalysis,
+  Injury
 } from './types';
 import { 
   logoutUser,
@@ -43,6 +44,8 @@ import {
   updateSquadPlayer,
   subscribeToSquadPlayers
 } from './services/squad/squadService';
+import { subscribeToInjuries } from './services/physio/injuriesService';
+import { buildDefaultAttendanceFromRoster, syncSquadPlayersWithInjuries } from './services/physio/squadInjurySync';
 import { applyMalikaAwardsToSquad } from './services/squad/malikaService';
 import { normalizeSquadPlayerPhotos } from './utils/squadPhotos';
 import {
@@ -77,7 +80,7 @@ import {
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
-import { subscribeToFitnessSessions } from './services/fitness/fitnessSessionsService';
+import { readCachedFitnessSessions, subscribeToFitnessSessions } from './services/fitness/fitnessSessionsService';
 import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
   deleteTrainingSession,
@@ -86,6 +89,7 @@ import {
 } from './modules/trainingSessionPersistence';
 import {
   deleteGkSession,
+  readCachedGkSessions,
   saveGkSession,
   subscribeToGkSessions
 } from './services/gk/gkSessionsService';
@@ -244,13 +248,6 @@ function formatSessionRosterFromSquad(players: SquadPlayer[]): string[] {
   );
 }
 
-function buildDefaultAttendanceFromRoster(roster: string[]): PlayerAttendance[] {
-  return roster.map((playerName) => ({
-    playerName,
-    status: 'Attending' as const
-  }));
-}
-
 export default function App() {
   const [currentPathname, setCurrentPathname] = useState(() => typeof window !== 'undefined' ? window.location.pathname : '/');
   const matchDetailRoute = currentPathname.startsWith('/matches/');
@@ -325,6 +322,27 @@ export default function App() {
       console.log('[Squad SYNC ERROR]', error);
       // Keep current in-memory state on read/realtime errors.
     });
+
+    return () => unsubscribe();
+  }, [isAuthInitializing, currentUser?.email]);
+
+  const [injuries, setInjuries] = useState<Injury[]>([]);
+
+  // Realtime subscription to physio injuries to dynamically sync injured/rehab status
+  useEffect(() => {
+    if (isAuthInitializing || !currentUser?.email) {
+      return;
+    }
+
+    const unsubscribe = subscribeToInjuries(
+      '00000000-0000-0000-0000-000000000001',
+      (items) => {
+        setInjuries(items);
+      },
+      (error) => {
+        console.warn('[Physio SYNC WARNING]', error);
+      }
+    );
 
     return () => unsubscribe();
   }, [isAuthInitializing, currentUser?.email]);
@@ -520,8 +538,8 @@ export default function App() {
   // Set when Firestore pushes a newer version of the session the user is CURRENTLY editing
   // while there are unsaved local changes — never silently overwritten (Bloque 2, tarea 3/4).
   const [remoteSessionConflict, setRemoteSessionConflict] = useState<CloudTrainingSession | null>(null);
-  const [gkSessions, setGkSessions] = useState<GkSession[]>([]);
-  const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>([]);
+  const [gkSessions, setGkSessions] = useState<GkSession[]>(() => readCachedGkSessions());
+  const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>(() => readCachedFitnessSessions());
   const fitnessSessionsRef = useRef<FitnessSession[]>([]);
   const [footballFitnessLoadError, setFootballFitnessLoadError] = useState<string | null>(null);
 
@@ -577,13 +595,17 @@ export default function App() {
     }
   });
 
+  const syncedSquadPlayers = useMemo(() => {
+    return syncSquadPlayersWithInjuries(squadPlayers, injuries);
+  }, [squadPlayers, injuries]);
+
   const squadStatistics = useMemo(() => {
     return calculateSquadStatistics({
-      players: squadPlayers,
+      players: syncedSquadPlayers,
       sessions: [session, ...cloudSessions],
       excludedPlayers
     });
-  }, [cloudSessions, excludedPlayers, session, squadPlayers]);
+  }, [cloudSessions, excludedPlayers, session, syncedSquadPlayers]);
 
   const squadPlayersWithStats = squadStatistics.players;
 
@@ -622,12 +644,14 @@ export default function App() {
         const kind = typeof err?.kind === 'string' ? err.kind : '';
         const hasLoadedFitnessData = fitnessSessionsRef.current.length > 0;
 
-        if (kind === 'realtime' && hasLoadedFitnessData) {
-          setFootballFitnessLoadError('Fitness live updates are temporarily unavailable. Showing last loaded Fitness data.');
+        // Never alarm users with a banner if data is already loaded and it's just a background websocket reconnect
+        if (kind === 'realtime') {
           return;
         }
 
-        setFootballFitnessLoadError('Fitness data is temporarily unavailable. Football session remains editable.');
+        if (!hasLoadedFitnessData) {
+          setFootballFitnessLoadError('Fitness data is temporarily unavailable. Football session remains editable.');
+        }
       }
     );
 
@@ -1241,7 +1265,7 @@ export default function App() {
       setSession({
         ...empty,
         squadRoster: rosterFromSquad,
-        attendance: buildDefaultAttendanceFromRoster(rosterFromSquad)
+        attendance: buildDefaultAttendanceFromRoster(rosterFromSquad, squadPlayersWithStats)
       });
       setExpandedExercises({});
     }
@@ -1344,7 +1368,7 @@ export default function App() {
       date: today,
       teamName: 'U17 Women Al Ula',
       squadRoster: rosterFromSquad,
-      attendance: buildDefaultAttendanceFromRoster(rosterFromSquad),
+      attendance: buildDefaultAttendanceFromRoster(rosterFromSquad, squadPlayersWithStats),
       gkWarmUp: { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
       gkMainPart: { id: 'main-block-gk', title: 'Main Part', exercises: [] },
       gkCoolDown: { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },
@@ -1484,7 +1508,7 @@ export default function App() {
               date: today,
               teamName: 'U17 Women Al Ula',
               squadRoster: rosterFromSquad,
-              attendance: buildDefaultAttendanceFromRoster(rosterFromSquad),
+              attendance: buildDefaultAttendanceFromRoster(rosterFromSquad, squadPlayersWithStats),
               gkWarmUp: { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] },
               gkMainPart: { id: 'main-block-gk', title: 'Main Part', exercises: [] },
               gkCoolDown: { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] },

@@ -4,9 +4,27 @@ import type { FitnessSession, PlayerGroup, TrainingBlock } from '../../types';
 import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamSelectionStore';
 
 const FITNESS_SESSIONS_TABLE = 'fitness_sessions';
+const FITNESS_SESSIONS_CACHE_KEY = 'u17_fitness_sessions_cache';
 const FITNESS_READ_RETRY_DELAY_MS = 1500;
 const FITNESS_MAX_READ_RETRIES = 1;
 const DEFAULT_FITNESS_TEAM_NAME = 'U17 Women Al Ula';
+
+export function readCachedFitnessSessions(): FitnessSession[] {
+  try {
+    const raw = localStorage.getItem(FITNESS_SESSIONS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeCachedFitnessSessions(sessions: FitnessSession[]): void {
+  try {
+    localStorage.setItem(FITNESS_SESSIONS_CACHE_KEY, JSON.stringify(sessions));
+  } catch {}
+}
 
 function createFitnessRealtimeChannelName(): string {
   return `u17-fitness-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -116,6 +134,80 @@ function defaultBlock(id: string, title: string): TrainingBlock {
   };
 }
 
+function hasExercises(block: any): boolean {
+  return Array.isArray(block?.exercises) && block.exercises.length > 0;
+}
+
+function fromLegacySessionRow(s: any): FitnessSession {
+  const sessionUid = s.id || `session-${Date.now()}`;
+  const recordId = typeof s.id === 'string' && s.id.startsWith('fitness-') ? s.id : `fitness-${sessionUid}`;
+
+  const fitnessWarmUp = hasExercises(s.fitness_warm_up)
+    ? s.fitness_warm_up
+    : (hasExercises(s.warm_up) ? s.warm_up : (s.fitness_warm_up || s.warm_up || defaultBlock('warmup-block-fitness', 'Warm Up')));
+
+  const fitnessMainPart = hasExercises(s.fitness_main_part)
+    ? s.fitness_main_part
+    : (hasExercises(s.main_part) ? s.main_part : (s.fitness_main_part || s.main_part || defaultBlock('main-block-fitness', 'Main Part')));
+
+  const fitnessCoolDown = hasExercises(s.fitness_cool_down)
+    ? s.fitness_cool_down
+    : (hasExercises(s.cool_down) ? s.cool_down : (s.fitness_cool_down || s.cool_down || defaultBlock('cooldown-block-fitness', 'Cool Down')));
+
+  const fitnessPlayerGroups = (Array.isArray(s.fitness_player_groups) && s.fitness_player_groups.length > 0)
+    ? s.fitness_player_groups
+    : (Array.isArray(s.player_groups) ? s.player_groups : []);
+
+  return {
+    id: recordId,
+    sessionUid,
+    legacySessionId: s.id,
+    teamName: s.team_name || s.teamName || '',
+    date: s.date || new Date().toISOString().slice(0, 10),
+    time: s.time || '18:30 - 20:00',
+    sessionNumber: s.session_number || s.sessionNumber || '',
+    microcycleDay: s.microcycle_day || s.microcycleDay || 'MD-3',
+    mainObjective: s.main_objective || s.mainObjective || '',
+    materialsNeeded: s.materials_needed || s.materialsNeeded || '',
+    observations: s.observations || '',
+    squadRoster: s.squad_roster || s.squadRoster || [],
+    attendance: s.attendance || [],
+    fitnessWarmUp,
+    fitnessMainPart,
+    fitnessCoolDown,
+    fitnessPlayerGroups,
+    createdAt: s.created_at || s.createdAt || Date.now(),
+    updatedAt: s.fitness_updated_at || s.updated_at || s.updatedAt || 0
+  };
+}
+
+function readAllPossibleCachedFitnessSessions(): FitnessSession[] {
+  const cachedFitness = readCachedFitnessSessions();
+  if (cachedFitness.length > 0) return cachedFitness;
+
+  try {
+    const rawCloud = localStorage.getItem('u17_cloud_sessions_cache');
+    if (rawCloud) {
+      const parsed = JSON.parse(rawCloud);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(fromLegacySessionRow);
+      }
+    }
+  } catch {}
+
+  try {
+    const rawLocal = localStorage.getItem('u17_training_sessions') || localStorage.getItem('u17_local_sessions');
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(fromLegacySessionRow);
+      }
+    }
+  } catch {}
+
+  return [];
+}
+
 function fromRow(row: FitnessSessionRow): FitnessSession {
   const sessionUid = row.session_uid || row.id;
   return {
@@ -189,15 +281,75 @@ async function ensureSessionCatalogIdentity(session: FitnessSession, updatedAt: 
 }
 
 async function listFitnessSessions(): Promise<FitnessSession[]> {
-  const query = getClient()
-    .from(FITNESS_SESSIONS_TABLE)
-    .select('*')
-    .order('updated_at', { ascending: false });
+  const client = getClient();
+  let rows: FitnessSessionRow[] = [];
+  let fetchError: unknown = null;
 
-  const { data, error } = await query;
+  try {
+    const { data, error } = await client
+      .from(FITNESS_SESSIONS_TABLE)
+      .select('*')
+      .order('updated_at', { ascending: false });
 
-  if (error) throw error;
-  return ((data || []) as FitnessSessionRow[]).map(fromRow);
+    if (error) {
+      fetchError = error;
+    } else {
+      rows = (data || []) as FitnessSessionRow[];
+    }
+  } catch (err) {
+    fetchError = err;
+  }
+
+  let mapped = rows.map(fromRow);
+
+  // Check legacy sessions table fallback if fitness_sessions is empty
+  try {
+    const { data: legacyData, error: legacyErr } = await client
+      .from('sessions')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (!legacyErr && Array.isArray(legacyData) && legacyData.length > 0) {
+      const knownUids = new Set(mapped.map((s) => s.sessionUid));
+      const knownIds = new Set(mapped.map((s) => s.id));
+
+      const recovered: FitnessSession[] = [];
+      legacyData.forEach((row) => {
+        if (!row || !row.id) return;
+        const asFitness = fromLegacySessionRow(row);
+        if (!knownUids.has(asFitness.sessionUid) && !knownIds.has(asFitness.id)) {
+          recovered.push(asFitness);
+          knownUids.add(asFitness.sessionUid);
+          knownIds.add(asFitness.id);
+        }
+      });
+
+      if (recovered.length > 0) {
+        mapped = [...mapped, ...recovered].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      }
+    }
+  } catch (legacyCatchErr) {
+    console.warn('[fitnessSessionsService] Legacy sessions query check notice:', legacyCatchErr);
+  }
+
+  // If both queries returned nothing or errored, check all available local storage caches
+  if (mapped.length === 0) {
+    const fallbackCached = readAllPossibleCachedFitnessSessions();
+    if (fallbackCached.length > 0) {
+      writeCachedFitnessSessions(fallbackCached);
+      return fallbackCached;
+    }
+  }
+
+  if (fetchError && mapped.length === 0) {
+    throw fetchError;
+  }
+
+  if (mapped.length > 0) {
+    writeCachedFitnessSessions(mapped);
+  }
+
+  return mapped;
 }
 
 export function subscribeToFitnessSessions(
@@ -208,6 +360,13 @@ export function subscribeToFitnessSessions(
   let active = true;
   let channel: RealtimeChannel | null = null;
   let hasLoadedAtLeastOnce = false;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Emit cached immediately to avoid loading flash
+  const initialCached = readAllPossibleCachedFitnessSessions();
+  if (initialCached.length > 0) {
+    callback(initialCached);
+  }
 
   const loadAndEmit = async (attempt = 0) => {
     try {
@@ -229,31 +388,43 @@ export function subscribeToFitnessSessions(
         return;
       }
 
-      if (active && onError) onError(withErrorKind(error, 'load'));
+      if (active && onError) {
+        onError(withErrorKind(error, 'load'));
+      }
     }
   };
 
   void loadAndEmit();
 
-  channel = client
-    .channel(createFitnessRealtimeChannelName())
-    .on('postgres_changes', { event: '*', schema: 'public', table: FITNESS_SESSIONS_TABLE }, () => {
+  // Setup periodic polling fallback (every 30s) to keep data fresh seamlessly
+  pollInterval = setInterval(() => {
+    if (active) {
       void loadAndEmit();
-    })
-    .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        if (!hasLoadedAtLeastOnce) {
-          void loadAndEmit();
-        }
+    }
+  }, 30000);
 
-        if (onError) {
-          onError(withErrorKind(new Error('Supabase realtime channel error for fitness sessions'), 'realtime'));
+  try {
+    channel = client
+      .channel(createFitnessRealtimeChannelName())
+      .on('postgres_changes', { event: '*', schema: 'public', table: FITNESS_SESSIONS_TABLE }, () => {
+        void loadAndEmit();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void loadAndEmit();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (!hasLoadedAtLeastOnce) {
+            void loadAndEmit();
+          }
         }
-      }
-    });
+      });
+  } catch (channelErr) {
+    console.warn('[fitnessSessionsService] Realtime channel setup notice:', channelErr);
+  }
 
   return () => {
     active = false;
+    if (pollInterval) clearInterval(pollInterval);
     if (channel) void client.removeChannel(channel);
   };
 }
@@ -267,6 +438,17 @@ export async function saveFitnessSession(session: FitnessSession): Promise<numbe
     .upsert(payload, { onConflict: 'id' });
 
   if (error) throw error;
+
+  const currentCached = readCachedFitnessSessions();
+  const index = currentCached.findIndex((s) => s.id === session.id);
+  const updatedSession = { ...session, updatedAt };
+  if (index >= 0) {
+    currentCached[index] = updatedSession;
+  } else {
+    currentCached.unshift(updatedSession);
+  }
+  writeCachedFitnessSessions(currentCached);
+
   return updatedAt;
 }
 
@@ -277,4 +459,7 @@ export async function deleteFitnessSession(fitnessSessionId: string): Promise<vo
     .eq('id', fitnessSessionId);
 
   if (error) throw error;
+
+  const currentCached = readCachedFitnessSessions().filter((s) => s.id !== fitnessSessionId);
+  writeCachedFitnessSessions(currentCached);
 }

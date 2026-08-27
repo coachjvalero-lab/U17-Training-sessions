@@ -2,13 +2,118 @@ import { AlertTriangle, MessageSquareText } from 'lucide-react';
 import type { Injury, PhysioComplaint, PhysioPlayerContext } from '../../types';
 import { formatBodyLocation } from './bodyMapModel';
 
-type TimelineProps = { players: PhysioPlayerContext[]; injuries: Injury[]; complaints: PhysioComplaint[]; selectedPlayerId: string; onSelectPlayer: (playerId: string) => void; onOpenInjury: (injury: Injury) => void };
+type TimelineProps = {
+  players: PhysioPlayerContext[];
+  injuries: Injury[];
+  complaints: PhysioComplaint[];
+  selectedPlayerId: string;
+  onSelectPlayer: (playerId: string) => void;
+  onOpenInjury: (injury: Injury) => void;
+  onOpenComplaint?: (complaint: PhysioComplaint) => void;
+};
 const label = (value: string) => value.replaceAll('_', ' ');
 
-export function PlayerClinicalTimeline({ players, injuries, complaints, selectedPlayerId, onSelectPlayer, onOpenInjury }: TimelineProps) {
+export function PlayerClinicalTimeline({
+  players,
+  injuries,
+  complaints,
+  selectedPlayerId,
+  onSelectPlayer,
+  onOpenInjury,
+  onOpenComplaint
+}: TimelineProps) {
   const events = [
     ...injuries.filter((injury) => injury.playerId === selectedPlayerId).map((injury) => ({ id: `injury-${injury.id}`, date: injury.injuryDate, kind: 'injury' as const, injury })),
     ...complaints.filter((complaint) => complaint.playerId === selectedPlayerId).map((complaint) => ({ id: `complaint-${complaint.id}`, date: complaint.occurrenceDate, kind: 'complaint' as const, complaint }))
   ].sort((left, right) => right.date.localeCompare(left.date));
-  return <div className="grid gap-6 lg:grid-cols-[260px_1fr]"><aside><label className="text-xs font-bold uppercase text-slate-600">Player<select className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" value={selectedPlayerId} onChange={(event) => onSelectPlayer(event.target.value)}><option value="">Select player</option>{players.map((player) => <option key={player.playerId} value={player.playerId}>{player.playerName}</option>)}</select></label>{selectedPlayerId && <div className="mt-4 border border-slate-200 bg-white p-4"><p className="font-bold text-slate-900">{players.find((player) => player.playerId === selectedPlayerId)?.playerName}</p><p className="mt-1 text-xs text-slate-500">{events.length} clinical events</p></div>}</aside><section><div className="mb-4"><p className="text-xs font-bold uppercase text-emerald-700">Longitudinal record</p><h2 className="text-xl font-black text-[#08233d]">Clinical timeline</h2></div>{!selectedPlayerId ? <div className="border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">Select a player to view their clinical history.</div> : events.length ? <div className="border-l-2 border-slate-200 pl-6">{events.map((event) => event.kind === 'injury' ? <button type="button" key={event.id} onClick={() => onOpenInjury(event.injury)} className="relative mb-3 block w-full border border-slate-200 bg-white p-5 text-left hover:border-rose-300"><span className="absolute -left-[34px] top-5 grid h-4 w-4 place-items-center rounded-full bg-rose-600 ring-4 ring-[#f5f7f8]" /><div className="flex justify-between gap-3"><div><p className="text-xs font-bold uppercase text-rose-700">Injury · {event.date}</p><p className="mt-1 font-bold text-slate-900">{event.injury.finalDiagnosis || event.injury.clinicalDiagnosis || label(event.injury.injuryType)}</p><p className="mt-1 text-sm text-slate-500">{formatBodyLocation(event.injury.location)}</p></div><AlertTriangle className="h-5 w-5 text-rose-500" /></div></button> : <article key={event.id} className="relative mb-3 border border-slate-200 bg-white p-5"><span className="absolute -left-[34px] top-5 grid h-4 w-4 place-items-center rounded-full bg-sky-600 ring-4 ring-[#f5f7f8]" /><div className="flex justify-between gap-3"><div><p className="text-xs font-bold uppercase text-sky-700">Complaint · {event.date}</p><p className="mt-1 font-bold capitalize text-slate-900">{label(event.complaint.complaintType)}</p><p className="mt-1 text-sm text-slate-500">{formatBodyLocation(event.complaint.location)} · {label(event.complaint.outcome)}</p></div><MessageSquareText className="h-5 w-5 text-sky-500" /></div></article>)}</div> : <div className="border border-dashed border-slate-300 bg-white p-12 text-center"><p className="font-bold text-slate-800">No clinical history</p><p className="mt-1 text-sm text-slate-500">No injuries or complaints are recorded for this player.</p></div>}</section></div>;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+      <aside>
+        <label className="text-xs font-bold uppercase text-slate-600">
+          Player
+          <select className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" value={selectedPlayerId} onChange={(event) => onSelectPlayer(event.target.value)}>
+            <option value="">Select player</option>
+            {players.map((player) => (
+              <option key={player.playerId} value={player.playerId}>{player.playerName}</option>
+            ))}
+          </select>
+        </label>
+        {selectedPlayerId && (
+          <div className="mt-4 border border-slate-200 bg-white p-4">
+            <p className="font-bold text-slate-900">{players.find((player) => player.playerId === selectedPlayerId)?.playerName}</p>
+            <p className="mt-1 text-xs text-slate-500">{events.length} clinical events</p>
+          </div>
+        )}
+      </aside>
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-bold uppercase text-emerald-700">Longitudinal record</p>
+          <h2 className="text-xl font-black text-[#08233d]">Clinical timeline</h2>
+        </div>
+        {!selectedPlayerId ? (
+          <div className="border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">
+            Select a player to view their clinical history.
+          </div>
+        ) : events.length ? (
+          <div className="border-l-2 border-slate-200 pl-6">
+            {events.map((event) =>
+              event.kind === 'injury' ? (
+                <button
+                  type="button"
+                  key={event.id}
+                  onClick={() => onOpenInjury(event.injury)}
+                  className="relative mb-3 block w-full border border-slate-200 bg-white p-5 text-left transition hover:border-rose-300"
+                >
+                  <span className="absolute -left-[34px] top-5 grid h-4 w-4 place-items-center rounded-full bg-rose-600 ring-4 ring-[#f5f7f8]" />
+                  <div className="flex justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-rose-700">Injury · {event.date}</p>
+                      <p className="mt-1 font-bold text-slate-900">{event.injury.finalDiagnosis || event.injury.clinicalDiagnosis || label(event.injury.injuryType)}</p>
+                      <p className="mt-1 text-sm text-slate-500">{formatBodyLocation(event.injury.location)}</p>
+                    </div>
+                    <AlertTriangle className="h-5 w-5 text-rose-500" />
+                  </div>
+                </button>
+              ) : onOpenComplaint ? (
+                <button
+                  type="button"
+                  key={event.id}
+                  onClick={() => onOpenComplaint(event.complaint)}
+                  className="relative mb-3 block w-full border border-slate-200 bg-white p-5 text-left transition hover:border-sky-300"
+                >
+                  <span className="absolute -left-[34px] top-5 grid h-4 w-4 place-items-center rounded-full bg-sky-600 ring-4 ring-[#f5f7f8]" />
+                  <div className="flex justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-sky-700">Complaint · {event.date}</p>
+                      <p className="mt-1 font-bold capitalize text-slate-900">{label(event.complaint.complaintType)}</p>
+                      <p className="mt-1 text-sm text-slate-500">{formatBodyLocation(event.complaint.location)} · {label(event.complaint.outcome)}</p>
+                    </div>
+                    <MessageSquareText className="h-5 w-5 text-sky-500" />
+                  </div>
+                </button>
+              ) : (
+                <article key={event.id} className="relative mb-3 border border-slate-200 bg-white p-5">
+                  <span className="absolute -left-[34px] top-5 grid h-4 w-4 place-items-center rounded-full bg-sky-600 ring-4 ring-[#f5f7f8]" />
+                  <div className="flex justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-sky-700">Complaint · {event.date}</p>
+                      <p className="mt-1 font-bold capitalize text-slate-900">{label(event.complaint.complaintType)}</p>
+                      <p className="mt-1 text-sm text-slate-500">{formatBodyLocation(event.complaint.location)} · {label(event.complaint.outcome)}</p>
+                    </div>
+                    <MessageSquareText className="h-5 w-5 text-sky-500" />
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        ) : (
+          <div className="border border-dashed border-slate-300 bg-white p-12 text-center">
+            <p className="font-bold text-slate-800">No clinical history</p>
+            <p className="mt-1 text-sm text-slate-500">No injuries or complaints are recorded for this player.</p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }

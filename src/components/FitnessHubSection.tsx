@@ -4,7 +4,7 @@ import { getEmptySession } from '../defaultSession';
 import type { CloudTrainingSession, FitnessSession, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
-import { deleteFitnessSession, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
+import { deleteFitnessSession, readCachedFitnessSessions, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
 import { selectWellnessRowsForDate } from '../utils/wellnessVisibility';
@@ -411,7 +411,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>(restoredContext.sessionSubNav);
   const [monitoringTab, setMonitoringTab] = useState<'wellness' | 'trainingLoad' | 'testing'>('wellness');
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
-  const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>([]);
+  const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>(() => readCachedFitnessSessions());
   const [selectedFitnessId, setSelectedFitnessId] = useState<string>('');
   const [editorSession, setEditorSession] = useState<TrainingSession>(() => getEmptySession());
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});

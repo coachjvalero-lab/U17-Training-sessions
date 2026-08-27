@@ -20,9 +20,10 @@ import {
   Upload,
   Loader2,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  Stethoscope
 } from 'lucide-react';
-import { SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary, Match } from '../types';
+import { SquadPlayer, TrainingSession, PlayerMatchStatisticsSummary, Match, Injury } from '../types';
 import { CloudTrainingSession } from '../types';
 import { AttendanceSection } from './AttendanceSection';
 import { processUploadedImageFile } from '../utils/heic';
@@ -34,6 +35,8 @@ import { updateSquadPlayerPhotoPath } from '../services/squad/squadService';
 import { useTeamContext } from '../contexts/TeamContext';
 import { getPlayerMatchStatisticsSummary, getAvailableCompetitions } from '../modules/squadStatisticsService';
 import { listMatches } from '../services/matches/matchService';
+import { subscribeToInjuries } from '../services/physio/injuriesService';
+import { getActiveInjuryForPlayer } from '../services/physio/squadInjurySync';
 
 interface SquadRosterSectionProps {
   players: SquadPlayer[];
@@ -144,6 +147,21 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
   const [isSavingPlayer, setIsSavingPlayer] = useState(false);
 
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
+  const [physioInjuries, setPhysioInjuries] = useState<Injury[]>([]);
+
+  useEffect(() => {
+    if (!selectedTeamId) return;
+    const unsubscribe = subscribeToInjuries(
+      selectedTeamId,
+      (list) => {
+        setPhysioInjuries(list);
+      },
+      (err) => {
+        console.warn('[SquadRosterSection] Injuries realtime notice:', err);
+      }
+    );
+    return () => unsubscribe();
+  }, [selectedTeamId]);
 
   const dataUrlToBlob = (dataUrl: string): Blob => {
     const parts = dataUrl.split(',');
@@ -1212,7 +1230,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   <span className="text-[11px] font-semibold text-slate-400">{group.players.length}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                  {group.players.map((player) => (
+                  {group.players.map((player) => {
+                    const activeInjury = getActiveInjuryForPlayer(player, physioInjuries);
+                    return (
                     <div 
                       key={player.id}
                       className="bg-white border border-slate-200/90 hover:border-emerald-500/60 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group overflow-hidden"
@@ -1264,6 +1284,17 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       </p>
                     </div>
                   </div>
+
+                  {/* Active Physio Injury Banner if exists */}
+                  {activeInjury && (
+                    <div className="my-2 px-2.5 py-1.5 bg-rose-50 border border-rose-200/80 rounded-xl text-[10px] text-rose-900 font-bold flex items-center gap-1.5 shadow-xs">
+                      <Stethoscope className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <div className="truncate min-w-0 flex-1">
+                        <span className="text-rose-700 font-semibold block text-[8px] uppercase tracking-wider">Physio Medical Alert</span>
+                        <span className="truncate block">{activeInjury.finalDiagnosis || activeInjury.clinicalDiagnosis || activeInjury.location} ({activeInjury.currentStatus.replace(/_/g, ' ')})</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Metrics Bar (Height, Weight, Foot) */}
                   <div className="grid grid-cols-3 gap-1 bg-slate-50 border border-slate-100 rounded-xl p-2 text-center text-[10px] font-mono text-slate-600 my-3">
@@ -1321,8 +1352,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                     </button>
                   </div>
                 </div>
-                      </div>
-                    ))}
+                    </div>
+                    );
+                  })}
                 </div>
               </div>
             ))
@@ -1353,7 +1385,9 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredPlayers.map((player) => (
+                  filteredPlayers.map((player) => {
+                    const activeInjury = getActiveInjuryForPlayer(player, physioInjuries);
+                    return (
                     <tr key={player.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3 px-4 text-center font-mono font-bold text-[#002142] bg-slate-50/40">
                         {player.number ? `#${player.number}` : '-'}
@@ -1370,7 +1404,17 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                               <Camera className="w-3 h-3 text-white" />
                             </div>
                           </div>
-                          <span>{player.firstName} {player.lastName}</span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span>{player.firstName} {player.lastName}</span>
+                              {activeInjury && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title={`Physio Alert: ${activeInjury.finalDiagnosis || activeInjury.clinicalDiagnosis || activeInjury.location} (${activeInjury.currentStatus.replace(/_/g, ' ')})`}>
+                                  <Stethoscope className="w-2.5 h-2.5 text-rose-600" />
+                                  <span>{activeInjury.location || 'Physio'}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -1421,7 +1465,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
