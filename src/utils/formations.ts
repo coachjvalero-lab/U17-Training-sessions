@@ -121,12 +121,44 @@ export const PREDEFINED_FORMATIONS: Record<FormationType, { name: string; label:
 export const FORMATION_KEYS = Object.keys(PREDEFINED_FORMATIONS) as FormationType[];
 
 /**
+ * Get tactical category from position string
+ */
+export function getPositionCategory(position?: string | null): 'GK' | 'DEF' | 'MID' | 'FWD' | 'OTHER' {
+  if (!position) return 'OTHER';
+  const pos = position.toUpperCase().trim();
+  if (pos === 'GK' || pos === 'POR') return 'GK';
+  if (['CB', 'LB', 'RB', 'LWB', 'RWB', 'LCB', 'RCB', 'DF', 'DEF'].includes(pos)) return 'DEF';
+  if (['CDM', 'CM', 'CAM', 'LAM', 'RAM', 'LM', 'RM', 'LDM', 'RDM', 'LCM', 'RCM', 'MF', 'MID', 'MC', 'MCD', 'MCO'].includes(pos)) return 'MID';
+  if (['ST', 'CF', 'LW', 'RW', 'LST', 'RST', 'FW', 'FWD', 'DC', 'EXT', 'DEL'].includes(pos)) return 'FWD';
+  return 'OTHER';
+}
+
+/**
+ * Check if player position is compatible or recommended for a given slot
+ */
+export function isPositionCompatible(slotPosition: string, playerPosition?: string | null): boolean {
+  if (!playerPosition) return true;
+  const slotCat = getPositionCategory(slotPosition);
+  const playerCat = getPositionCategory(playerPosition);
+  return slotCat === playerCat;
+}
+
+/**
+ * Calculate Euclidean distance between two percentage points on the pitch
+ */
+export function pitchDistance(x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
  * Detect which formation best matches a set of coordinates, or default to 1-4-3-3
  */
 export function detectFormation(starters: Array<{ pitchX?: number | null; pitchY?: number | null; position?: string }>): FormationType {
   if (starters.length === 0) return '1-4-3-3';
   
-  // Count defenders by position or Y > 65
+  // Count defenders by position or Y >= 65
   const defenders = starters.filter(s => {
     const pos = (s.position || '').toUpperCase();
     if (['CB', 'LB', 'RB', 'LWB', 'RWB', 'LCB', 'RCB'].includes(pos)) return true;
@@ -157,3 +189,4 @@ export function detectFormation(starters: Array<{ pitchX?: number | null; pitchY
 
   return '1-4-3-3';
 }
+

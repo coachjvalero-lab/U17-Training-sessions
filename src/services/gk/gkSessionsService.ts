@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
-import type { GkSession, PlayerGroup, TrainingBlock } from '../../types';
+import { saveSessionFieldsByRoleSupabase } from '../../supabaseSessions';
+import type { GkSession, PlayerGroup, TrainingBlock, TrainingSession } from '../../types';
 import { getSelectedTeamIdSnapshot, getTeamNameById } from '../permissions/teamSelectionStore';
 
 const GK_SESSIONS_TABLE = 'gk_sessions';
@@ -48,6 +49,27 @@ function withErrorKind(error: unknown, kind: GkSessionsErrorKind): GkSessionsErr
   const fallback = new Error(String(error)) as GkSessionsError;
   fallback.kind = kind;
   return fallback;
+}
+
+function isTableNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const withAny = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const code = String(withAny.code || '');
+  const message = String(withAny.message || '').toLowerCase();
+  const details = String(withAny.details || '').toLowerCase();
+  const hint = String(withAny.hint || '').toLowerCase();
+  const allText = `${message} ${details} ${hint}`;
+
+  return (
+    code === 'PGRST205' ||
+    code === 'PGRST204' ||
+    code === 'PGRST200' ||
+    code === '42P01' ||
+    allText.includes('could not find the table') ||
+    allText.includes('schema cache') ||
+    allText.includes('does not exist') ||
+    (allText.includes('relation') && allText.includes('does not exist'))
+  );
 }
 
 function isTransientReadError(error: unknown): boolean {
@@ -135,6 +157,10 @@ function defaultBlock(id: string, title: string): TrainingBlock {
   };
 }
 
+function hasExercises(block: any): boolean {
+  return Array.isArray(block?.exercises) && block.exercises.length > 0;
+}
+
 function fromRow(row: GkSessionRow): GkSession {
   const sessionUid = row.session_uid || row.id;
   return {
@@ -160,8 +186,47 @@ function fromRow(row: GkSessionRow): GkSession {
   };
 }
 
-function readAllPossibleCachedSessions(): GkSession[] {
-  return readCachedGkSessions();
+function fromLegacySessionRow(s: any): GkSession {
+  const sessionUid = s.id || `session-${Date.now()}`;
+  const recordId = typeof s.id === 'string' && s.id.startsWith('gk-') ? s.id : `gk-${sessionUid}`;
+
+  const gkWarmUp = hasExercises(s.gk_warm_up)
+    ? s.gk_warm_up
+    : (hasExercises(s.warm_up) ? s.warm_up : (s.gk_warm_up || s.warm_up || defaultBlock('warmup-block-gk', 'Warm Up')));
+
+  const gkMainPart = hasExercises(s.gk_main_part)
+    ? s.gk_main_part
+    : (hasExercises(s.main_part) ? s.main_part : (s.gk_main_part || s.main_part || defaultBlock('main-block-gk', 'Main Part')));
+
+  const gkCoolDown = hasExercises(s.gk_cool_down)
+    ? s.gk_cool_down
+    : (hasExercises(s.cool_down) ? s.cool_down : (s.gk_cool_down || s.cool_down || defaultBlock('cooldown-block-gk', 'Cool Down')));
+
+  const gkPlayerGroups = (Array.isArray(s.gk_player_groups) && s.gk_player_groups.length > 0)
+    ? s.gk_player_groups
+    : (Array.isArray(s.player_groups) ? s.player_groups : []);
+
+  return {
+    id: recordId,
+    sessionUid,
+    legacySessionId: s.id,
+    teamName: s.team_name || s.teamName || DEFAULT_GK_TEAM_NAME,
+    date: s.date || new Date().toISOString().slice(0, 10),
+    time: s.time || '18:30 - 20:00',
+    sessionNumber: s.session_number || s.sessionNumber || '',
+    microcycleDay: s.microcycle_day || s.microcycleDay || 'MD-3',
+    mainObjective: s.main_objective || s.mainObjective || '',
+    materialsNeeded: s.materials_needed || s.materialsNeeded || '',
+    observations: s.observations || '',
+    squadRoster: s.squad_roster || s.squadRoster || [],
+    attendance: s.attendance || [],
+    gkWarmUp,
+    gkMainPart,
+    gkCoolDown,
+    gkPlayerGroups,
+    createdAt: s.gk_updated_at || s.updated_at || s.created_at || Date.now(),
+    updatedAt: s.gk_updated_at || s.updated_at || 0
+  };
 }
 
 function toRow(session: GkSession, updatedAt: number): GkSessionRow {
@@ -204,21 +269,26 @@ async function ensureSessionCatalogIdentity(session: GkSession, updatedAt: numbe
     updated_at: updatedAt
   };
 
-  const { error } = await getClient()
-    .from('session_catalog')
-    .upsert(sessionCatalogPayload, { onConflict: 'session_uid' });
+  try {
+    const { error } = await getClient()
+      .from('session_catalog')
+      .upsert(sessionCatalogPayload, { onConflict: 'session_uid' });
 
-  if (error) {
-    console.warn('[gkSessionsService] session_catalog upsert notice:', error);
+    if (error && !isTableNotFoundError(error)) {
+      console.warn('[gkSessionsService] session_catalog upsert notice:', error);
+    }
+  } catch (e) {
+    // Non-blocking if table is not configured
   }
 }
 
 export async function listGkSessions(): Promise<GkSession[]> {
   const client = getClient();
-  
-  // 1. Read existing rows in gk_sessions
   let gkRows: GkSessionRow[] = [];
   let gkFetchError: unknown = null;
+  let hasGkTable = true;
+
+  // 1. Try reading from dedicated gk_sessions table
   try {
     const { data, error } = await client
       .from(GK_SESSIONS_TABLE)
@@ -226,17 +296,55 @@ export async function listGkSessions(): Promise<GkSession[]> {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      gkFetchError = error;
+      if (isTableNotFoundError(error)) {
+        hasGkTable = false;
+      } else {
+        gkFetchError = error;
+      }
     } else {
       gkRows = (data || []) as GkSessionRow[];
     }
   } catch (err) {
-    gkFetchError = err;
+    if (isTableNotFoundError(err)) {
+      hasGkTable = false;
+    } else {
+      gkFetchError = err;
+    }
   }
 
   let mappedGk = gkRows.map(fromRow);
 
-  // 2. If query errored and nothing in memory, fallback to local cache
+  // 2. Read from public.sessions table so that existing database sessions are visible
+  try {
+    const { data: legacyData, error: legacyErr } = await client
+      .from('sessions')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (!legacyErr && Array.isArray(legacyData) && legacyData.length > 0) {
+      const knownUids = new Set(mappedGk.map((s) => s.sessionUid));
+      const knownIds = new Set(mappedGk.map((s) => s.id));
+
+      const recovered: GkSession[] = [];
+      legacyData.forEach((row) => {
+        if (!row || !row.id) return;
+        const asGk = fromLegacySessionRow(row);
+        if (!knownUids.has(asGk.sessionUid) && !knownIds.has(asGk.id) && !knownIds.has(row.id)) {
+          recovered.push(asGk);
+          knownUids.add(asGk.sessionUid);
+          knownIds.add(asGk.id);
+        }
+      });
+
+      if (recovered.length > 0) {
+        mappedGk = [...mappedGk, ...recovered].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      }
+    }
+  } catch (legacyCatchErr) {
+    console.warn('[gkSessionsService] sessions query fallback notice:', legacyCatchErr);
+  }
+
+  // 3. If everything errored or was empty, check local storage cache
   if (mappedGk.length === 0) {
     const fallbackCached = readCachedGkSessions();
     if (fallbackCached.length > 0) {
@@ -244,7 +352,7 @@ export async function listGkSessions(): Promise<GkSession[]> {
     }
   }
 
-  if (gkFetchError && mappedGk.length === 0) {
+  if (gkFetchError && mappedGk.length === 0 && hasGkTable) {
     throw gkFetchError;
   }
 
@@ -258,7 +366,9 @@ export function subscribeToGkSessions(
 ): () => void {
   const client = getClient();
   let active = true;
-  let channel: RealtimeChannel | null = null;
+  let gkChannel: RealtimeChannel | null = null;
+  let sessionsChannel: RealtimeChannel | null = null;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
   let hasLoadedAtLeastOnce = false;
 
   // Emit cached immediately to avoid blank flash
@@ -287,48 +397,113 @@ export function subscribeToGkSessions(
         return;
       }
 
-      if (active && onError) onError(withErrorKind(error, 'load'));
+      if (active && onError && !isTableNotFoundError(error)) {
+        onError(withErrorKind(error, 'load'));
+      }
     }
   };
 
   void loadAndEmit();
 
-  channel = client
-    .channel(createGkRealtimeChannelName())
-    .on('postgres_changes', { event: '*', schema: 'public', table: GK_SESSIONS_TABLE }, () => {
+  // Periodic poll fallback (every 25s)
+  pollInterval = setInterval(() => {
+    if (active) {
       void loadAndEmit();
-    })
-    .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        if (!hasLoadedAtLeastOnce) {
-          void loadAndEmit();
-        }
+    }
+  }, 25000);
 
-        if (onError) {
-          onError(withErrorKind(new Error('Supabase realtime channel error for GK sessions'), 'realtime'));
+  try {
+    gkChannel = client
+      .channel(createGkRealtimeChannelName())
+      .on('postgres_changes', { event: '*', schema: 'public', table: GK_SESSIONS_TABLE }, () => {
+        void loadAndEmit();
+      })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          if (!hasLoadedAtLeastOnce) {
+            void loadAndEmit();
+          }
         }
-      }
-    });
+      });
+  } catch (err) {
+    console.warn('[gkSessionsService] Realtime gk_sessions channel notice:', err);
+  }
+
+  try {
+    sessionsChannel = client
+      .channel(`u17-gk-legacy-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
+        void loadAndEmit();
+      })
+      .subscribe();
+  } catch (err) {
+    console.warn('[gkSessionsService] Realtime sessions channel notice:', err);
+  }
 
   return () => {
     active = false;
-    if (channel) void client.removeChannel(channel);
+    if (pollInterval) clearInterval(pollInterval);
+    if (gkChannel) void client.removeChannel(gkChannel);
+    if (sessionsChannel) void client.removeChannel(sessionsChannel);
   };
 }
 
 export async function saveGkSession(session: GkSession): Promise<number> {
+  const client = getClient();
   const updatedAt = Date.now();
-  await ensureSessionCatalogIdentity(session, updatedAt);
-  const payload = toRow(session, updatedAt);
-  const { error } = await getClient()
-    .from(GK_SESSIONS_TABLE)
-    .upsert(payload, { onConflict: 'id' });
 
-  if (error) throw error;
+  let savedSuccessfully = false;
+
+  // 1. Try to save to gk_sessions table and session_catalog
+  try {
+    await ensureSessionCatalogIdentity(session, updatedAt);
+    const payload = toRow(session, updatedAt);
+    const { error } = await client
+      .from(GK_SESSIONS_TABLE)
+      .upsert(payload, { onConflict: 'id' });
+
+    if (!error) {
+      savedSuccessfully = true;
+    } else if (!isTableNotFoundError(error)) {
+      throw error;
+    }
+  } catch (tableErr) {
+    if (!isTableNotFoundError(tableErr)) {
+      throw tableErr;
+    }
+  }
+
+  // 2. If gk_sessions table does not exist, save GK fields to public.sessions table independently
+  if (!savedSuccessfully) {
+    const rawSessionUid = session.sessionUid || (session.id.startsWith('gk-') ? session.id.slice(3) : session.id);
+    const trainingSessionEquivalent: TrainingSession = {
+      id: rawSessionUid,
+      teamName: session.teamName,
+      date: session.date,
+      time: session.time,
+      sessionNumber: session.sessionNumber,
+      microcycleDay: session.microcycleDay,
+      mainObjective: session.mainObjective,
+      materialsNeeded: session.materialsNeeded,
+      observations: session.observations,
+      squadRoster: session.squadRoster || [],
+      attendance: session.attendance || [],
+      warmUp: defaultBlock('warmup-block', 'Warm Up'),
+      mainPart: defaultBlock('main-block', 'Main Part'),
+      coolDown: defaultBlock('cooldown-block', 'Cool Down'),
+      playerGroups: [],
+      gkWarmUp: session.gkWarmUp,
+      gkMainPart: session.gkMainPart,
+      gkCoolDown: session.gkCoolDown,
+      gkPlayerGroups: session.gkPlayerGroups || []
+    };
+
+    await saveSessionFieldsByRoleSupabase(rawSessionUid, 'gk', trainingSessionEquivalent);
+  }
 
   // Update local cache
   const cached = readCachedGkSessions();
-  const existingIdx = cached.findIndex((s) => s.id === session.id);
+  const existingIdx = cached.findIndex((s) => s.id === session.id || s.sessionUid === session.sessionUid);
   const updatedSession = { ...session, updatedAt };
   if (existingIdx >= 0) {
     cached[existingIdx] = updatedSession;
@@ -341,15 +516,37 @@ export async function saveGkSession(session: GkSession): Promise<number> {
 }
 
 export async function deleteGkSession(gkSessionId: string): Promise<void> {
-  const { error } = await getClient()
-    .from(GK_SESSIONS_TABLE)
-    .delete()
-    .eq('id', gkSessionId);
+  const client = getClient();
+  let deletedFromGkTable = false;
 
-  if (error) throw error;
+  try {
+    const { error } = await client
+      .from(GK_SESSIONS_TABLE)
+      .delete()
+      .eq('id', gkSessionId);
+
+    if (!error) {
+      deletedFromGkTable = true;
+    } else if (!isTableNotFoundError(error)) {
+      throw error;
+    }
+  } catch (err) {
+    if (!isTableNotFoundError(err)) throw err;
+  }
+
+  // If not deleted from gk_sessions or table not found, also delete from sessions table
+  if (!deletedFromGkTable) {
+    const rawSessionUid = gkSessionId.startsWith('gk-') ? gkSessionId.slice(3) : gkSessionId;
+    try {
+      await client.from('sessions').delete().eq('id', rawSessionUid);
+    } catch (e) {
+      console.warn('[gkSessionsService] Delete legacy session fallback notice:', e);
+    }
+  }
 
   const cached = readCachedGkSessions();
-  const remaining = cached.filter((s) => s.id !== gkSessionId);
+  const remaining = cached.filter((s) => s.id !== gkSessionId && s.sessionUid !== gkSessionId);
   writeCachedGkSessions(remaining);
 }
+
 

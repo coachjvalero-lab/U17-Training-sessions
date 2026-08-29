@@ -13,7 +13,10 @@ import {
   ChevronDown,
   UserCheck,
   UserX,
-  Sparkles
+  Sparkles,
+  Zap,
+  Layers,
+  HelpCircle
 } from 'lucide-react';
 import { MatchLineupEntry } from '../types';
 import { CloudSquadPlayer } from '../services/squad/squadService';
@@ -23,7 +26,9 @@ import {
   FormationSlot, 
   PREDEFINED_FORMATIONS, 
   FORMATION_KEYS, 
-  detectFormation 
+  getPositionCategory,
+  isPositionCompatible,
+  pitchDistance
 } from '../utils/formations';
 
 interface MatchPitchBoardProps {
@@ -55,10 +60,12 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const [activeTokenMenuId, setActiveTokenMenuId] = useState<string | null>(null);
   const [squadSearchQuery, setSquadSearchQuery] = useState('');
   const [squadFilterTab, setSquadFilterTab] = useState<'all' | 'unselected' | 'bench'>('all');
+  const [positionFilter, setPositionFilter] = useState<'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD'>('ALL');
 
   // Dragging state for pointer drag
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragCoords, setDragCoords] = useState<{ x: number; y: number } | null>(null);
+  const [hoverTargetId, setHoverTargetId] = useState<string | null>(null);
   const isDraggingRef = useRef(false);
   const activeDragIdRef = useRef<string | null>(null);
 
@@ -72,14 +79,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const unselectedPlayers = useMemo(() => {
     return squadPlayers.filter((p) => !lineupPlayerIds.has(p.id));
   }, [squadPlayers, lineupPlayerIds]);
-
-  // Auto-detect initial formation if starters exist
-  useEffect(() => {
-    if (starters.length > 0) {
-      const detected = detectFormation(starters);
-      setSelectedFormation(detected);
-    }
-  }, [starters.length]);
 
   const getPlayer = useCallback((playerId: string) => {
     return squadPlayers.find((p) => p.id === playerId);
@@ -96,28 +95,47 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     return p.firstName || p.lastName;
   }, [getPlayer]);
 
-  // Formation slots calculation
+  // Formation slots configuration
   const formationConfig = PREDEFINED_FORMATIONS[selectedFormation] || PREDEFINED_FORMATIONS['1-4-3-3'];
   const formationSlots = formationConfig.slots;
 
-  // Unassigned formation slots (slots without a placed starter nearby)
-  const unassignedSlots = useMemo(() => {
-    if (starters.length >= 11) return [];
-    
-    // For each formation slot, check if a starter is assigned to this position/slot
-    const assignedSlotIds = new Set<string>();
-    
-    // Simple assignment: match by proximity or index
-    formationSlots.forEach((slot, idx) => {
-      if (idx < starters.length) {
-        assignedSlotIds.add(slot.id);
+  // Accurately calculate which formation slots are occupied vs unassigned
+  // A slot is occupied if a starter is within 8.5% distance on pitch or has exact matching position when close
+  const { occupiedSlots, unassignedSlots } = useMemo(() => {
+    const occupied = new Map<string, MatchLineupEntry>();
+    const unassigned: FormationSlot[] = [];
+
+    // Copy slots to find closest matching starters
+    const availableStarters = [...starters];
+
+    for (const slot of formationSlots) {
+      // Find starter closest to this slot
+      let bestIndex = -1;
+      let minDistance = 12.0; // Distance threshold %
+
+      for (let i = 0; i < availableStarters.length; i++) {
+        const starter = availableStarters[i];
+        if (typeof starter.pitchX === 'number' && typeof starter.pitchY === 'number') {
+          const dist = pitchDistance(starter.pitchX, starter.pitchY, slot.x, slot.y);
+          if (dist < minDistance) {
+            minDistance = dist;
+            bestIndex = i;
+          }
+        }
       }
-    });
 
-    return formationSlots.filter((slot, idx) => idx >= starters.length);
-  }, [formationSlots, starters.length]);
+      if (bestIndex !== -1) {
+        const matchedStarter = availableStarters.splice(bestIndex, 1)[0];
+        occupied.set(slot.id, matchedStarter);
+      } else {
+        unassigned.push(slot);
+      }
+    }
 
-  // Apply a predefined formation layout
+    return { occupiedSlots: occupied, unassignedSlots: unassigned };
+  }, [formationSlots, starters]);
+
+  // Apply a predefined formation layout with intelligent position matching
   const handleSelectFormation = async (formationKey: FormationType) => {
     setSelectedFormation(formationKey);
     const targetConfig = PREDEFINED_FORMATIONS[formationKey];
@@ -125,12 +143,18 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
     const availableSlots = [...targetConfig.slots];
     const updates: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>> = [];
+    const startersToAssign = [...starters];
 
     // 1. Assign GK first
     const gkSlotIdx = availableSlots.findIndex((s) => s.position === 'GK');
-    const gkStarter = starters.find((s) => s.position?.toUpperCase() === 'GK');
-    if (gkStarter && gkSlotIdx !== -1) {
+    const gkStarterIdx = startersToAssign.findIndex((s) => {
+      const player = getPlayer(s.playerId);
+      return (s.position?.toUpperCase() === 'GK' || player?.position?.toUpperCase() === 'GK' || s.position === 'POR');
+    });
+
+    if (gkSlotIdx !== -1 && gkStarterIdx !== -1) {
       const slot = availableSlots.splice(gkSlotIdx, 1)[0];
+      const gkStarter = startersToAssign.splice(gkStarterIdx, 1)[0];
       updates.push({
         id: gkStarter.id,
         matchId,
@@ -145,40 +169,72 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       });
     }
 
-    // 2. Assign remaining starters
-    const remainingStarters = starters.filter((s) => s.id !== gkStarter?.id);
-    for (const starter of remainingStarters) {
-      if (availableSlots.length > 0) {
-        // Try exact position match
-        let slotIdx = availableSlots.findIndex((s) => s.position.toUpperCase() === (starter.position || '').toUpperCase());
-        if (slotIdx === -1) slotIdx = 0;
-        const slot = availableSlots.splice(slotIdx, 1)[0];
-        updates.push({
-          id: starter.id,
-          matchId,
-          playerId: starter.playerId,
-          position: slot.position,
-          starter: true,
-          pitchX: slot.x,
-          pitchY: slot.y,
-          shirtNumber: starter.shirtNumber,
-          captain: starter.captain,
-          notes: starter.notes
-        });
-      } else {
-        updates.push({
-          id: starter.id,
-          matchId,
-          playerId: starter.playerId,
-          position: starter.position,
-          starter: true,
-          pitchX: starter.pitchX ?? 50,
-          pitchY: starter.pitchY ?? 50,
-          shirtNumber: starter.shirtNumber,
-          captain: starter.captain,
-          notes: starter.notes
-        });
+    // 2. Assign by exact position category (DEF, MID, FWD)
+    const assignCategory = (category: 'DEF' | 'MID' | 'FWD') => {
+      const catStarters = startersToAssign.filter((s) => {
+        const p = getPlayer(s.playerId);
+        return getPositionCategory(s.position) === category || getPositionCategory(p?.position) === category;
+      });
+
+      for (const starter of catStarters) {
+        const slotIdx = availableSlots.findIndex((s) => getPositionCategory(s.position) === category);
+        if (slotIdx !== -1) {
+          const slot = availableSlots.splice(slotIdx, 1)[0];
+          const stIdx = startersToAssign.findIndex((s) => s.id === starter.id);
+          if (stIdx !== -1) startersToAssign.splice(stIdx, 1);
+
+          updates.push({
+            id: starter.id,
+            matchId,
+            playerId: starter.playerId,
+            position: slot.position,
+            starter: true,
+            pitchX: slot.x,
+            pitchY: slot.y,
+            shirtNumber: starter.shirtNumber,
+            captain: starter.captain,
+            notes: starter.notes
+          });
+        }
       }
+    };
+
+    assignCategory('DEF');
+    assignCategory('MID');
+    assignCategory('FWD');
+
+    // 3. Assign any remaining starters to available slots
+    while (startersToAssign.length > 0 && availableSlots.length > 0) {
+      const starter = startersToAssign.shift()!;
+      const slot = availableSlots.shift()!;
+      updates.push({
+        id: starter.id,
+        matchId,
+        playerId: starter.playerId,
+        position: slot.position,
+        starter: true,
+        pitchX: slot.x,
+        pitchY: slot.y,
+        shirtNumber: starter.shirtNumber,
+        captain: starter.captain,
+        notes: starter.notes
+      });
+    }
+
+    // 4. Any leftover starters without slots stay with default coordinates
+    for (const remaining of startersToAssign) {
+      updates.push({
+        id: remaining.id,
+        matchId,
+        playerId: remaining.playerId,
+        position: remaining.position || 'UTIL',
+        starter: true,
+        pitchX: remaining.pitchX ?? 50,
+        pitchY: remaining.pitchY ?? 50,
+        shirtNumber: remaining.shirtNumber,
+        captain: remaining.captain,
+        notes: remaining.notes
+      });
     }
 
     if (updates.length > 0) {
@@ -203,10 +259,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     });
   };
 
-  // Move bench player to starting XI on pitch
+  // Move bench player to starting XI on pitch at specific slot
   const handleMoveToStarter = async (entry: MatchLineupEntry, targetSlot?: FormationSlot) => {
     setActiveSlotModal(null);
-    const nextSlot = targetSlot || unassignedSlots[0] || { x: 50, y: 50, position: entry.position || 'UTIL' };
+    const nextSlot = targetSlot || unassignedSlots[0] || { id: 'slot', x: 50, y: 50, position: entry.position || 'UTIL' };
     await onUpdateLineupEntry({
       id: entry.id,
       matchId,
@@ -221,7 +277,75 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     });
   };
 
-  // Remove player from match lineup completely (moves back to unselected pool, never deletes from squad)
+  // Quick action: Move all starters to bench
+  const handleMoveAllToBench = async () => {
+    if (starters.length === 0) return;
+    const updates = starters.map((starter) => ({
+      id: starter.id,
+      matchId,
+      playerId: starter.playerId,
+      starter: false,
+      position: starter.position || 'SUB',
+      shirtNumber: starter.shirtNumber,
+      captain: starter.captain,
+      pitchX: null,
+      pitchY: null,
+      notes: starter.notes
+    }));
+    await onBatchUpdateLineupEntries(updates);
+  };
+
+  // Quick fill remaining formation slots with best available bench/squad players
+  const handleAutoFillFormation = async () => {
+    if (unassignedSlots.length === 0) return;
+    const availablePool = [...substitutes, ...unselectedPlayers.map((p) => ({
+      id: undefined,
+      matchId,
+      playerId: p.id,
+      position: p.position || 'UTIL',
+      starter: false,
+      shirtNumber: p.number ? Number(p.number) : null,
+      captain: false,
+      pitchX: null,
+      pitchY: null,
+      notes: null
+    }))];
+
+    const updates: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>> = [];
+
+    for (const slot of unassignedSlots) {
+      if (availablePool.length === 0) break;
+      // Find best matching player for slot category
+      const targetCat = getPositionCategory(slot.position);
+      let matchIdx = availablePool.findIndex((cand) => {
+        const player = getPlayer(cand.playerId);
+        return getPositionCategory(cand.position) === targetCat || getPositionCategory(player?.position) === targetCat;
+      });
+      if (matchIdx === -1) matchIdx = 0; // Take next available
+
+      const chosen = availablePool.splice(matchIdx, 1)[0];
+      const player = getPlayer(chosen.playerId);
+
+      updates.push({
+        id: chosen.id,
+        matchId,
+        playerId: chosen.playerId,
+        position: slot.position,
+        starter: true,
+        pitchX: slot.x,
+        pitchY: slot.y,
+        shirtNumber: chosen.shirtNumber ?? (player?.number ? Number(player.number) : null),
+        captain: chosen.captain,
+        notes: chosen.notes
+      });
+    }
+
+    if (updates.length > 0) {
+      await onBatchUpdateLineupEntries(updates);
+    }
+  };
+
+  // Remove player from match lineup completely (moves back to unselected pool)
   const handleRemoveFromLineup = async (entryId: string) => {
     setActiveTokenMenuId(null);
     await onRemoveLineupEntry(entryId);
@@ -230,13 +354,13 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   // Add an unselected squad player directly to starting XI or bench
   const handleAddSquadPlayer = async (player: CloudSquadPlayer, asStarter: boolean, slot?: FormationSlot) => {
     setActiveSlotModal(null);
-    await onAddPlayerToMatch(player, asStarter, slot);
+    const targetSlot = slot || (asStarter ? unassignedSlots[0] : undefined);
+    await onAddPlayerToMatch(player, asStarter, targetSlot);
   };
 
   // Pointer drag logic for pitch tokens
   const handlePointerDown = (e: React.PointerEvent, entry: MatchLineupEntry) => {
     e.stopPropagation();
-    // Only drag with primary pointer button
     if (e.button !== 0) return;
 
     isDraggingRef.current = true;
@@ -263,6 +387,17 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     const x = Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100));
     const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
     setDragCoords({ x, y });
+
+    // Check if dragging near another starter to show swap target indicator
+    const currentId = activeDragIdRef.current;
+    const otherStarter = starters.find((s) => {
+      if (s.id === currentId) return false;
+      const sx = s.pitchX ?? 50;
+      const sy = s.pitchY ?? 50;
+      return pitchDistance(x, y, sx, sy) < 7.5;
+    });
+
+    setHoverTargetId(otherStarter ? otherStarter.id : null);
   };
 
   const handlePointerUp = async (e: React.PointerEvent) => {
@@ -271,6 +406,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     isDraggingRef.current = false;
     activeDragIdRef.current = null;
     setDraggingId(null);
+    setHoverTargetId(null);
 
     const pitchEl = pitchRef.current;
     if (pitchEl) {
@@ -278,20 +414,81 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       const finalX = Math.round(Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100)) * 10) / 10;
       const finalY = Math.round(Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100)) * 10) / 10;
 
-      const entry = starters.find((s) => s.id === draggedEntryId);
-      if (entry) {
-        await onUpdateLineupEntry({
-          id: entry.id,
-          matchId,
-          playerId: entry.playerId,
-          position: entry.position,
-          starter: true,
-          shirtNumber: entry.shirtNumber,
-          captain: entry.captain,
-          pitchX: finalX,
-          pitchY: finalY,
-          notes: entry.notes
+      const draggedEntry = starters.find((s) => s.id === draggedEntryId);
+      if (draggedEntry) {
+        // Check if dropped onto another starter -> SWAP positions!
+        const targetStarter = starters.find((s) => {
+          if (s.id === draggedEntryId) return false;
+          const sx = s.pitchX ?? 50;
+          const sy = s.pitchY ?? 50;
+          return pitchDistance(finalX, finalY, sx, sy) < 8.0;
         });
+
+        if (targetStarter) {
+          // Swap positions and coordinates
+          const origX = draggedEntry.pitchX ?? 50;
+          const origY = draggedEntry.pitchY ?? 50;
+          const origPos = draggedEntry.position;
+
+          const targetX = targetStarter.pitchX ?? 50;
+          const targetY = targetStarter.pitchY ?? 50;
+          const targetPos = targetStarter.position;
+
+          await onBatchUpdateLineupEntries([
+            {
+              id: draggedEntry.id,
+              matchId,
+              playerId: draggedEntry.playerId,
+              starter: true,
+              position: targetPos,
+              pitchX: targetX,
+              pitchY: targetY,
+              shirtNumber: draggedEntry.shirtNumber,
+              captain: draggedEntry.captain,
+              notes: draggedEntry.notes
+            },
+            {
+              id: targetStarter.id,
+              matchId,
+              playerId: targetStarter.playerId,
+              starter: true,
+              position: origPos,
+              pitchX: origX,
+              pitchY: origY,
+              shirtNumber: targetStarter.shirtNumber,
+              captain: targetStarter.captain,
+              notes: targetStarter.notes
+            }
+          ]);
+        } else {
+          // Check if dropped very close to an empty formation slot -> Snap to slot!
+          let snapX = finalX;
+          let snapY = finalY;
+          let snapPos = draggedEntry.position;
+
+          for (const slot of formationSlots) {
+            const isSlotTaken = starters.some((s) => s.id !== draggedEntry.id && s.pitchX === slot.x && s.pitchY === slot.y);
+            if (!isSlotTaken && pitchDistance(finalX, finalY, slot.x, slot.y) < 6.0) {
+              snapX = slot.x;
+              snapY = slot.y;
+              snapPos = slot.position;
+              break;
+            }
+          }
+
+          await onUpdateLineupEntry({
+            id: draggedEntry.id,
+            matchId,
+            playerId: draggedEntry.playerId,
+            position: snapPos,
+            starter: true,
+            shirtNumber: draggedEntry.shirtNumber,
+            captain: draggedEntry.captain,
+            pitchX: snapX,
+            pitchY: snapY,
+            notes: draggedEntry.notes
+          });
+        }
       }
     }
     setDragCoords(null);
@@ -316,6 +513,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       list = squadPlayers.filter((p) => benchPlayerIds.has(p.id));
     }
 
+    if (positionFilter !== 'ALL') {
+      list = list.filter((p) => getPositionCategory(p.position) === positionFilter);
+    }
+
     if (!squadSearchQuery.trim()) return list;
     const q = squadSearchQuery.toLowerCase();
     return list.filter((p) => 
@@ -324,7 +525,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       (p.position && p.position.toLowerCase().includes(q)) ||
       (p.number !== undefined && String(p.number).includes(q))
     );
-  }, [squadPlayers, squadFilterTab, unselectedPlayers, substitutes, squadSearchQuery]);
+  }, [squadPlayers, squadFilterTab, positionFilter, unselectedPlayers, substitutes, squadSearchQuery]);
 
   return (
     <div className="space-y-6">
@@ -334,42 +535,81 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                Tactical Board
+                Pizarra Táctica
               </span>
               <span className="text-xs font-bold text-slate-500">
-                Starting XI: <strong className="text-slate-900">{starters.length}/11</strong> • Bench: <strong className="text-slate-900">{substitutes.length}</strong>
+                Titulares: <strong className="text-slate-900">{starters.length}/11</strong> • Suplentes: <strong className="text-slate-900">{substitutes.length}</strong>
               </span>
             </div>
             <h3 className="mt-1 text-lg font-black text-[#002142] font-display">
-              Pitch Lineup & Tactical Formation
+              Alineación y Esquema Táctico
             </h3>
             <p className="text-xs text-slate-500 font-medium">
-              Drag and drop players on the pitch to customize tactical positions. Select standard formations or adjust individual roles freely.
+              Arrastra las jugadoras para ajustar posiciones tácticas o haz clic en los huecos vacíos para colocar titulares.
             </p>
           </div>
 
-          {/* Formations Quick Switcher */}
-          <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 border border-slate-200">
-            <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              Formations:
-            </span>
-            {FORMATION_KEYS.map((key) => {
-              const isSelected = selectedFormation === key;
-              return (
+          {/* Formations Quick Switcher & Tools */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 border border-slate-200">
+              <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Formación:
+              </span>
+              {FORMATION_KEYS.map((key) => {
+                const isSelected = selectedFormation === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleSelectFormation(key)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#002142] text-white shadow-sm scale-105'
+                        : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/60'
+                    }`}
+                  >
+                    {key}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tactical Actions */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleSelectFormation(selectedFormation)}
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                title="Alinear automáticamente los titulares a la formación activa"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
+                <span>Auto-alinear</span>
+              </button>
+
+              {unassignedSlots.length > 0 && substitutes.length + unselectedPlayers.length > 0 && (
                 <button
-                  key={key}
                   type="button"
-                  onClick={() => handleSelectFormation(key)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#002142] text-white shadow-sm scale-105'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/60'
-                  }`}
+                  onClick={handleAutoFillFormation}
+                  className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-black text-white shadow-xs transition-colors"
+                  title="Completar el 11 titular automáticamente con las jugadoras disponibles"
                 >
-                  {key}
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Completar 11</span>
                 </button>
-              );
-            })}
+              )}
+
+              {starters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMoveAllToBench}
+                  className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 transition-colors"
+                  title="Mover todos los titulares al banquillo"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <span>Al banquillo</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -380,16 +620,16 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               saveStatus.state === 'saving' ? 'text-sky-600' :
               saveStatus.state === 'saved' ? 'text-emerald-600' : 'text-rose-600'
             }`}>
-              {saveStatus.state === 'saving' && 'Saving lineup changes...'}
-              {saveStatus.state === 'saved' && '✓ All positions and lineup assignments saved'}
-              {saveStatus.state === 'error' && (saveStatus.message || 'Error saving lineup')}
+              {saveStatus.state === 'saving' && 'Guardando cambios en la alineación...'}
+              {saveStatus.state === 'saved' && '✓ Esquema táctico y posiciones guardadas correctamente'}
+              {saveStatus.state === 'error' && (saveStatus.message || 'Error al guardar la alineación')}
             </span>
           </div>
         )}
       </div>
 
       {/* Main Pitch and Squad Layout */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.9fr)]">
         {/* Left Column: Interactive Pitch Campogram */}
         <div className="space-y-4">
           <div
@@ -446,14 +686,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             </svg>
 
             {/* Goal Posts labels */}
-            <div className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
-              Opponent Goal
+            <div className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
+              Campo Rival
             </div>
-            <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
-              Our Goal
+            <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
+              Nuestra Portería
             </div>
 
-            {/* Render Empty Formation Slots if Starters < 11 */}
+            {/* Render Empty Formation Slots */}
             {unassignedSlots.map((slot) => (
               <button
                 key={slot.id}
@@ -465,10 +705,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                 }}
                 className="absolute -translate-x-1/2 -translate-y-1/2 group flex flex-col items-center cursor-pointer transition-transform hover:scale-110 z-10"
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-emerald-300/80 bg-emerald-950/40 text-emerald-200 shadow-md backdrop-blur-xs group-hover:border-white group-hover:bg-emerald-600/60">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-emerald-300/80 bg-emerald-950/50 text-emerald-200 shadow-md backdrop-blur-xs group-hover:border-white group-hover:bg-emerald-600/70">
                   <Plus className="h-4 w-4" />
                 </div>
-                <span className="mt-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-emerald-200 group-hover:bg-emerald-900 group-hover:text-white">
+                <span className="mt-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-emerald-200 group-hover:bg-emerald-900 group-hover:text-white">
                   + {slot.position}
                 </span>
               </button>
@@ -478,8 +718,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             {starters.map((entry, index) => {
               const player = getPlayer(entry.playerId);
               const isBeingDragged = draggingId === entry.id;
+              const isHoveredTarget = hoverTargetId === entry.id;
               
-              // Determine position coordinates: drag state > persisted pitchX/Y > formation default
+              // Coordinates: drag state > persisted pitchX/Y > formation slot fallback
               const fallbackSlot = formationSlots[index] || { x: 50, y: 50 };
               const posX = isBeingDragged && dragCoords ? dragCoords.x : (entry.pitchX ?? fallbackSlot.x);
               const posY = isBeingDragged && dragCoords ? dragCoords.y : (entry.pitchY ?? fallbackSlot.y);
@@ -498,7 +739,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                   <div
                     onPointerDown={(e) => handlePointerDown(e, entry)}
                     className={`group relative flex flex-col items-center cursor-grab active:cursor-grabbing ${
-                      isBeingDragged ? 'scale-115 opacity-90' : 'hover:scale-105'
+                      isBeingDragged ? 'scale-115 opacity-90' : isHoveredTarget ? 'scale-110 ring-4 ring-amber-400 rounded-full' : 'hover:scale-105'
                     }`}
                   >
                     {/* Player Badge Token */}
@@ -521,11 +762,11 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                     </div>
 
                     {/* Player Surname & Position Pill */}
-                    <div className="mt-1 flex flex-col items-center">
-                      <span className="max-w-[84px] truncate rounded-md bg-slate-950/85 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-sm backdrop-blur-xs">
+                    <div className="mt-1 flex flex-col items-center pointer-events-none">
+                      <span className="max-w-[88px] truncate rounded-md bg-slate-950/90 px-2 py-0.5 text-[10px] font-black text-white shadow-sm backdrop-blur-xs">
                         {getPlayerShortName(entry.playerId)}
                       </span>
-                      <span className="mt-0.5 rounded bg-emerald-400/90 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-slate-950 shadow-xs">
+                      <span className="mt-0.5 rounded bg-emerald-400/95 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-slate-950 shadow-xs">
                         {entry.position || 'UTIL'}
                       </span>
                     </div>
@@ -538,8 +779,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         e.stopPropagation();
                         setActiveTokenMenuId(isMenuOpen ? null : entry.id);
                       }}
-                      className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-700 shadow-md hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
-                      title="Player options"
+                      className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-700 shadow-md hover:bg-slate-100 hover:text-slate-900 border border-slate-200 cursor-pointer"
+                      title="Opciones de jugadora"
                     >
                       <ChevronDown className="h-3 w-3" />
                     </button>
@@ -549,19 +790,19 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                   {isMenuOpen && (
                     <div 
                       onPointerDown={(e) => e.stopPropagation()}
-                      className="absolute left-1/2 top-full mt-2 -translate-x-1/2 z-50 w-44 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in zoom-in-95 text-slate-800"
+                      className="absolute left-1/2 top-full mt-2 -translate-x-1/2 z-50 w-48 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in zoom-in-95 text-slate-800"
                     >
                       <div className="px-2.5 py-1 text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
-                        {getPlayerName(entry.playerId)}
+                        {getPlayerName(entry.playerId)} {entry.shirtNumber ? `(#${entry.shirtNumber})` : ''}
                       </div>
                       <div className="mt-1 space-y-0.5">
                         <button
                           type="button"
                           onClick={() => handleMoveToBench(entry)}
-                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-900 text-left transition-colors"
+                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-900 text-left transition-colors cursor-pointer"
                         >
                           <ArrowRightLeft className="h-3.5 w-3.5 text-amber-600" />
-                          <span>Move to Bench</span>
+                          <span>Mover al Banquillo</span>
                         </button>
                         <button
                           type="button"
@@ -569,18 +810,18 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                             setActiveTokenMenuId(null);
                             onOpenEditModal(entry);
                           }}
-                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 text-left transition-colors"
+                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 text-left transition-colors cursor-pointer"
                         >
                           <Edit3 className="h-3.5 w-3.5 text-sky-600" />
-                          <span>Edit Details</span>
+                          <span>Editar Detalles / Dorsal</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveFromLineup(entry.id)}
-                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 text-left transition-colors"
+                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 text-left transition-colors cursor-pointer"
                         >
                           <UserX className="h-3.5 w-3.5 text-rose-600" />
-                          <span>Remove from Squad</span>
+                          <span>Descartar de Convocatoria</span>
                         </button>
                       </div>
                     </div>
@@ -594,14 +835,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 px-4 py-2.5 border border-slate-200 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <Move className="h-4 w-4 text-emerald-600" />
-              <span>Click & drag any player to position on the pitch.</span>
+              <span>Arrastra para mover o suelta encima de otra jugadora para intercambiar posiciones.</span>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-bold">
               <span className="flex items-center gap-1 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Starters ({starters.length})
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Titulares ({starters.length}/11)
               </span>
               <span className="flex items-center gap-1 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-amber-500" /> Bench ({substitutes.length})
+                <span className="h-2 w-2 rounded-full bg-amber-500" /> Suplentes ({substitutes.length})
               </span>
             </div>
           </div>
@@ -614,20 +855,20 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">
-                  Substitutes
+                  Banquillo
                 </span>
                 <h4 className="text-sm font-black text-[#002142] font-display">
-                  Bench Players ({substitutes.length})
+                  Suplentes ({substitutes.length})
                 </h4>
               </div>
               <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200">
-                {substitutes.length} Available
+                {substitutes.length} Disponibles
               </span>
             </div>
 
             {substitutes.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
-                No substitutes selected. Add players from the Squad Roster below to the bench.
+                No hay jugadoras en el banquillo. Añade jugadoras desde la plantilla de abajo.
               </div>
             ) : (
               <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto pr-1">
@@ -649,7 +890,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                             {getPlayerName(entry.playerId)}
                           </p>
                           <p className="text-[10px] font-bold text-slate-400">
-                            {entry.position || player?.position || 'SUB'} {entry.minuteSubbedIn ? `• In: ${entry.minuteSubbedIn}'` : ''}
+                            {entry.position || player?.position || 'SUB'} {entry.minuteSubbedIn ? `• Entró: ${entry.minuteSubbedIn}'` : ''}
                           </p>
                         </div>
                       </div>
@@ -658,24 +899,24 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         <button
                           type="button"
                           onClick={() => handleMoveToStarter(entry)}
-                          className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors"
-                          title="Promote to Starting XI on Pitch"
+                          className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                          title="Pasar al 11 titular en el campo"
                         >
-                          + Pitch
+                          + Titular
                         </button>
                         <button
                           type="button"
                           onClick={() => onOpenEditModal(entry)}
-                          className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100"
-                          title="Edit details"
+                          className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 cursor-pointer"
+                          title="Editar detalles"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveFromLineup(entry.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50"
-                          title="Remove from bench"
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50 cursor-pointer"
+                          title="Descartar del partido"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -689,34 +930,54 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
           {/* Full Squad Call-Up & Selection Roster */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
-                  Roster Management
-                </span>
-                <h4 className="text-sm font-black text-[#002142] font-display">
-                  Squad Call-Up & Reserves
-                </h4>
+            <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
+                    Plantilla Completa
+                  </span>
+                  <h4 className="text-sm font-black text-[#002142] font-display">
+                    Convocatoria y Reservas
+                  </h4>
+                </div>
+                <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setSquadFilterTab('all')}
+                    className={`rounded-lg px-2 py-0.5 transition-all cursor-pointer ${
+                      squadFilterTab === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Todas ({squadPlayers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSquadFilterTab('unselected')}
+                    className={`rounded-lg px-2 py-0.5 transition-all cursor-pointer ${
+                      squadFilterTab === 'unselected' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Sin asignar ({unselectedPlayers.length})
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setSquadFilterTab('all')}
-                  className={`rounded-lg px-2 py-0.5 transition-all ${
-                    squadFilterTab === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  All ({squadPlayers.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSquadFilterTab('unselected')}
-                  className={`rounded-lg px-2 py-0.5 transition-all ${
-                    squadFilterTab === 'unselected' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Available ({unselectedPlayers.length})
-                </button>
+
+              {/* Position Filter Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto pt-1">
+                {(['ALL', 'GK', 'DEF', 'MID', 'FWD'] as const).map((pos) => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setPositionFilter(pos)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                      positionFilter === pos
+                        ? 'bg-[#002142] text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {pos === 'ALL' ? 'Todas' : pos === 'GK' ? 'Porteras' : pos === 'DEF' ? 'Defensas' : pos === 'MID' ? 'Medios' : 'Delanteras'}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -727,7 +988,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                 type="text"
                 value={squadSearchQuery}
                 onChange={(e) => setSquadSearchQuery(e.target.value)}
-                placeholder="Search squad by name, number, position..."
+                placeholder="Buscar por nombre, dorsal, posición..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none"
               />
             </div>
@@ -736,7 +997,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto pr-1">
               {filteredSquadList.length === 0 ? (
                 <div className="py-6 text-center text-xs text-slate-400">
-                  No squad players found matching criteria.
+                  No se encontraron jugadoras con este filtro.
                 </div>
               ) : (
                 filteredSquadList.map((player) => {
@@ -762,15 +1023,15 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                           <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
                             <span>#{player.number ?? '–'}</span>
                             <span>•</span>
-                            <span>{player.position || 'Player'}</span>
+                            <span>{player.position || 'Jugadora'}</span>
                             {isStarter && (
                               <span className="rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-black text-emerald-800">
-                                Starting XI
+                                Titular
                               </span>
                             )}
                             {isBench && (
                               <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-black text-amber-800">
-                                Bench
+                                Banquillo
                               </span>
                             )}
                           </div>
@@ -785,36 +1046,36 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                               type="button"
                               onClick={() => handleAddSquadPlayer(player, true)}
                               className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-white shadow-xs transition-colors cursor-pointer"
-                              title="Add to Starting XI Pitch"
+                              title="Colocar como titular en la pizarra"
                             >
-                              + Starter
+                              + Titular
                             </button>
                             <button
                               type="button"
                               onClick={() => handleAddSquadPlayer(player, false)}
                               className="rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-700 transition-colors cursor-pointer"
-                              title="Add to Bench"
+                              title="Añadir al banquillo"
                             >
-                              + Bench
+                              + Banquillo
                             </button>
                           </>
                         ) : isStarter ? (
                           <button
                             type="button"
                             onClick={() => handleMoveToBench(existingLineup)}
-                            className="rounded-lg bg-amber-50 hover:bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800 border border-amber-200 transition-colors"
-                            title="Move from pitch to bench"
+                            className="rounded-lg bg-amber-50 hover:bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800 border border-amber-200 transition-colors cursor-pointer"
+                            title="Pasar al banquillo"
                           >
-                            To Bench
+                            Al Banquillo
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleMoveToStarter(existingLineup)}
-                            className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors"
-                            title="Promote to Starting XI on pitch"
+                            className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
+                            title="Pasar al 11 titular"
                           >
-                            To Pitch
+                            A Titular
                           </button>
                         )}
                       </div>
@@ -834,23 +1095,23 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                  Assign Starting Position
+                  Asignar Posición Titular
                 </span>
                 <h3 className="text-base font-black text-[#002142] font-display">
-                  Select Player for {activeSlotModal.position}
+                  Elegir jugadora para {activeSlotModal.position}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setActiveSlotModal(null)}
-                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <p className="text-xs text-slate-500 font-medium">
-              Choose an available player from your bench or squad reserves to place in this tactical slot.
+              Selecciona una jugadora del banquillo o de la plantilla para colocarla exactamente en la posición de {activeSlotModal.position}.
             </p>
 
             {/* List of candidates */}
@@ -858,15 +1119,16 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               {/* First list bench substitutes */}
               {substitutes.length > 0 && (
                 <div className="pb-2">
-                  <span className="text-[10px] font-black uppercase text-amber-700">From Bench</span>
+                  <span className="text-[10px] font-black uppercase text-amber-700">Desde el Banquillo</span>
                   {substitutes.map((entry) => {
                     const player = getPlayer(entry.playerId);
+                    const isCompat = isPositionCompatible(activeSlotModal.position, entry.position || player?.position);
                     return (
                       <button
                         key={entry.id}
                         type="button"
                         onClick={() => handleMoveToStarter(entry, activeSlotModal)}
-                        className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl"
+                        className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <PlayerPitchAvatar
@@ -877,10 +1139,15 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                             className="bg-slate-100 text-xs font-black text-slate-700"
                             alt={getPlayerName(entry.playerId)}
                           />
-                          <span className="text-xs font-bold text-slate-900">{getPlayerName(entry.playerId)}</span>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900">{getPlayerName(entry.playerId)}</span>
+                            <span className="ml-1 text-[10px] text-slate-400">({entry.position || player?.position || 'SUB'})</span>
+                          </div>
                         </div>
-                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
-                          Place as {activeSlotModal.position}
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                          isCompat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          Poner como {activeSlotModal.position}
                         </span>
                       </button>
                     );
@@ -891,36 +1158,44 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               {/* Next list unselected players */}
               {unselectedPlayers.length > 0 && (
                 <div className="pt-2">
-                  <span className="text-[10px] font-black uppercase text-sky-700">From Squad Reserves</span>
-                  {unselectedPlayers.map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => handleAddSquadPlayer(player, true, activeSlotModal)}
-                      className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlayerPitchAvatar
-                          photoUrl={player.photoUrl}
-                          shirtNumber={player.number}
-                          fallbackNumber="–"
-                          sizeClassName="h-7 w-7"
-                          className="bg-slate-100 text-xs font-black text-slate-700"
-                          alt={`${player.firstName} ${player.lastName}`}
-                        />
-                        <span className="text-xs font-bold text-slate-900">{player.firstName} {player.lastName}</span>
-                      </div>
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
-                        Place as {activeSlotModal.position}
-                      </span>
-                    </button>
-                  ))}
+                  <span className="text-[10px] font-black uppercase text-sky-700">Desde Reservas / Plantilla</span>
+                  {unselectedPlayers.map((player) => {
+                    const isCompat = isPositionCompatible(activeSlotModal.position, player.position);
+                    return (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => handleAddSquadPlayer(player, true, activeSlotModal)}
+                        className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <PlayerPitchAvatar
+                            photoUrl={player.photoUrl}
+                            shirtNumber={player.number}
+                            fallbackNumber="–"
+                            sizeClassName="h-7 w-7"
+                            className="bg-slate-100 text-xs font-black text-slate-700"
+                            alt={`${player.firstName} ${player.lastName}`}
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-900">{player.firstName} {player.lastName}</span>
+                            <span className="ml-1 text-[10px] text-slate-400">({player.position || 'Jugadora'})</span>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                          isCompat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          Poner como {activeSlotModal.position}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
               {substitutes.length === 0 && unselectedPlayers.length === 0 && (
                 <p className="py-6 text-center text-xs text-slate-400">
-                  All available squad players are currently in the starting XI.
+                  Todas las jugadoras de la plantilla están ya en el 11 titular.
                 </p>
               )}
             </div>
@@ -930,3 +1205,4 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     </div>
   );
 };
+

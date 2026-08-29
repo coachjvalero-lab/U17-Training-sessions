@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TrainingSession, Match } from '../types';
 import { MatchCentreSection } from './MatchCentreSection';
+import { MatchCallUpSection } from './MatchCallUpSection';
 import { TeamCrest } from './TeamCrest';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { useTeamContext } from '../contexts/TeamContext';
@@ -661,56 +662,12 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
       {/* Main Tab 3: Matchday Squad Call-Up List */}
       {activeTab === 'callup' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-base font-black text-[#002142] font-display">
-                Matchday Squad Call-Up Roster
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                Select 18-20 players called up for the upcoming fixture.
-              </p>
-            </div>
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1.5">
-              <Users className="w-4 h-4 text-emerald-600" />
-              <span>{selectedCallup.length} Players Selected</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {squadRoster.map((player) => {
-              const isSelected = selectedCallup.includes(player);
-
-              return (
-                <button
-                  key={player}
-                  type="button"
-                  onClick={() => toggleCallupPlayer(player)}
-                  className={`p-3 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer select-none ${
-                    isSelected
-                      ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 shadow-sm'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5 truncate">
-                    <div className={`w-7 h-7 rounded-lg text-xs font-extrabold flex items-center justify-center ${
-                      isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {player.substring(0, 2).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-bold truncate">{player}</span>
-                  </div>
-
-                  {isSelected ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : (
-                    <Plus className="w-4 h-4 text-slate-400 shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <MatchCallUpSection
+          matches={matches}
+          selectedTeamId={selectedTeamId}
+          currentLogo={currentLogo}
+          onNavigateToTactics={() => setActiveTab('matches')}
+        />
       )}
 
       {/* Add / Edit Match Modal */}
