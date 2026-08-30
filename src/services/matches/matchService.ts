@@ -77,50 +77,89 @@ function toRow(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' |
 }
 
 export async function listMatches(teamId?: string | null): Promise<Match[]> {
-  // Join with auth_teams to get opponent name
-  let query = getClient()
-    .from(MATCHES_TABLE)
-    .select(`
-      *,
-      opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
-    `);
-  
-  if (teamId) {
-    query = query.eq('team_id', teamId);
+  try {
+    let query = getClient()
+      .from(MATCHES_TABLE)
+      .select(`
+        *,
+        opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
+      `);
+    
+    if (teamId) {
+      query = query.eq('team_id', teamId);
+    }
+
+    const { data, error } = await query.order('date', { ascending: true });
+    if (!error && data) {
+      return (data as any[]).map((row) => {
+        const opponent = row.opponent_team as { name?: string; logo_url?: string | null } | null;
+        return fromRow({
+          ...row,
+          opponent_name: opponent?.name || row.opponent_team_id,
+          opponent_logo_url: opponent?.logo_url
+        } as MatchRowWithOpponent);
+      });
+    }
+  } catch {
+    // Fall back to direct query without join
   }
 
-  const { data, error } = await query.order('date', { ascending: true });
+  let fallbackQuery = getClient()
+    .from(MATCHES_TABLE)
+    .select('*');
+
+  if (teamId) {
+    fallbackQuery = fallbackQuery.eq('team_id', teamId);
+  }
+
+  const { data, error } = await fallbackQuery.order('date', { ascending: true });
   if (error) throw error;
 
-  // Transform the joined data
   return ((data || []) as any[]).map((row) => {
-    const opponent = row.opponent_team as { name?: string; logo_url?: string | null } | null;
     return fromRow({
       ...row,
-      opponent_name: opponent?.name,
-      opponent_logo_url: opponent?.logo_url
+      opponent_name: row.opponent_team_id || 'Match',
+      opponent_logo_url: null
     } as MatchRowWithOpponent);
   });
 }
 
 export async function getMatchById(matchId: string): Promise<Match | null> {
+  try {
+    const { data, error } = await getClient()
+      .from(MATCHES_TABLE)
+      .select(`
+        *,
+        opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
+      `)
+      .eq('id', matchId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const row = data as MatchRow & { opponent_team?: { name?: string; logo_url?: string | null } | null };
+      return fromRow({
+        ...row,
+        opponent_name: row.opponent_team?.name || row.opponent_team_id,
+        opponent_logo_url: row.opponent_team?.logo_url
+      } as MatchRowWithOpponent);
+    }
+  } catch {
+    // Fall back to direct query
+  }
+
   const { data, error } = await getClient()
     .from(MATCHES_TABLE)
-    .select(`
-      *,
-      opponent_team:auth_teams!matches_opponent_team_id_fkey(name, logo_url)
-    `)
+    .select('*')
     .eq('id', matchId)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
 
-  const row = data as MatchRow & { opponent_team?: { name?: string; logo_url?: string | null } | null };
   return fromRow({
-    ...row,
-    opponent_name: row.opponent_team?.name,
-    opponent_logo_url: row.opponent_team?.logo_url
+    ...data,
+    opponent_name: data.opponent_team_id || 'Match',
+    opponent_logo_url: null
   } as MatchRowWithOpponent);
 }
 

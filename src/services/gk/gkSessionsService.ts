@@ -161,6 +161,19 @@ function hasExercises(block: any): boolean {
   return Array.isArray(block?.exercises) && block.exercises.length > 0;
 }
 
+function isHistoricalGkSession(s: any): boolean {
+  if (!s || !s.id) return false;
+  // If explicitly a GK session id
+  if (typeof s.id === 'string' && s.id.startsWith('gk-')) return true;
+  // If specifically marked with GK update time
+  if (typeof s.gk_updated_at === 'number' && s.gk_updated_at > 0) return true;
+  // If has GK specific exercises in any GK block
+  if (hasExercises(s.gk_warm_up) || hasExercises(s.gk_main_part) || hasExercises(s.gk_cool_down)) {
+    return true;
+  }
+  return false;
+}
+
 function fromRow(row: GkSessionRow): GkSession {
   const sessionUid = row.session_uid || row.id;
   return {
@@ -192,19 +205,19 @@ function fromLegacySessionRow(s: any): GkSession {
 
   const gkWarmUp = hasExercises(s.gk_warm_up)
     ? s.gk_warm_up
-    : (hasExercises(s.warm_up) ? s.warm_up : (s.gk_warm_up || s.warm_up || defaultBlock('warmup-block-gk', 'Warm Up')));
+    : (s.gk_warm_up || defaultBlock('warmup-block-gk', 'Warm Up'));
 
   const gkMainPart = hasExercises(s.gk_main_part)
     ? s.gk_main_part
-    : (hasExercises(s.main_part) ? s.main_part : (s.gk_main_part || s.main_part || defaultBlock('main-block-gk', 'Main Part')));
+    : (s.gk_main_part || defaultBlock('main-block-gk', 'Main Part'));
 
   const gkCoolDown = hasExercises(s.gk_cool_down)
     ? s.gk_cool_down
-    : (hasExercises(s.cool_down) ? s.cool_down : (s.gk_cool_down || s.cool_down || defaultBlock('cooldown-block-gk', 'Cool Down')));
+    : (s.gk_cool_down || defaultBlock('cooldown-block-gk', 'Cool Down'));
 
   const gkPlayerGroups = (Array.isArray(s.gk_player_groups) && s.gk_player_groups.length > 0)
     ? s.gk_player_groups
-    : (Array.isArray(s.player_groups) ? s.player_groups : []);
+    : [];
 
   return {
     id: recordId,
@@ -314,7 +327,7 @@ export async function listGkSessions(): Promise<GkSession[]> {
 
   let mappedGk = gkRows.map(fromRow);
 
-  // 2. Read from public.sessions table so that existing database sessions are visible
+  // 2. Read from public.sessions table so that existing historical database sessions are visible
   try {
     const { data: legacyData, error: legacyErr } = await client
       .from('sessions')
@@ -328,6 +341,9 @@ export async function listGkSessions(): Promise<GkSession[]> {
       const recovered: GkSession[] = [];
       legacyData.forEach((row) => {
         if (!row || !row.id) return;
+        // Only include historical sessions that were actually created/edited as GK sessions
+        if (!isHistoricalGkSession(row)) return;
+
         const asGk = fromLegacySessionRow(row);
         if (!knownUids.has(asGk.sessionUid) && !knownIds.has(asGk.id) && !knownIds.has(row.id)) {
           recovered.push(asGk);
@@ -367,7 +383,6 @@ export function subscribeToGkSessions(
   const client = getClient();
   let active = true;
   let gkChannel: RealtimeChannel | null = null;
-  let sessionsChannel: RealtimeChannel | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let hasLoadedAtLeastOnce = false;
 
@@ -429,22 +444,10 @@ export function subscribeToGkSessions(
     console.warn('[gkSessionsService] Realtime gk_sessions channel notice:', err);
   }
 
-  try {
-    sessionsChannel = client
-      .channel(`u17-gk-legacy-sessions-realtime-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
-        void loadAndEmit();
-      })
-      .subscribe();
-  } catch (err) {
-    console.warn('[gkSessionsService] Realtime sessions channel notice:', err);
-  }
-
   return () => {
     active = false;
     if (pollInterval) clearInterval(pollInterval);
     if (gkChannel) void client.removeChannel(gkChannel);
-    if (sessionsChannel) void client.removeChannel(sessionsChannel);
   };
 }
 

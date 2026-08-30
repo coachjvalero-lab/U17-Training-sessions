@@ -2,6 +2,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { Injury, InjuryFollowUp, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { determineSquadStatusFromPlayerInjuries } from './squadInjurySync';
+import { listSquadPlayers } from '../squad/squadService';
+import { listMatches } from '../matches/matchService';
 
 const INJURIES_TABLE = 'injuries';
 const FOLLOW_UPS_TABLE = 'injury_follow_ups';
@@ -101,31 +103,61 @@ const injuryFromRow = (row: any): Injury => ({
   closedAt: row.closed_at, createdAt: row.created_at, updatedAt: row.updated_at
 });
 
-const injuryToRow = (value: Partial<Injury>): Record<string, unknown> => ({
-  ...(value.teamId !== undefined && { team_id: value.teamId }), ...(value.playerId !== undefined && { player_id: value.playerId }),
-  ...(value.injuryDate !== undefined && { injury_date: value.injuryDate }), ...(value.context !== undefined && { context: value.context }),
-  ...(value.trainingSessionId !== undefined && { training_session_id: value.trainingSessionId }), ...(value.matchId !== undefined && { match_id: value.matchId }),
-  ...(value.location !== undefined && { location: value.location }), ...(value.affectedSide !== undefined && { affected_side: value.affectedSide }),
-  ...(value.injuryType !== undefined && { injury_type: value.injuryType }), ...(value.clinicalDiagnosis !== undefined && { clinical_diagnosis: value.clinicalDiagnosis }),
-  ...(value.medicalDiagnosis !== undefined && { medical_diagnosis: value.medicalDiagnosis }), ...(value.imagingDiagnosis !== undefined && { imaging_diagnosis: value.imagingDiagnosis }),
-  ...(value.finalDiagnosis !== undefined && { final_diagnosis: value.finalDiagnosis }), ...(value.diagnosisStatus !== undefined && { diagnosis_status: value.diagnosisStatus }),
-  ...(value.injuryGrade !== undefined && { injury_grade: value.injuryGrade }), ...(value.previousSimilarInjury !== undefined && { previous_similar_injury: value.previousSimilarInjury }),
-  ...(value.occurrenceType !== undefined && { occurrence_type: value.occurrenceType }), ...(value.previousInjuryId !== undefined && { previous_injury_id: value.previousInjuryId }),
-  ...(value.previousInjuryDate !== undefined && { previous_injury_date: value.previousInjuryDate }), ...(value.sameLocation !== undefined && { same_location: value.sameLocation }),
-  ...(value.sameDiagnosis !== undefined && { same_diagnosis: value.sameDiagnosis }), ...(value.playingSurface !== undefined && { playing_surface: value.playingSurface }),
-  ...(value.contactType !== undefined && { contact_type: value.contactType }), ...(value.contactWith !== undefined && { contact_with: value.contactWith }),
-  ...(value.activities !== undefined && { activities: value.activities }), ...(value.painScore !== undefined && { pain_score: value.painScore }), ...(value.onset !== undefined && { onset: value.onset }),
-  ...(value.popSensation !== undefined && { pop_sensation: value.popSensation }), ...(value.swelling !== undefined && { swelling: value.swelling }),
-  ...(value.instability !== undefined && { instability: value.instability }), ...(value.lossOfStrength !== undefined && { loss_of_strength: value.lossOfStrength }),
-  ...(value.reducedRangeOfMotion !== undefined && { reduced_range_of_motion: value.reducedRangeOfMotion }), ...(value.otherSymptoms !== undefined && { other_symptoms: value.otherSymptoms }),
-  ...(value.trainingDurationMinutes !== undefined && { training_duration_minutes: value.trainingDurationMinutes }), ...(value.trainingMinute !== undefined && { training_minute: value.trainingMinute }),
-  ...(value.trainingPhase !== undefined && { training_phase: value.trainingPhase }), ...(value.playerContinued !== undefined && { player_continued: value.playerContinued }),
-  ...(value.continuedWithLimitations !== undefined && { continued_with_limitations: value.continuedWithLimitations }), ...(value.leftTraining !== undefined && { left_training: value.leftTraining }),
-  ...(value.playingTimeMinutes !== undefined && { playing_time_minutes: value.playingTimeMinutes }), ...(value.matchMinute !== undefined && { match_minute: value.matchMinute }),
-  ...(value.matchPhase !== undefined && { match_phase: value.matchPhase }), ...(value.leftMatch !== undefined && { left_match: value.leftMatch }),
-  ...(value.currentStatus !== undefined && { current_status: value.currentStatus }), ...(value.estimatedReturnDate !== undefined && { estimated_return_date: value.estimatedReturnDate }),
-  ...(value.actualReturnDate !== undefined && { actual_return_date: value.actualReturnDate }), ...(value.closedAt !== undefined && { closed_at: value.closedAt })
-});
+const injuryToRow = (value: Partial<Injury>): Record<string, unknown> => {
+  const context = value.context || 'unknown';
+  const trainingSessionId = context === 'training' && value.trainingSessionId ? String(value.trainingSessionId).trim() : (value.trainingSessionId ? String(value.trainingSessionId).trim() : null);
+  const matchId = context === 'match' && value.matchId ? String(value.matchId).trim() : (value.matchId ? String(value.matchId).trim() : null);
+
+  return {
+    ...(value.teamId !== undefined && { team_id: value.teamId }),
+    ...(value.playerId !== undefined && { player_id: value.playerId }),
+    ...(value.injuryDate !== undefined && { injury_date: value.injuryDate }),
+    ...(value.context !== undefined && { context: value.context }),
+    training_session_id: trainingSessionId,
+    match_id: matchId,
+    ...(value.location !== undefined && { location: value.location }),
+    ...(value.affectedSide !== undefined && { affected_side: value.affectedSide }),
+    ...(value.injuryType !== undefined && { injury_type: value.injuryType }),
+    ...(value.clinicalDiagnosis !== undefined && { clinical_diagnosis: value.clinicalDiagnosis }),
+    ...(value.medicalDiagnosis !== undefined && { medical_diagnosis: value.medicalDiagnosis }),
+    ...(value.imagingDiagnosis !== undefined && { imaging_diagnosis: value.imagingDiagnosis }),
+    ...(value.finalDiagnosis !== undefined && { final_diagnosis: value.finalDiagnosis }),
+    ...(value.diagnosisStatus !== undefined && { diagnosis_status: value.diagnosisStatus }),
+    ...(value.injuryGrade !== undefined && { injury_grade: value.injuryGrade }),
+    ...(value.previousSimilarInjury !== undefined && { previous_similar_injury: Boolean(value.previousSimilarInjury) }),
+    ...(value.occurrenceType !== undefined && { occurrence_type: value.occurrenceType }),
+    ...(value.previousInjuryId !== undefined && { previous_injury_id: value.previousSimilarInjury && value.previousInjuryId ? String(value.previousInjuryId).trim() : null }),
+    ...(value.previousInjuryDate !== undefined && { previous_injury_date: value.previousSimilarInjury && value.previousInjuryDate ? value.previousInjuryDate : null }),
+    ...(value.sameLocation !== undefined && { same_location: value.sameLocation }),
+    ...(value.sameDiagnosis !== undefined && { same_diagnosis: value.sameDiagnosis }),
+    ...(value.playingSurface !== undefined && { playing_surface: value.playingSurface }),
+    ...(value.contactType !== undefined && { contact_type: value.contactType }),
+    ...(value.contactWith !== undefined && { contact_with: value.contactWith }),
+    ...(value.activities !== undefined && { activities: value.activities }),
+    ...(value.painScore !== undefined && { pain_score: value.painScore }),
+    ...(value.onset !== undefined && { onset: value.onset }),
+    ...(value.popSensation !== undefined && { pop_sensation: Boolean(value.popSensation) }),
+    ...(value.swelling !== undefined && { swelling: Boolean(value.swelling) }),
+    ...(value.instability !== undefined && { instability: Boolean(value.instability) }),
+    ...(value.lossOfStrength !== undefined && { loss_of_strength: Boolean(value.lossOfStrength) }),
+    ...(value.reducedRangeOfMotion !== undefined && { reduced_range_of_motion: Boolean(value.reducedRangeOfMotion) }),
+    ...(value.otherSymptoms !== undefined && { other_symptoms: value.otherSymptoms }),
+    ...(value.trainingDurationMinutes !== undefined && { training_duration_minutes: value.trainingDurationMinutes }),
+    ...(value.trainingMinute !== undefined && { training_minute: value.trainingMinute }),
+    ...(value.trainingPhase !== undefined && { training_phase: value.trainingPhase }),
+    ...(value.playerContinued !== undefined && { player_continued: value.playerContinued }),
+    ...(value.continuedWithLimitations !== undefined && { continued_with_limitations: value.continuedWithLimitations }),
+    ...(value.leftTraining !== undefined && { left_training: value.leftTraining }),
+    ...(value.playingTimeMinutes !== undefined && { playing_time_minutes: value.playingTimeMinutes }),
+    ...(value.matchMinute !== undefined && { match_minute: value.matchMinute }),
+    ...(value.matchPhase !== undefined && { match_phase: value.matchPhase }),
+    ...(value.leftMatch !== undefined && { left_match: value.leftMatch }),
+    ...(value.currentStatus !== undefined && { current_status: value.currentStatus }),
+    ...(value.estimatedReturnDate !== undefined && { estimated_return_date: value.estimatedReturnDate }),
+    ...(value.actualReturnDate !== undefined && { actual_return_date: value.actualReturnDate }),
+    ...(value.closedAt !== undefined && { closed_at: value.closedAt })
+  };
+};
 
 export async function listInjuries(teamId: string): Promise<Injury[]> {
   const { data, error } = await client().from(INJURIES_TABLE).select('*').eq('team_id', teamId).order('injury_date', { ascending: false });
@@ -199,39 +231,140 @@ export async function addInjuryFollowUp(input: Omit<InjuryFollowUp, 'id' | 'crea
 
 export async function getPhysioContext(teamId: string): Promise<{ players: PhysioPlayerContext[]; sessions: PhysioTrainingContext[]; matches: PhysioMatchContext[] }> {
   const normalizedTeamId = (teamId || '').trim();
-  const [players, sessions, matches] = await Promise.all([
-    client().rpc('physio_player_context', { target_team_id: normalizedTeamId }),
-    client().rpc('physio_training_context', { target_team_id: normalizedTeamId }),
-    client().rpc('physio_match_context', { target_team_id: normalizedTeamId })
-  ]);
-  if (players.error) throw players.error;
-  if (sessions.error) throw sessions.error;
 
-  let matchRows: any[] = matches.data || [];
-  if ((matches.error || !matchRows.length) && normalizedTeamId) {
+  // 1. Fetch Squad Players from squad_players table + RPC merge to ensure 100% of squad players appear
+  const playerMap = new Map<string, PhysioPlayerContext>();
+
+  try {
+    const squadPlayers = await listSquadPlayers().catch(() => []);
+    for (const p of squadPlayers) {
+      const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim() || p.id;
+      playerMap.set(p.id, {
+        playerId: p.id,
+        playerName: fullName,
+        shirtNumber: p.number != null ? String(p.number) : null,
+        position: p.position || 'CM',
+        currentStatus: p.status || 'Active'
+      });
+    }
+  } catch {
+    // If listSquadPlayers fails, fallback to direct query
     try {
-      const { data: directMatches } = await client()
-        .from('matches')
-        .select('id, date, status, opponent_team:auth_teams!matches_opponent_team_id_fkey(name)')
-        .eq('team_id', normalizedTeamId)
-        .order('date', { ascending: false });
+      const { data: directSquad } = await client().from('squad_players').select('*');
+      if (directSquad) {
+        for (const p of directSquad) {
+          const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.id;
+          playerMap.set(p.id, {
+            playerId: p.id,
+            playerName: fullName,
+            shirtNumber: p.number != null ? String(p.number) : null,
+            position: p.position || 'CM',
+            currentStatus: p.status || 'Active'
+          });
+        }
+      }
+    } catch {}
+  }
 
-      if (directMatches && directMatches.length > 0) {
-        matchRows = directMatches.map((row: any) => ({
-          match_id: row.id,
-          match_date: row.date,
-          opponent_name: row.opponent_team?.name || 'Match',
-          match_status: row.status
+  // Also query physio_player_context RPC if available to catch any team-specific clinical player mappings
+  try {
+    const rpcPlayers = await client().rpc('physio_player_context', { target_team_id: normalizedTeamId });
+    if (!rpcPlayers.error && rpcPlayers.data) {
+      for (const row of rpcPlayers.data) {
+        if (!playerMap.has(row.player_id)) {
+          playerMap.set(row.player_id, {
+            playerId: row.player_id,
+            playerName: row.player_name,
+            shirtNumber: row.shirt_number != null ? String(row.shirt_number) : null,
+            position: row.position,
+            currentStatus: row.current_status
+          });
+        }
+      }
+    }
+  } catch {}
+
+  const players = Array.from(playerMap.values()).sort((a, b) => a.playerName.localeCompare(b.playerName));
+
+  // 2. Fetch Sessions
+  let sessionRows: PhysioTrainingContext[] = [];
+  try {
+    const rpcSessions = await client().rpc('physio_training_context', { target_team_id: normalizedTeamId });
+    if (!rpcSessions.error && rpcSessions.data && rpcSessions.data.length > 0) {
+      sessionRows = rpcSessions.data.map((row: any) => ({
+        sessionId: row.session_id,
+        sessionDate: row.session_date,
+        sessionTime: row.session_time,
+        sessionNumber: String(row.session_number || '1'),
+        durationMinutes: row.duration_minutes
+      }));
+    }
+  } catch {}
+
+  if (!sessionRows.length) {
+    try {
+      let sq = client().from('sessions').select('*').order('date', { ascending: false });
+      if (normalizedTeamId) {
+        sq = sq.eq('team_id', normalizedTeamId);
+      }
+      const { data: rawSessions } = await sq;
+      if (rawSessions && rawSessions.length > 0) {
+        sessionRows = rawSessions.map((s: any) => ({
+          sessionId: s.id,
+          sessionDate: s.date,
+          sessionTime: s.time || '',
+          sessionNumber: String(s.session_number || '1'),
+          durationMinutes: s.duration || 90
         }));
       }
-    } catch {
-      // Ignore fallback failure
+    } catch {}
+  }
+
+  // 3. Fetch Matches
+  let matchRows: PhysioMatchContext[] = [];
+  try {
+    const rpcMatches = await client().rpc('physio_match_context', { target_team_id: normalizedTeamId });
+    if (!rpcMatches.error && rpcMatches.data && rpcMatches.data.length > 0) {
+      matchRows = rpcMatches.data.map((row: any) => ({
+        matchId: row.match_id || row.id,
+        matchDate: row.match_date || row.date,
+        opponentName: row.opponent_name || 'Match',
+        matchStatus: row.match_status || row.status
+      }));
     }
+  } catch {}
+
+  if (!matchRows.length) {
+    try {
+      const matchesList = await listMatches(normalizedTeamId || undefined);
+      if (matchesList && matchesList.length > 0) {
+        matchRows = matchesList.map((m) => ({
+          matchId: m.id,
+          matchDate: m.date,
+          opponentName: m.opponentName || m.opponentTeamId || m.competitionName || 'Match',
+          matchStatus: m.status
+        }));
+      }
+    } catch {}
+  }
+
+  if (!matchRows.length) {
+    try {
+      const { data: rawMatches } = await client().from('matches').select('*').order('date', { ascending: false });
+      if (rawMatches && rawMatches.length > 0) {
+        matchRows = rawMatches.map((m: any) => ({
+          matchId: m.id,
+          matchDate: m.date,
+          opponentName: m.opponent_team_id || m.competition_name || 'Match',
+          matchStatus: m.status
+        }));
+      }
+    } catch {}
   }
 
   return {
-    players: (players.data || []).map((row: any) => ({ playerId: row.player_id, playerName: row.player_name, shirtNumber: row.shirt_number, position: row.position, currentStatus: row.current_status })),
-    sessions: (sessions.data || []).map((row: any) => ({ sessionId: row.session_id, sessionDate: row.session_date, sessionTime: row.session_time, sessionNumber: row.session_number, durationMinutes: row.duration_minutes })),
-    matches: matchRows.map((row: any) => ({ matchId: row.match_id || row.id, matchDate: row.match_date || row.date, opponentName: row.opponent_name || 'Match', matchStatus: row.match_status || row.status }))
+    players,
+    sessions: sessionRows,
+    matches: matchRows
   };
 }

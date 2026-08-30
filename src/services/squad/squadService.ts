@@ -124,7 +124,7 @@ function toEditablePatchRow(patch: EditableSquadPlayerPatch, updatedAt: number):
   return row;
 }
 
-async function listSquadPlayers(): Promise<CloudSquadPlayer[]> {
+export async function listSquadPlayers(): Promise<CloudSquadPlayer[]> {
   const { data, error } = await getClient()
     .from(SQUAD_TABLE)
     .select('*');

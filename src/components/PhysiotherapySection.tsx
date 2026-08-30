@@ -103,6 +103,14 @@ export function PhysiotherapySection({ userEmail }: PhysiotherapySectionProps) {
   }, [selectedTeamId]);
 
   useEffect(() => {
+    if (selectedTeamId && (view === 'new-injury' || view === 'new-complaint' || view === 'edit-injury' || view === 'edit-complaint')) {
+      void getPhysioContext(selectedTeamId).then((nextContext) => {
+        setContext(nextContext);
+      }).catch(() => {});
+    }
+  }, [view, selectedTeamId]);
+
+  useEffect(() => {
     if (!selectedInjury) {
       setFollowUps([]);
       return;
@@ -189,6 +197,8 @@ export function PhysiotherapySection({ userEmail }: PhysiotherapySectionProps) {
       <InjuryDetail
         injury={selectedInjury}
         player={playerMap.get(selectedInjury.playerId)}
+        session={selectedInjury.trainingSessionId ? context.sessions.find((s) => s.sessionId === selectedInjury.trainingSessionId) : undefined}
+        match={selectedInjury.matchId ? context.matches.find((m) => m.matchId === selectedInjury.matchId) : undefined}
         followUps={followUps}
         loadingFollowUps={loadingFollowUps}
         canWrite={canWrite}

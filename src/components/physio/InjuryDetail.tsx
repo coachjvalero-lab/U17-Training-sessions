@@ -1,6 +1,6 @@
 import { ArrowLeft, CalendarCheck, CheckCircle2, Clock3, LoaderCircle, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
-import type { ClinicalInjuryStatus, Injury, InjuryFollowUp, PhysioPlayerContext } from '../../types';
+import type { ClinicalInjuryStatus, Injury, InjuryFollowUp, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
 import { getInjuryDays } from '../../services/physio/physioMetricsService';
 import { formatBodyLocation } from './bodyMapModel';
@@ -10,6 +10,8 @@ type FollowUpInput = Omit<InjuryFollowUp, 'id' | 'createdAt' | 'updatedAt'>;
 type InjuryDetailProps = {
   injury: Injury;
   player?: PhysioPlayerContext;
+  session?: PhysioTrainingContext;
+  match?: PhysioMatchContext;
   followUps: InjuryFollowUp[];
   loadingFollowUps: boolean;
   canWrite: boolean;
@@ -26,12 +28,23 @@ const label = (value: string) => value.replaceAll('_', ' ');
 const today = () => new Date().toISOString().slice(0, 10);
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
 
-export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canWrite, canDelete, onBack, onEdit, onAddFollowUp, onCloseInjury, onDeleteInjury }: InjuryDetailProps) {
+export function InjuryDetail({ injury, player, session, match, followUps, loadingFollowUps, canWrite, canDelete, onBack, onEdit, onAddFollowUp, onCloseInjury, onDeleteInjury }: InjuryDetailProps) {
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
+
+  const eventContextDisplay =
+    injury.context === 'training'
+      ? session
+        ? `Training: ${session.sessionDate} · Session ${session.sessionNumber}`
+        : 'Training session'
+      : injury.context === 'match'
+        ? match
+          ? `Match: ${match.matchDate} · ${match.opponentName || 'Opponent'}`
+          : 'Match'
+        : label(injury.context);
 
   const closeCase = async () => {
     if (working) return;
@@ -73,7 +86,7 @@ export function InjuryDetail({ injury, player, followUps, loadingFollowUps, canW
     </header>
 
     <section><h2 className="mb-3 text-lg font-black text-[#08233d]">Case summary</h2><dl className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">{[
-      ['Injury date', injury.injuryDate], ['Context', label(injury.context)], ['Type', label(injury.injuryType)], ['Diagnosis status', label(injury.diagnosisStatus)],
+      ['Injury date', injury.injuryDate], ['Context', eventContextDisplay], ['Type', label(injury.injuryType)], ['Diagnosis status', label(injury.diagnosisStatus)],
       ['Pain score', injury.painScore == null ? 'Not scored' : `${injury.painScore} / 10`], ['Onset', injury.onset ? label(injury.onset) : 'Not recorded'], ['Mechanism', injury.contactType ? label(injury.contactType) : 'Not recorded'], ['Estimated return', injury.estimatedReturnDate || 'Not established']
     ].map(([term, value]) => <div key={term} className="bg-white p-4"><dt className="text-[11px] font-bold uppercase text-slate-500">{term}</dt><dd className="mt-1 text-sm font-semibold capitalize text-slate-900">{value}</dd></div>)}</dl></section>
 

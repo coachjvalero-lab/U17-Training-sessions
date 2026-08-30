@@ -47,10 +47,10 @@ function toGkSessionRecord(session: TrainingSession): GkSession {
   const now = Date.now();
   const recordId = normalizedSessionUid.startsWith('gk-') ? normalizedSessionUid : `gk-${normalizedSessionUid}`;
   
-  const gkWarmUp = session.gkWarmUp || session.warmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] };
-  const gkMainPart = session.gkMainPart || session.mainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] };
-  const gkCoolDown = session.gkCoolDown || session.coolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] };
-  const gkPlayerGroups = session.gkPlayerGroups || session.playerGroups || [];
+  const gkWarmUp = session.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] };
+  const gkMainPart = session.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] };
+  const gkCoolDown = session.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] };
+  const gkPlayerGroups = session.gkPlayerGroups || [];
 
   return {
     id: recordId,

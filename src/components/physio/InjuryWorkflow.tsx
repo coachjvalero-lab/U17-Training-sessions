@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, LoaderCircle } from 'lucide-react';
 import type { Injury, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
@@ -101,6 +101,15 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!draft.playerId && players.length > 0 && !editing) {
+      setDraft((current) => ({
+        ...current,
+        playerId: current.playerId || players[0].playerId
+      }));
+    }
+  }, [players, draft.playerId, editing]);
+
   const patch = (next: Partial<InjuryInput>) => setDraft((current) => ({ ...current, ...next }));
   const playerInjuries = useMemo(
     () => previousInjuries.filter((injury) => injury.playerId === draft.playerId),
@@ -132,7 +141,11 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
     setSaving(true);
     setError('');
     try {
-      await onSave(draft);
+      await onSave({
+        ...draft,
+        trainingSessionId: draft.context === 'training' ? (draft.trainingSessionId || null) : null,
+        matchId: draft.context === 'match' ? (draft.matchId || null) : null
+      });
     } catch (submissionError) {
       setError(classifySupabaseError(submissionError).userMessage);
       setSaving(false);
@@ -178,8 +191,34 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
                 <Field label="Injury date"><input className={fieldClass} type="date" max={today()} value={draft.injuryDate} onChange={(event) => patch({ injuryDate: event.target.value })} /></Field>
               </div>
               <fieldset className="mt-6"><legend className={labelClass}>Event context</legend><ChoiceGrid values={['training', 'match', 'external', 'unknown']} selected={draft.context} onChange={(context) => patch({ context: context as InjuryInput['context'], trainingSessionId: null, matchId: null })} /></fieldset>
-              {draft.context === 'training' && <Field label="Training session" className="mt-6"><select className={fieldClass} value={draft.trainingSessionId || ''} onChange={(event) => patch({ trainingSessionId: event.target.value || null })}><option value="">Select session</option>{sessions.map((session) => <option key={session.sessionId} value={session.sessionId}>{session.sessionDate} · Session {session.sessionNumber}</option>)}</select></Field>}
-              {draft.context === 'match' && <Field label="Match" className="mt-6"><select className={fieldClass} value={draft.matchId || ''} onChange={(event) => patch({ matchId: event.target.value || null })}><option value="">Select match</option>{matches.map((match) => <option key={match.matchId} value={match.matchId}>{match.matchDate} · {match.opponentName}</option>)}</select></Field>}
+              {draft.context === 'training' && (
+                <Field label="Training session" className="mt-6">
+                  {sessions.length === 0 ? (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      No training sessions found for this team. You can register training sessions in the Training Hub or choose another context.
+                    </div>
+                  ) : (
+                    <select className={fieldClass} value={draft.trainingSessionId || ''} onChange={(event) => patch({ trainingSessionId: event.target.value || null })}>
+                      <option value="">Select session</option>
+                      {sessions.map((session) => <option key={session.sessionId} value={session.sessionId}>{session.sessionDate} · Session {session.sessionNumber}</option>)}
+                    </select>
+                  )}
+                </Field>
+              )}
+              {draft.context === 'match' && (
+                <Field label="Match" className="mt-6">
+                  {matches.length === 0 ? (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      No matches found for this team. You can register matches in Match Centre or choose another context.
+                    </div>
+                  ) : (
+                    <select className={fieldClass} value={draft.matchId || ''} onChange={(event) => patch({ matchId: event.target.value || null })}>
+                      <option value="">Select match</option>
+                      {matches.map((match) => <option key={match.matchId} value={match.matchId}>{match.matchDate} · {match.opponentName || 'Match'}</option>)}
+                    </select>
+                  )}
+                </Field>
+              )}
             </Step>
           )}
 
