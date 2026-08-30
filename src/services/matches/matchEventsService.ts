@@ -98,3 +98,26 @@ export async function deleteMatchEvent(eventId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+export async function batchCreateMatchEvents(inputs: Array<Omit<MatchEvent, 'id' | 'createdAt'>>): Promise<MatchEvent[]> {
+  if (inputs.length === 0) return [];
+  const rowsToInsert = inputs.map((input) => ({
+    match_id: input.matchId,
+    player_id: input.playerId ?? null,
+    team_side: input.teamSide,
+    event_type: input.eventType,
+    minute: input.minute,
+    video_timestamp_seconds: input.videoTimestampSeconds,
+    related_player_id: input.relatedPlayerId ?? null,
+    description: input.description ?? ''
+  }));
+
+  const { data, error } = await getClient()
+    .from(MATCH_EVENTS_TABLE)
+    .insert(rowsToInsert)
+    .select('*');
+
+  if (error) throw error;
+  return ((data || []) as MatchEventRow[]).map(fromRow);
+}
+

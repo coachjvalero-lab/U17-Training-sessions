@@ -290,6 +290,9 @@ export type MatchStatus = 'planned' | 'played';
 export type TeamSide = 'our_team' | 'opponent';
 export type MatchEventType =
   | 'goal'
+  | 'opponent_goal'
+  | 'corner'
+  | 'opponent_corner'
   | 'assist'
   | 'yellow_card'
   | 'red_card'

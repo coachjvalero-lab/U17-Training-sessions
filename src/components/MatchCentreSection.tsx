@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
-import { Activity, CalendarDays, Check, ChevronLeft, Edit3, Eye, MapPin, PlayCircle, Plus, Save, Shield, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
+import { Activity, CalendarDays, Check, ChevronLeft, Edit3, Eye, Flag, MapPin, PlayCircle, Plus, Save, Shield, Sparkles, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
 import { TeamCrest } from './TeamCrest';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
+  batchCreateMatchEvents,
   createMatchEvent,
   deleteMatchEvent,
   getMatchEvents,
@@ -21,8 +22,9 @@ import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPla
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
 import { getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
 import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squad/squadService';
-import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics } from '../types';
+import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics, TeamSide } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
+import { AiMatchEventsModal } from './AiMatchEventsModal';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -47,6 +49,9 @@ const opponentTagGroups: Array<{ key: 'build-up' | 'pressing' | 'block' | 'defen
 
 const EVENT_TYPE_OPTIONS: Array<{ value: MatchEventType; label: string }> = [
   { value: 'goal', label: 'Goal' },
+  { value: 'opponent_goal', label: 'Opponent Goal' },
+  { value: 'corner', label: 'Corner' },
+  { value: 'opponent_corner', label: 'Opponent Corner' },
   { value: 'assist', label: 'Assist' },
   { value: 'yellow_card', label: 'Yellow Card' },
   { value: 'red_card', label: 'Red Card' },
@@ -80,6 +85,9 @@ function formatMatchStatusLabel(status: Match['status']): string {
 function getEventLabel(eventType: MatchEventType): string {
   const map: Record<MatchEventType, string> = {
     goal: 'Goal',
+    opponent_goal: 'Opponent Goal',
+    corner: 'Corner',
+    opponent_corner: 'Opponent Corner',
     assist: 'Assist',
     yellow_card: 'Yellow Card',
     red_card: 'Red Card',
@@ -152,6 +160,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [matchVideoUrl, setMatchVideoUrl] = useState('');
   const [currentVideoSeconds, setCurrentVideoSeconds] = useState(0);
+  const [isAiEventsModalOpen, setIsAiEventsModalOpen] = useState(false);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
   const [lineupForm, setLineupForm] = useState({
     playerId: '',
@@ -387,14 +396,15 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
     try {
       setSaveState('events', 'saving');
+      const isOpponent = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
       const eventInput = {
         matchId: selectedMatch.id,
-        playerId: newEventPlayerId || null,
-        teamSide: 'our_team' as const,
+        playerId: isOpponent ? null : (newEventPlayerId || null),
+        teamSide: (isOpponent ? 'opponent' : 'our_team') as TeamSide,
         eventType: newEventType,
         minute: Number(newEventMinute) || 0,
         videoTimestampSeconds: Math.max(0, Math.floor(currentVideoSeconds)),
-        relatedPlayerId: newEventRelatedPlayerId || null,
+        relatedPlayerId: isOpponent ? null : (newEventRelatedPlayerId || null),
         description: newEventDescription || ''
       };
       const saved = editingEventId
@@ -419,6 +429,32 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     } catch (error) {
       console.error('[MatchCentreSection] Failed creating match event', error);
       setSaveState('events', 'error', error instanceof Error ? error.message : 'Unable to save event.');
+    }
+  };
+
+  const handleApplyAiEvents = async (
+    newEvents: Array<Omit<MatchEventModel, 'id' | 'createdAt'>>,
+    replaceExisting: boolean
+  ) => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('events', 'saving');
+      if (replaceExisting && events.length > 0) {
+        for (const ev of events) {
+          await deleteMatchEvent(ev.id);
+        }
+      }
+      const created = await batchCreateMatchEvents(newEvents);
+      const combined = replaceExisting ? created : [...events, ...created];
+      combined.sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds);
+      setEvents(combined);
+      const nextStats = await recalculatePlayerMatchStatistics(selectedMatch.id);
+      setStats(nextStats);
+      setSaveState('events', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed applying AI events', error);
+      setSaveState('events', 'error', error instanceof Error ? error.message : 'Unable to apply AI events.');
+      throw error;
     }
   };
 
@@ -975,38 +1011,414 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       return player ? `${player.firstName} ${player.lastName}` : playerId || 'Team event';
     };
 
-    return <div className="space-y-5">
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
-        <div className="aspect-video w-full bg-black">
-          {matchVideoUrl ? <ReactPlayer ref={videoPlayerRef} src={matchVideoUrl} controls width="100%" height="100%" onTimeUpdate={() => setCurrentVideoSeconds(videoPlayerRef.current?.currentTime ?? 0)} /> : <div className="flex h-full items-center justify-center text-sm font-bold text-slate-500">Add match footage to start tagging events.</div>}
-        </div>
-        <div className="flex flex-col gap-3 border-t border-slate-800 p-4 sm:flex-row sm:items-center">
-          <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Match video URL<input value={matchVideoUrl} onChange={(event) => setMatchVideoUrl(event.target.value)} placeholder="YouTube, Vimeo or direct video URL" className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium normal-case text-white" /></label>
-          <div className="flex items-center gap-3"><span className="font-mono text-sm font-black text-cyan-300">{formatVideoTimestamp(currentVideoSeconds)}</span>{renderSaveStatus('match-video')}<button type="button" onClick={() => void handleSaveMatchVideo()} className="inline-flex items-center gap-2 rounded-md bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950"><Save className="h-4 w-4" />Save video</button></div>
-        </div>
-      </section>
+    const isOpponentSelected = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
 
-      <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Video logger</p><h3 className="text-lg font-black text-slate-950">{editingEventId ? 'Edit event' : 'Tag current moment'}</h3></div>{renderSaveStatus('events')}</div>
-          <div className="mb-4 grid grid-cols-3 gap-2">{EVENT_TYPE_OPTIONS.slice(0, 6).map((option) => <button key={option.value} type="button" onClick={() => setNewEventType(option.value)} className={`min-h-10 rounded-md border px-2 text-[10px] font-black ${newEventType === option.value ? 'border-sky-700 bg-sky-700 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>{option.label}</button>)}</div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <label className="text-[10px] font-black uppercase text-slate-500">Video timestamp<input readOnly value={formatVideoTimestamp(currentVideoSeconds)} className="mt-1 w-full rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 font-mono text-xs normal-case text-cyan-900" /></label>
-            <label className="text-[10px] font-black uppercase text-slate-500">Match minute<input type="number" min="0" max="130" value={newEventMinute} onChange={(event) => setNewEventMinute(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case" /></label>
-            <label className="text-[10px] font-black uppercase text-slate-500">Event type<select value={newEventType} onChange={(event) => setNewEventType(event.target.value as MatchEventType)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case">{EVENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="text-[10px] font-black uppercase text-slate-500">Player<select value={newEventPlayerId} onChange={(event) => setNewEventPlayerId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"><option value="">Team / no player</option>{squadPlayers.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName}</option>)}</select></label>
-            <label className="text-[10px] font-black uppercase text-slate-500">Related player<select value={newEventRelatedPlayerId} onChange={(event) => setNewEventRelatedPlayerId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"><option value="">None</option>{squadPlayers.map((player) => <option key={player.id} value={player.id}>{player.firstName} {player.lastName}</option>)}</select></label>
+    const getEventBadge = (type: MatchEventType, team: TeamSide) => {
+      switch (type) {
+        case 'goal':
+          return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">⚽ Gol (A favor)</span>;
+        case 'opponent_goal':
+          return <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-800">🥅 Gol Rival</span>;
+        case 'corner':
+          return <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🚩 Córner</span>;
+        case 'opponent_corner':
+          return <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🚩 Córner Rival</span>;
+        case 'assist':
+          return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">👟 Asistencia</span>;
+        case 'yellow_card':
+          return <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-black text-yellow-800">🟨 T. Amarilla</span>;
+        case 'red_card':
+          return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 T. Roja</span>;
+        case 'substitution_in':
+          return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Cambio (Entra)</span>;
+        case 'substitution_out':
+          return <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-black text-indigo-800">🔄 Cambio (Sale)</span>;
+        case 'injury':
+          return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Lesión</span>;
+        default:
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800">📌 Evento</span>;
+      }
+    };
+
+    return (
+      <div className="space-y-5">
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
+          <div className="aspect-video w-full bg-black">
+            {matchVideoUrl ? (
+              <ReactPlayer
+                ref={videoPlayerRef}
+                src={matchVideoUrl}
+                controls
+                width="100%"
+                height="100%"
+                onTimeUpdate={() => setCurrentVideoSeconds(videoPlayerRef.current?.currentTime ?? 0)}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm font-bold text-slate-500">
+                <Video className="h-10 w-10 text-slate-700" />
+                <span>Introduce el enlace del vídeo del partido para etiquetar y reproducir momentos.</span>
+              </div>
+            )}
           </div>
-          <textarea value={newEventDescription} onChange={(event) => setNewEventDescription(event.target.value)} placeholder="Describe the action, trigger or coaching point" className="mt-3 min-h-[90px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />
-          <div className="mt-3 flex gap-2">{editingEventId && <button type="button" onClick={cancelEventEdit} className="rounded-md border border-slate-300 px-3 py-2.5 text-xs font-black text-slate-700">Cancel</button>}<button type="button" disabled={saveStates.events?.state === 'saving'} onClick={() => void handleAddEvent()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#002142] px-3 py-2.5 text-xs font-black text-white disabled:opacity-60">{editingEventId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{editingEventId ? 'Save event' : 'Add at current time'}</button></div>
+          <div className="flex flex-col gap-3 border-t border-slate-800 p-4 sm:flex-row sm:items-center">
+            <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Match video URL
+              <input
+                value={matchVideoUrl}
+                onChange={(event) => setMatchVideoUrl(event.target.value)}
+                placeholder="YouTube, Vimeo, Veo o URL de vídeo directa"
+                className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium normal-case text-white placeholder:text-slate-500"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="font-mono text-sm font-black text-cyan-300">
+                {formatVideoTimestamp(currentVideoSeconds)}
+              </span>
+              {renderSaveStatus('match-video')}
+              <button
+                type="button"
+                onClick={() => void handleSaveMatchVideo()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-700"
+              >
+                <Save className="h-4 w-4" />
+                Guardar URL
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAiEventsModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-cyan-400 to-sky-400 px-3.5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:opacity-95"
+              >
+                <Sparkles className="h-4 w-4 text-slate-950" />
+                Generar eventos con IA
+              </button>
+            </div>
+          </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="mb-5 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Video chronology</p><h3 className="text-lg font-black text-slate-950">Tagged moments</h3></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{events.length} events</span></div>
-          {events.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-xs font-medium text-slate-500">No events recorded yet.</div> : <div className="divide-y divide-slate-100">{events.slice().sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds).map((event) => <div key={event.id} className="group grid grid-cols-[68px_minmax(0,1fr)_72px] gap-3 py-4"><button type="button" onClick={() => seekVideo(event.videoTimestampSeconds)} title="Seek video" className="self-start rounded-md bg-slate-950 px-2 py-1.5 font-mono text-xs font-black text-cyan-300">{formatVideoTimestamp(event.videoTimestampSeconds)}</button><button type="button" onClick={() => seekVideo(event.videoTimestampSeconds)} className="min-w-0 text-left"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-sky-700">{getEventLabel(event.eventType)} · {event.minute}'</span><div className="text-sm font-black text-slate-900">{playerName(event.playerId)}</div>{event.relatedPlayerId && <div className="text-xs text-slate-500">Related: {playerName(event.relatedPlayerId)}</div>}{event.description && <div className="mt-1 text-xs leading-5 text-slate-600">{event.description}</div>}</button><div className="flex items-start justify-end gap-1"><button type="button" onClick={() => handleEditEvent(event)} title="Edit event" className="p-2 text-slate-400 hover:text-sky-700"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => void handleDeleteEvent(event.id)} title="Delete event" className="p-2 text-slate-400 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>}
-        </section>
+        <div className="grid gap-5 xl:grid-cols-[410px_minmax(0,1fr)]">
+          {/* Quick event logger */}
+          <section className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Botonera de eventos</p>
+                <h3 className="text-lg font-black text-slate-950">
+                  {editingEventId ? 'Editar evento' : 'Etiquetar momento'}
+                </h3>
+              </div>
+              {renderSaveStatus('events')}
+            </div>
+
+            {/* Quick buttons grid */}
+            <div className="mb-4 space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                Acciones rápidas:
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => { setNewEventType('goal'); }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition ${
+                    newEventType === 'goal'
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  ⚽ Gol
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setNewEventType('opponent_goal'); setNewEventPlayerId(''); setNewEventRelatedPlayerId(''); }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition ${
+                    newEventType === 'opponent_goal'
+                      ? 'border-rose-600 bg-rose-600 text-white shadow-sm'
+                      : 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100'
+                  }`}
+                >
+                  🥅 Gol Rival
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setNewEventType('corner'); }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition ${
+                    newEventType === 'corner'
+                      ? 'border-sky-600 bg-sky-600 text-white shadow-sm'
+                      : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100'
+                  }`}
+                >
+                  🚩 Córner
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setNewEventType('opponent_corner'); setNewEventPlayerId(''); setNewEventRelatedPlayerId(''); }}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition ${
+                    newEventType === 'opponent_corner'
+                      ? 'border-amber-600 bg-amber-600 text-white shadow-sm'
+                      : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  🚩 Córner Rival
+                </button>
+              </div>
+
+              {/* Secondary buttons */}
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {[
+                  { value: 'assist' as MatchEventType, label: '👟 Asistencia' },
+                  { value: 'yellow_card' as MatchEventType, label: '🟨 T. Amarilla' },
+                  { value: 'red_card' as MatchEventType, label: '🟥 T. Roja' },
+                  { value: 'substitution_in' as MatchEventType, label: '🔄 Entra' },
+                  { value: 'substitution_out' as MatchEventType, label: '🔄 Sale' },
+                  { value: 'injury' as MatchEventType, label: '🩹 Lesión' }
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setNewEventType(item.value)}
+                    className={`rounded-md border px-2 py-1.5 text-[10px] font-bold transition ${
+                      newEventType === item.value
+                        ? 'border-[#002142] bg-[#002142] text-white'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <label className="text-[10px] font-black uppercase text-slate-500">
+                Momento de vídeo
+                <input
+                  readOnly
+                  value={formatVideoTimestamp(currentVideoSeconds)}
+                  className="mt-1 w-full rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 font-mono text-xs normal-case text-cyan-900"
+                />
+              </label>
+              <label className="text-[10px] font-black uppercase text-slate-500">
+                Minuto del partido
+                <input
+                  type="number"
+                  min="0"
+                  max="130"
+                  value={newEventMinute}
+                  onChange={(event) => setNewEventMinute(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
+                />
+              </label>
+              <label className="text-[10px] font-black uppercase text-slate-500">
+                Tipo de evento
+                <select
+                  value={newEventType}
+                  onChange={(event) => {
+                    const val = event.target.value as MatchEventType;
+                    setNewEventType(val);
+                    if (val === 'opponent_goal' || val === 'opponent_corner') {
+                      setNewEventPlayerId('');
+                      setNewEventRelatedPlayerId('');
+                    }
+                  }}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case font-bold"
+                >
+                  {EVENT_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {isOpponentSelected ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50/70 p-2.5 text-xs text-rose-800">
+                  <span className="font-bold">Evento del equipo rival:</span> No requiere asignar jugadora de nuestra plantilla.
+                </div>
+              ) : (
+                <>
+                  <label className="text-[10px] font-black uppercase text-slate-500">
+                    Jugadora
+                    <select
+                      value={newEventPlayerId}
+                      onChange={(event) => setNewEventPlayerId(event.target.value)}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
+                    >
+                      <option value="">Equipo / Sin jugadora</option>
+                      {squadPlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          #{player.number ?? '-'} {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-black uppercase text-slate-500">
+                    Jugadora relacionada (Asistencia / Cambio)
+                    <select
+                      value={newEventRelatedPlayerId}
+                      onChange={(event) => setNewEventRelatedPlayerId(event.target.value)}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
+                    >
+                      <option value="">Ninguna</option>
+                      {squadPlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          #{player.number ?? '-'} {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+            </div>
+
+            <textarea
+              value={newEventDescription}
+              onChange={(event) => setNewEventDescription(event.target.value)}
+              placeholder="Describe la jugada, córner, desajuste táctico o detalle..."
+              className="mt-3 min-h-[90px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:border-sky-600 focus:bg-white"
+            />
+
+            <div className="mt-3 flex gap-2">
+              {editingEventId && (
+                <button
+                  type="button"
+                  onClick={cancelEventEdit}
+                  className="rounded-md border border-slate-300 px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={saveStates.events?.state === 'saving'}
+                onClick={() => void handleAddEvent()}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#002142] px-3 py-2.5 text-xs font-black text-white hover:bg-[#083561] disabled:opacity-60"
+              >
+                {editingEventId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {editingEventId ? 'Guardar cambios' : 'Añadir al segundo actual'}
+              </button>
+            </div>
+          </section>
+
+          {/* Chronology & event list */}
+          <section className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Cronología del partido</p>
+                <h3 className="text-lg font-black text-slate-950">Momentos y eventos</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                  {events.length} eventos
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAiEventsModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-xs font-black text-cyan-900 transition hover:bg-cyan-100"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
+                  Generar con IA
+                </button>
+              </div>
+            </div>
+
+            {events.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                <Sparkles className="h-8 w-8 text-cyan-600 mb-2" />
+                <p className="text-xs font-bold text-slate-700">No hay eventos registrados todavía</p>
+                <p className="mt-1 text-[11px] text-slate-500 max-w-sm">
+                  Utiliza la botonera lateral para añadir goles y córners, o genera la cronología completa automáticamente con el botón de IA.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAiEventsModalOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-[#0a3a66]"
+                >
+                  <Sparkles className="h-4 w-4 text-cyan-300" />
+                  Generar eventos con IA
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {events
+                  .slice()
+                  .sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds)
+                  .map((event) => {
+                    const isOpponent = event.eventType === 'opponent_goal' || event.eventType === 'opponent_corner' || event.teamSide === 'opponent';
+                    const playerDisplayName = isOpponent
+                      ? (selectedMatch?.opponentName ? `Equipo rival (${selectedMatch.opponentName})` : 'Equipo rival')
+                      : playerName(event.playerId);
+
+                    return (
+                      <div
+                        key={event.id}
+                        className="group grid grid-cols-[68px_minmax(0,1fr)_72px] gap-3 py-3.5 hover:bg-slate-50/70 rounded-lg px-2 transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => seekVideo(event.videoTimestampSeconds)}
+                          title="Ir al segundo del vídeo"
+                          className="self-start rounded-md bg-slate-950 px-2 py-1.5 font-mono text-xs font-black text-cyan-300 hover:bg-slate-800 transition"
+                        >
+                          {formatVideoTimestamp(event.videoTimestampSeconds)}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => seekVideo(event.videoTimestampSeconds)}
+                          className="min-w-0 text-left"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            {getEventBadge(event.eventType, event.teamSide)}
+                            <span className="font-mono text-xs font-black text-slate-500">
+                              {event.minute}'
+                            </span>
+                          </div>
+
+                          <div className="text-sm font-black text-slate-900">
+                            {playerDisplayName}
+                          </div>
+
+                          {event.relatedPlayerId && (
+                            <div className="text-xs font-medium text-slate-500">
+                              Relacionada: {playerName(event.relatedPlayerId)}
+                            </div>
+                          )}
+
+                          {event.description && (
+                            <div className="mt-1 text-xs leading-5 text-slate-600">
+                              {event.description}
+                            </div>
+                          )}
+                        </button>
+
+                        <div className="flex items-start justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEditEvent(event)}
+                            title="Editar evento"
+                            className="p-1.5 rounded text-slate-400 hover:bg-slate-200 hover:text-sky-700"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteEvent(event.id)}
+                            title="Eliminar evento"
+                            className="p-1.5 rounded text-slate-400 hover:bg-rose-100 hover:text-rose-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
-    </div>;
+    );
   };
 
   const renderStatisticsTab = () => {
@@ -1115,6 +1527,17 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             {activeTab === 'statistics' && renderStatisticsTab()}
           </>}
         </main>
+
+        {selectedMatch && (
+          <AiMatchEventsModal
+            isOpen={isAiEventsModalOpen}
+            onClose={() => setIsAiEventsModalOpen(false)}
+            match={selectedMatch}
+            squadPlayers={squadPlayers}
+            onApplyEvents={handleApplyAiEvents}
+            existingEventsCount={events.length}
+          />
+        )}
       </div>
     );
   }
