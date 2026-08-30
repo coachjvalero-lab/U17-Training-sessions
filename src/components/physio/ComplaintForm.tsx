@@ -144,9 +144,23 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, co
               ))}
             </select>
           </Field>
-          <Field label="Occurrence date">
-            <input required type="date" max={today()} className={fieldClass} value={draft.occurrenceDate} onChange={(event) => patch({ occurrenceDate: event.target.value })} />
-          </Field>
+
+          <div>
+            <Field label="Occurrence date (Fecha de ocurrencia)">
+              <input
+                required
+                type="date"
+                className={fieldClass}
+                value={draft.occurrenceDate}
+                onChange={(event) => patch({ occurrenceDate: event.target.value })}
+              />
+            </Field>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+              <span>Fecha en que se produjo la molestia o evento</span>
+              <span className="font-medium text-sky-700">Registro en sistema: {today()}</span>
+            </div>
+          </div>
+
           <Field label="Complaint type">
             <select className={fieldClass} value={draft.complaintType} onChange={(event) => patch({ complaintType: event.target.value as ComplaintInput['complaintType'] })}>
               {['pain', 'fatigue', 'muscle_soreness', 'cramp', 'stiffness', 'feeling_of_weakness', 'feeling_of_instability', 'dizziness', 'feeling_unwell', 'other'].map((item) => (
@@ -173,19 +187,46 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, co
                   No training sessions found for this team. You can register training sessions in the Training Hub or choose another context.
                 </div>
               ) : (
-                <select
-                  required
-                  className={fieldClass}
-                  value={draft.trainingSessionId || ''}
-                  onChange={(event) => patch({ trainingSessionId: event.target.value || null })}
-                >
-                  <option value="">Select session</option>
-                  {sessions.map((session) => (
-                    <option key={session.sessionId} value={session.sessionId}>
-                      {session.sessionDate} · Session {session.sessionNumber}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    required
+                    className={fieldClass}
+                    value={draft.trainingSessionId || ''}
+                    onChange={(event) => {
+                      const sessionId = event.target.value || null;
+                      const session = sessions.find((s) => s.sessionId === sessionId);
+                      patch({
+                        trainingSessionId: sessionId,
+                        ...(session?.sessionDate ? { occurrenceDate: session.sessionDate } : {})
+                      });
+                    }}
+                  >
+                    <option value="">Select session</option>
+                    {sessions.map((session) => (
+                      <option key={session.sessionId} value={session.sessionId}>
+                        {session.sessionDate} · Session {session.sessionNumber}
+                      </option>
+                    ))}
+                  </select>
+                  {draft.trainingSessionId && (() => {
+                    const session = sessions.find((s) => s.sessionId === draft.trainingSessionId);
+                    if (!session) return null;
+                    return (
+                      <div className="flex items-center justify-between text-xs text-sky-800 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">
+                        <span>Sesión del: <strong>{session.sessionDate}</strong></span>
+                        {draft.occurrenceDate !== session.sessionDate && (
+                          <button
+                            type="button"
+                            onClick={() => patch({ occurrenceDate: session.sessionDate })}
+                            className="font-bold underline text-sky-900 hover:text-sky-700"
+                          >
+                            Usar fecha de la sesión ({session.sessionDate})
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </Field>
           )}
@@ -197,19 +238,46 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, co
                   No matches found for this team. You can register matches in Match Centre or choose another context.
                 </div>
               ) : (
-                <select
-                  required
-                  className={fieldClass}
-                  value={draft.matchId || ''}
-                  onChange={(event) => patch({ matchId: event.target.value || null })}
-                >
-                  <option value="">Select match</option>
-                  {matches.map((match) => (
-                    <option key={match.matchId} value={match.matchId}>
-                      {match.matchDate} · {match.opponentName || 'Opponent'}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    required
+                    className={fieldClass}
+                    value={draft.matchId || ''}
+                    onChange={(event) => {
+                      const matchId = event.target.value || null;
+                      const match = matches.find((m) => m.matchId === matchId);
+                      patch({
+                        matchId,
+                        ...(match?.matchDate ? { occurrenceDate: match.matchDate } : {})
+                      });
+                    }}
+                  >
+                    <option value="">Select match</option>
+                    {matches.map((match) => (
+                      <option key={match.matchId} value={match.matchId}>
+                        {match.matchDate} · {match.opponentName || 'Opponent'}
+                      </option>
+                    ))}
+                  </select>
+                  {draft.matchId && (() => {
+                    const match = matches.find((m) => m.matchId === draft.matchId);
+                    if (!match) return null;
+                    return (
+                      <div className="flex items-center justify-between text-xs text-sky-800 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">
+                        <span>Partido del: <strong>{match.matchDate}</strong></span>
+                        {draft.occurrenceDate !== match.matchDate && (
+                          <button
+                            type="button"
+                            onClick={() => patch({ occurrenceDate: match.matchDate })}
+                            className="font-bold underline text-sky-900 hover:text-sky-700"
+                          >
+                            Usar fecha del partido ({match.matchDate})
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </Field>
           )}

@@ -28,7 +28,8 @@ import {
   FORMATION_KEYS, 
   getPositionCategory,
   isPositionCompatible,
-  pitchDistance
+  pitchDistance,
+  detectFormation
 } from '../utils/formations';
 
 interface MatchPitchBoardProps {
@@ -55,7 +56,16 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   saveStatus
 }) => {
   const pitchRef = useRef<HTMLDivElement | null>(null);
-  const [selectedFormation, setSelectedFormation] = useState<FormationType>('1-4-3-3');
+  const [selectedFormation, setSelectedFormation] = useState<FormationType>(() => {
+    if (typeof window !== 'undefined' && matchId) {
+      const saved = localStorage.getItem(`tactical_formation_${matchId}`);
+      if (saved && FORMATION_KEYS.includes(saved as FormationType)) {
+        return saved as FormationType;
+      }
+    }
+    const currentStarters = lineupEntries.filter((e) => e.starter);
+    return detectFormation(currentStarters);
+  });
   const [activeSlotModal, setActiveSlotModal] = useState<FormationSlot | null>(null);
   const [activeTokenMenuId, setActiveTokenMenuId] = useState<string | null>(null);
   const [squadSearchQuery, setSquadSearchQuery] = useState('');
@@ -71,6 +81,21 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
   const starters = useMemo(() => lineupEntries.filter((e) => e.starter), [lineupEntries]);
   const substitutes = useMemo(() => lineupEntries.filter((e) => !e.starter), [lineupEntries]);
+
+  // Synchronize formation when matchId changes or when new starters load without stored preference
+  useEffect(() => {
+    if (typeof window !== 'undefined' && matchId) {
+      const saved = localStorage.getItem(`tactical_formation_${matchId}`);
+      if (saved && FORMATION_KEYS.includes(saved as FormationType)) {
+        setSelectedFormation(saved as FormationType);
+        return;
+      }
+    }
+    if (starters.length > 0) {
+      const detected = detectFormation(starters);
+      setSelectedFormation(detected);
+    }
+  }, [matchId, starters]);
 
   // Map of lineup entries by playerId
   const lineupPlayerIds = useMemo(() => new Set(lineupEntries.map((e) => e.playerId)), [lineupEntries]);
@@ -99,19 +124,24 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const formationConfig = PREDEFINED_FORMATIONS[selectedFormation] || PREDEFINED_FORMATIONS['1-4-3-3'];
   const formationSlots = formationConfig.slots;
 
-  // Accurately calculate which formation slots are occupied vs unassigned
-  // A slot is occupied if a starter is within 8.5% distance on pitch or has exact matching position when close
+  // Accurately calculate which formation slots are occupied vs unassigned.
+  // CRITICAL: If 11 starters are already on the pitch, there are ZERO unassigned slots to show!
   const { occupiedSlots, unassignedSlots } = useMemo(() => {
     const occupied = new Map<string, MatchLineupEntry>();
     const unassigned: FormationSlot[] = [];
 
-    // Copy slots to find closest matching starters
+    // If all 11 starters are on the pitch, do not render ghost empty slots!
+    if (starters.length >= 11) {
+      return { occupiedSlots: occupied, unassignedSlots: [] };
+    }
+
+    // Available starters to match against slots
     const availableStarters = [...starters];
 
     for (const slot of formationSlots) {
-      // Find starter closest to this slot
+      // Find starter closest to this slot or matching exact position
       let bestIndex = -1;
-      let minDistance = 12.0; // Distance threshold %
+      let minDistance = 18.0; // Distance threshold %
 
       for (let i = 0; i < availableStarters.length; i++) {
         const starter = availableStarters[i];
@@ -121,6 +151,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             minDistance = dist;
             bestIndex = i;
           }
+        } else if (starter.position?.toUpperCase() === slot.position.toUpperCase()) {
+          bestIndex = i;
+          break;
         }
       }
 
@@ -132,12 +165,19 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       }
     }
 
-    return { occupiedSlots: occupied, unassignedSlots: unassigned };
+    // Only show unassigned slots up to the number of missing starters (11 - starters.length)
+    const neededEmptySlots = Math.max(0, 11 - starters.length);
+    const trimmedUnassigned = unassigned.slice(0, neededEmptySlots);
+
+    return { occupiedSlots: occupied, unassignedSlots: trimmedUnassigned };
   }, [formationSlots, starters]);
 
-  // Apply a predefined formation layout with intelligent position matching
+  // Apply a predefined formation layout with intelligent spatial and positional matching
   const handleSelectFormation = async (formationKey: FormationType) => {
     setSelectedFormation(formationKey);
+    if (typeof window !== 'undefined' && matchId) {
+      localStorage.setItem(`tactical_formation_${matchId}`, formationKey);
+    }
     const targetConfig = PREDEFINED_FORMATIONS[formationKey];
     if (!targetConfig || starters.length === 0) return;
 
@@ -149,7 +189,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     const gkSlotIdx = availableSlots.findIndex((s) => s.position === 'GK');
     const gkStarterIdx = startersToAssign.findIndex((s) => {
       const player = getPlayer(s.playerId);
-      return (s.position?.toUpperCase() === 'GK' || player?.position?.toUpperCase() === 'GK' || s.position === 'POR');
+      const pos = (s.position || player?.position || '').toUpperCase();
+      return pos === 'GK' || pos === 'POR';
     });
 
     if (gkSlotIdx !== -1 && gkStarterIdx !== -1) {
@@ -169,44 +210,62 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       });
     }
 
-    // 2. Assign by exact position category (DEF, MID, FWD)
-    const assignCategory = (category: 'DEF' | 'MID' | 'FWD') => {
-      const catStarters = startersToAssign.filter((s) => {
+    // 2. Assign categories with left-to-right spatial preservation
+    const assignCategoryWithSpatialMatch = (category: 'DEF' | 'MID' | 'FWD') => {
+      const categorySlots = availableSlots.filter((s) => getPositionCategory(s.position) === category);
+      categorySlots.sort((a, b) => a.x - b.x);
+
+      const categoryStarters = startersToAssign.filter((s) => {
         const p = getPlayer(s.playerId);
         return getPositionCategory(s.position) === category || getPositionCategory(p?.position) === category;
       });
+      categoryStarters.sort((a, b) => (a.pitchX ?? 50) - (b.pitchX ?? 50));
 
-      for (const starter of catStarters) {
-        const slotIdx = availableSlots.findIndex((s) => getPositionCategory(s.position) === category);
-        if (slotIdx !== -1) {
-          const slot = availableSlots.splice(slotIdx, 1)[0];
-          const stIdx = startersToAssign.findIndex((s) => s.id === starter.id);
-          if (stIdx !== -1) startersToAssign.splice(stIdx, 1);
+      const countToAssign = Math.min(categorySlots.length, categoryStarters.length);
+      for (let i = 0; i < countToAssign; i++) {
+        const starter = categoryStarters[i];
+        const slot = categorySlots[i];
 
-          updates.push({
-            id: starter.id,
-            matchId,
-            playerId: starter.playerId,
-            position: slot.position,
-            starter: true,
-            pitchX: slot.x,
-            pitchY: slot.y,
-            shirtNumber: starter.shirtNumber,
-            captain: starter.captain,
-            notes: starter.notes
-          });
-        }
+        const slotIdx = availableSlots.findIndex((s) => s.id === slot.id);
+        if (slotIdx !== -1) availableSlots.splice(slotIdx, 1);
+
+        const stIdx = startersToAssign.findIndex((s) => s.id === starter.id);
+        if (stIdx !== -1) startersToAssign.splice(stIdx, 1);
+
+        updates.push({
+          id: starter.id,
+          matchId,
+          playerId: starter.playerId,
+          position: slot.position,
+          starter: true,
+          pitchX: slot.x,
+          pitchY: slot.y,
+          shirtNumber: starter.shirtNumber,
+          captain: starter.captain,
+          notes: starter.notes
+        });
       }
     };
 
-    assignCategory('DEF');
-    assignCategory('MID');
-    assignCategory('FWD');
+    assignCategoryWithSpatialMatch('DEF');
+    assignCategoryWithSpatialMatch('MID');
+    assignCategoryWithSpatialMatch('FWD');
 
-    // 3. Assign any remaining starters to available slots
+    // 3. Assign any remaining starters to closest available slots
     while (startersToAssign.length > 0 && availableSlots.length > 0) {
       const starter = startersToAssign.shift()!;
-      const slot = availableSlots.shift()!;
+      let bestSlotIdx = 0;
+      let minD = Infinity;
+      const sX = starter.pitchX ?? 50;
+      const sY = starter.pitchY ?? 50;
+      for (let i = 0; i < availableSlots.length; i++) {
+        const d = pitchDistance(sX, sY, availableSlots[i].x, availableSlots[i].y);
+        if (d < minD) {
+          minD = d;
+          bestSlotIdx = i;
+        }
+      }
+      const slot = availableSlots.splice(bestSlotIdx, 1)[0];
       updates.push({
         id: starter.id,
         matchId,
@@ -720,8 +779,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               const isBeingDragged = draggingId === entry.id;
               const isHoveredTarget = hoverTargetId === entry.id;
               
-              // Coordinates: drag state > persisted pitchX/Y > formation slot fallback
-              const fallbackSlot = formationSlots[index] || { x: 50, y: 50 };
+              // Coordinates: drag state > persisted pitchX/Y > formation slot fallback matching position
+              const matchingSlot = formationSlots.find((s) => s.position.toUpperCase() === (entry.position || '').toUpperCase());
+              const fallbackSlot = matchingSlot || formationSlots[index] || { x: 50, y: 50 };
               const posX = isBeingDragged && dragCoords ? dragCoords.x : (entry.pitchX ?? fallbackSlot.x);
               const posY = isBeingDragged && dragCoords ? dragCoords.y : (entry.pitchY ?? fallbackSlot.y);
               const isMenuOpen = activeTokenMenuId === entry.id;

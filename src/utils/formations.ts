@@ -153,11 +153,65 @@ export function pitchDistance(x1: number, y1: number, x2: number, y2: number): n
 }
 
 /**
- * Detect which formation best matches a set of coordinates, or default to 1-4-3-3
+ * Detect which formation best matches a set of coordinates and positions, or default to 1-4-3-3
  */
 export function detectFormation(starters: Array<{ pitchX?: number | null; pitchY?: number | null; position?: string }>): FormationType {
   if (starters.length === 0) return '1-4-3-3';
   
+  // 1. Check exact position signatures
+  const positions = starters.map((s) => (s.position || '').toUpperCase().trim());
+  const hasLAM = positions.includes('LAM') || positions.includes('RAM');
+  const cdmsCount = positions.filter((p) => ['CDM', 'MCD', 'LDM', 'RDM'].includes(p)).length;
+  const camsCount = positions.filter((p) => ['CAM', 'LAM', 'RAM', 'MCO'].includes(p)).length;
+  const lmsCount = positions.filter((p) => ['LM', 'RM', 'MI', 'MD'].includes(p)).length;
+  const lwCount = positions.filter((p) => ['LW', 'RW', 'EXT'].includes(p)).length;
+  const stsCount = positions.filter((p) => ['ST', 'CF', 'LST', 'RST', 'DC', 'DEL'].includes(p)).length;
+  const cbsCount = positions.filter((p) => ['CB', 'LCB', 'RCB', 'DFC'].includes(p)).length;
+  const wingbacksCount = positions.filter((p) => ['LWB', 'RWB', 'CAI', 'CAD'].includes(p)).length;
+
+  if (hasLAM || (cdmsCount >= 2 && camsCount >= 1)) {
+    return '1-4-2-3-1';
+  }
+  if (stsCount >= 2 && (lmsCount >= 1 || positions.includes('LM') || positions.includes('RM'))) {
+    return '1-4-4-2';
+  }
+  if (cbsCount >= 3 || wingbacksCount >= 2) {
+    if (stsCount >= 2) return '1-3-5-2';
+    if (lwCount >= 2 || stsCount >= 3) return '1-3-4-3';
+    return '1-3-5-2';
+  }
+  if (cdmsCount >= 1 && lmsCount >= 2) {
+    return '1-4-1-4-1';
+  }
+  if (lwCount >= 2) {
+    return '1-4-3-3';
+  }
+
+  // 2. Proximity-based matching if coordinates are available
+  const startersWithCoords = starters.filter((s) => typeof s.pitchX === 'number' && typeof s.pitchY === 'number');
+  if (startersWithCoords.length >= 4) {
+    let bestFormation: FormationType = '1-4-3-3';
+    let minTotalDistance = Infinity;
+
+    for (const key of FORMATION_KEYS) {
+      const slots = PREDEFINED_FORMATIONS[key].slots;
+      let totalDist = 0;
+      for (const starter of startersWithCoords) {
+        let minDist = Infinity;
+        for (const slot of slots) {
+          const d = pitchDistance(starter.pitchX!, starter.pitchY!, slot.x, slot.y);
+          if (d < minDist) minDist = d;
+        }
+        totalDist += minDist;
+      }
+      if (totalDist < minTotalDistance) {
+        minTotalDistance = totalDist;
+        bestFormation = key;
+      }
+    }
+    return bestFormation;
+  }
+
   // Count defenders by position or Y >= 65
   const defenders = starters.filter(s => {
     const pos = (s.position || '').toUpperCase();

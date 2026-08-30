@@ -187,10 +187,35 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
           {step === 0 && (
             <Step title="When did it happen?" description="Start with the player and the event that anchors this record.">
               <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Player"><select className={fieldClass} value={draft.playerId} onChange={(event) => patch({ playerId: event.target.value })}><option value="">Select player</option>{players.map((player) => <option key={player.playerId} value={player.playerId}>#{player.shirtNumber || '–'} {player.playerName}</option>)}</select></Field>
-                <Field label="Injury date"><input className={fieldClass} type="date" max={today()} value={draft.injuryDate} onChange={(event) => patch({ injuryDate: event.target.value })} /></Field>
+                <Field label="Player">
+                  <select className={fieldClass} value={draft.playerId} onChange={(event) => patch({ playerId: event.target.value })}>
+                    <option value="">Select player</option>
+                    {players.map((player) => (
+                      <option key={player.playerId} value={player.playerId}>
+                        #{player.shirtNumber || '–'} {player.playerName}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div>
+                  <Field label="Injury date (Fecha de lesión)">
+                    <input
+                      className={fieldClass}
+                      type="date"
+                      value={draft.injuryDate}
+                      onChange={(event) => patch({ injuryDate: event.target.value })}
+                    />
+                  </Field>
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Fecha en que se produjo la lesión</span>
+                    <span className="font-medium text-emerald-700">Registro en sistema: {today()}</span>
+                  </div>
+                </div>
               </div>
-              <fieldset className="mt-6"><legend className={labelClass}>Event context</legend><ChoiceGrid values={['training', 'match', 'external', 'unknown']} selected={draft.context} onChange={(context) => patch({ context: context as InjuryInput['context'], trainingSessionId: null, matchId: null })} /></fieldset>
+              <fieldset className="mt-6">
+                <legend className={labelClass}>Event context</legend>
+                <ChoiceGrid values={['training', 'match', 'external', 'unknown']} selected={draft.context} onChange={(context) => patch({ context: context as InjuryInput['context'], trainingSessionId: null, matchId: null })} />
+              </fieldset>
               {draft.context === 'training' && (
                 <Field label="Training session" className="mt-6">
                   {sessions.length === 0 ? (
@@ -198,10 +223,45 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
                       No training sessions found for this team. You can register training sessions in the Training Hub or choose another context.
                     </div>
                   ) : (
-                    <select className={fieldClass} value={draft.trainingSessionId || ''} onChange={(event) => patch({ trainingSessionId: event.target.value || null })}>
-                      <option value="">Select session</option>
-                      {sessions.map((session) => <option key={session.sessionId} value={session.sessionId}>{session.sessionDate} · Session {session.sessionNumber}</option>)}
-                    </select>
+                    <div className="space-y-1.5">
+                      <select
+                        className={fieldClass}
+                        value={draft.trainingSessionId || ''}
+                        onChange={(event) => {
+                          const sessionId = event.target.value || null;
+                          const session = sessions.find((s) => s.sessionId === sessionId);
+                          patch({
+                            trainingSessionId: sessionId,
+                            ...(session?.sessionDate ? { injuryDate: session.sessionDate } : {})
+                          });
+                        }}
+                      >
+                        <option value="">Select session</option>
+                        {sessions.map((session) => (
+                          <option key={session.sessionId} value={session.sessionId}>
+                            {session.sessionDate} · Session {session.sessionNumber}
+                          </option>
+                        ))}
+                      </select>
+                      {draft.trainingSessionId && (() => {
+                        const session = sessions.find((s) => s.sessionId === draft.trainingSessionId);
+                        if (!session) return null;
+                        return (
+                          <div className="flex items-center justify-between text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
+                            <span>Sesión del: <strong>{session.sessionDate}</strong></span>
+                            {draft.injuryDate !== session.sessionDate && (
+                              <button
+                                type="button"
+                                onClick={() => patch({ injuryDate: session.sessionDate })}
+                                className="font-bold underline text-emerald-900 hover:text-emerald-700"
+                              >
+                                Usar fecha de la sesión ({session.sessionDate})
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
                 </Field>
               )}
@@ -212,10 +272,45 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
                       No matches found for this team. You can register matches in Match Centre or choose another context.
                     </div>
                   ) : (
-                    <select className={fieldClass} value={draft.matchId || ''} onChange={(event) => patch({ matchId: event.target.value || null })}>
-                      <option value="">Select match</option>
-                      {matches.map((match) => <option key={match.matchId} value={match.matchId}>{match.matchDate} · {match.opponentName || 'Match'}</option>)}
-                    </select>
+                    <div className="space-y-1.5">
+                      <select
+                        className={fieldClass}
+                        value={draft.matchId || ''}
+                        onChange={(event) => {
+                          const matchId = event.target.value || null;
+                          const match = matches.find((m) => m.matchId === matchId);
+                          patch({
+                            matchId,
+                            ...(match?.matchDate ? { injuryDate: match.matchDate } : {})
+                          });
+                        }}
+                      >
+                        <option value="">Select match</option>
+                        {matches.map((match) => (
+                          <option key={match.matchId} value={match.matchId}>
+                            {match.matchDate} · {match.opponentName || 'Match'}
+                          </option>
+                        ))}
+                      </select>
+                      {draft.matchId && (() => {
+                        const match = matches.find((m) => m.matchId === draft.matchId);
+                        if (!match) return null;
+                        return (
+                          <div className="flex items-center justify-between text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
+                            <span>Partido del: <strong>{match.matchDate}</strong></span>
+                            {draft.injuryDate !== match.matchDate && (
+                              <button
+                                type="button"
+                                onClick={() => patch({ injuryDate: match.matchDate })}
+                                className="font-bold underline text-emerald-900 hover:text-emerald-700"
+                              >
+                                Usar fecha del partido ({match.matchDate})
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
                 </Field>
               )}
