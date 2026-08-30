@@ -4,6 +4,7 @@ import type { Injury, InjuryFollowUp, PhysioMatchContext, PhysioPlayerContext, P
 import { determineSquadStatusFromPlayerInjuries } from './squadInjurySync';
 import { listSquadPlayers } from '../squad/squadService';
 import { listMatches } from '../matches/matchService';
+import { ensurePhysioTeamPrerequisites } from './physioComplaintsService';
 
 const INJURIES_TABLE = 'injuries';
 const FOLLOW_UPS_TABLE = 'injury_follow_ups';
@@ -165,15 +166,73 @@ export async function listInjuries(teamId: string): Promise<Injury[]> {
   return (data || []).map(injuryFromRow);
 }
 export async function createInjury(input: Omit<Injury, 'id' | 'createdAt' | 'updatedAt'>): Promise<Injury> {
-  const { data, error } = await client().from(INJURIES_TABLE).insert(injuryToRow(input)).select('*').single();
-  if (error) throw error;
+  await ensurePhysioTeamPrerequisites(
+    input.teamId,
+    input.playerId,
+    input.context,
+    input.matchId,
+    input.trainingSessionId
+  );
+
+  const row = injuryToRow(input);
+  let { data, error } = await client().from(INJURIES_TABLE).insert(row).select('*').single();
+
+  if (error) {
+    if (error.code === '23514' && (input.context === 'match' || input.context === 'training')) {
+      await ensurePhysioTeamPrerequisites(
+        input.teamId,
+        input.playerId,
+        input.context,
+        input.matchId,
+        input.trainingSessionId
+      );
+      const retry = await client().from(INJURIES_TABLE).insert(row).select('*').single();
+      if (!retry.error) {
+        const created = injuryFromRow(retry.data);
+        void syncPlayerSquadStatusInDb(created.playerId);
+        return created;
+      }
+    }
+    throw error;
+  }
+
   const created = injuryFromRow(data);
   void syncPlayerSquadStatusInDb(created.playerId);
   return created;
 }
 export async function updateInjury(id: string, patch: Partial<Injury>): Promise<Injury> {
-  const { data, error } = await client().from(INJURIES_TABLE).update(injuryToRow(patch)).eq('id', id).select('*').single();
-  if (error) throw error;
+  if (patch.teamId) {
+    await ensurePhysioTeamPrerequisites(
+      patch.teamId,
+      patch.playerId,
+      patch.context,
+      patch.matchId,
+      patch.trainingSessionId
+    );
+  }
+
+  const row = injuryToRow(patch);
+  let { data, error } = await client().from(INJURIES_TABLE).update(row).eq('id', id).select('*').single();
+
+  if (error) {
+    if (error.code === '23514' && patch.teamId && (patch.context === 'match' || patch.context === 'training')) {
+      await ensurePhysioTeamPrerequisites(
+        patch.teamId,
+        patch.playerId,
+        patch.context,
+        patch.matchId,
+        patch.trainingSessionId
+      );
+      const retry = await client().from(INJURIES_TABLE).update(row).eq('id', id).select('*').single();
+      if (!retry.error) {
+        const updated = injuryFromRow(retry.data);
+        void syncPlayerSquadStatusInDb(updated.playerId);
+        return updated;
+      }
+    }
+    throw error;
+  }
+
   const updated = injuryFromRow(data);
   void syncPlayerSquadStatusInDb(updated.playerId);
   return updated;

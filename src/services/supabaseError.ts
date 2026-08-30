@@ -63,11 +63,12 @@ export function classifySupabaseError(error: unknown): ClassifiedSupabaseError {
   }
 
   if (code === '23514' || code === '22023') {
+    const isCustomTrigger = messageLower.includes('does not belong') || messageLower.includes('injury') || messageLower.includes('check constraint');
     return {
       kind: 'validation',
       code,
       message,
-      userMessage: 'Invalid value. Please review the input and try again.'
+      userMessage: isCustomTrigger ? message : 'Invalid value or clinical constraint mismatch. Please review the selected details and try again.'
     };
   }
 

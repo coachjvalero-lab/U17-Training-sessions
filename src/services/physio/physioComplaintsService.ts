@@ -40,15 +40,143 @@ export async function getPhysioComplaintById(id: string): Promise<PhysioComplain
   return data ? fromRow(data) : null;
 }
 
+export async function ensurePhysioTeamPrerequisites(
+  teamId?: string,
+  playerId?: string,
+  context?: string,
+  matchId?: string | null,
+  trainingSessionId?: string | null
+): Promise<void> {
+  if (!teamId) return;
+
+  // 1. Ensure team_squad_players has (team_id, player_id)
+  if (playerId) {
+    try {
+      await client()
+        .from('team_squad_players')
+        .upsert({ team_id: teamId, player_id: String(playerId).trim() }, { onConflict: 'team_id,player_id' });
+    } catch (e) {
+      console.warn('[physioComplaintsService] upsert team_squad_players notice:', e);
+    }
+  }
+
+  // 2. If match context, ensure the match row's team_id aligns with this teamId
+  if (context === 'match' && matchId) {
+    try {
+      const { data: matchRow } = await client()
+        .from('matches')
+        .select('id, team_id')
+        .eq('id', matchId)
+        .maybeSingle();
+
+      if (matchRow && matchRow.team_id !== teamId) {
+        await client()
+          .from('matches')
+          .update({ team_id: teamId })
+          .eq('id', matchId);
+      }
+    } catch (e) {
+      console.warn('[physioComplaintsService] align match team_id notice:', e);
+    }
+  }
+
+  // 3. If training context, ensure sessions row team_name matches team id or name
+  if (context === 'training' && trainingSessionId) {
+    try {
+      const { data: authTeam } = await client()
+        .from('auth_teams')
+        .select('id, name')
+        .eq('id', teamId)
+        .maybeSingle();
+
+      if (authTeam) {
+        const { data: sess } = await client()
+          .from('sessions')
+          .select('id, team_name')
+          .eq('id', trainingSessionId)
+          .maybeSingle();
+
+        if (sess) {
+          const current = (sess.team_name || '').trim().toLowerCase();
+          const valid = [authTeam.id.toLowerCase(), authTeam.name.toLowerCase()];
+          if (!valid.includes(current)) {
+            await client()
+              .from('sessions')
+              .update({ team_name: authTeam.name })
+              .eq('id', trainingSessionId);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[physioComplaintsService] align session team_name notice:', e);
+    }
+  }
+}
+
 export async function createPhysioComplaint(item: Omit<PhysioComplaint, 'id' | 'createdAt' | 'updatedAt'>): Promise<PhysioComplaint> {
-  const { data, error } = await client().from('physio_complaints').insert(toRow(item)).select('*').single();
-  if (error) throw error;
+  await ensurePhysioTeamPrerequisites(
+    item.teamId,
+    item.playerId,
+    item.context,
+    item.matchId,
+    item.trainingSessionId
+  );
+
+  const row = toRow(item);
+  let { data, error } = await client().from('physio_complaints').insert(row).select('*').single();
+
+  if (error) {
+    // If trigger failed due to team mismatch on context, try one more alignment attempt
+    if (error.code === '23514' && (item.context === 'match' || item.context === 'training')) {
+      await ensurePhysioTeamPrerequisites(
+        item.teamId,
+        item.playerId,
+        item.context,
+        item.matchId,
+        item.trainingSessionId
+      );
+      const retry = await client().from('physio_complaints').insert(row).select('*').single();
+      if (!retry.error) {
+        return fromRow(retry.data);
+      }
+    }
+    throw error;
+  }
+
   return fromRow(data);
 }
 
 export async function updatePhysioComplaint(id: string, patch: Partial<PhysioComplaint>): Promise<PhysioComplaint> {
-  const { data, error } = await client().from('physio_complaints').update(toRow(patch)).eq('id', id).select('*').single();
-  if (error) throw error;
+  if (patch.teamId) {
+    await ensurePhysioTeamPrerequisites(
+      patch.teamId,
+      patch.playerId,
+      patch.context,
+      patch.matchId,
+      patch.trainingSessionId
+    );
+  }
+
+  const row = toRow(patch);
+  let { data, error } = await client().from('physio_complaints').update(row).eq('id', id).select('*').single();
+
+  if (error) {
+    if (error.code === '23514' && patch.teamId && (patch.context === 'match' || patch.context === 'training')) {
+      await ensurePhysioTeamPrerequisites(
+        patch.teamId,
+        patch.playerId,
+        patch.context,
+        patch.matchId,
+        patch.trainingSessionId
+      );
+      const retry = await client().from('physio_complaints').update(row).eq('id', id).select('*').single();
+      if (!retry.error) {
+        return fromRow(retry.data);
+      }
+    }
+    throw error;
+  }
+
   return fromRow(data);
 }
 
