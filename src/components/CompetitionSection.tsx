@@ -16,6 +16,7 @@ import { TrainingSession, Match } from '../types';
 import { MatchCentreSection } from './MatchCentreSection';
 import { MatchCallUpSection } from './MatchCallUpSection';
 import { TeamCrest } from './TeamCrest';
+import { MatchEditModal } from './MatchEditModal';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
@@ -114,18 +115,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     })();
   }, [selectedTeamId, activeTab, matches]);
 
-  // Match Form State
-  const [formData, setFormData] = useState<Partial<Match>>({
-    opponentTeamId: '',
-    competitionName: 'Saudi U17 Premier League',
-    date: new Date().toISOString().split('T')[0],
-    time: '18:30',
-    isHome: true,
-    venue: 'Al Ula Sports Complex Stadium',
-    status: 'planned'
-  });
-  const [isSavingMatch, setIsSavingMatch] = useState(false);
-  const [matchSaveError, setMatchSaveError] = useState<string | null>(null);
+  // Match Edit / Add State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   // Score Modal State
   const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
@@ -139,72 +131,37 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingMatch(null);
-    setMatchSaveError(null);
-    setFormData({
-      opponentTeamId: '',
-      competitionName: 'Saudi U17 Premier League',
-      date: new Date().toISOString().split('T')[0],
-      time: '18:30',
-      isHome: true,
-      venue: 'Al Ula Sports Complex Stadium',
-      status: 'planned'
-    });
     setIsAddModalOpen(true);
   };
 
   const handleOpenEditModal = (match: Match) => {
     setEditingMatch(match);
-    setMatchSaveError(null);
-    setFormData(match);
     setIsAddModalOpen(true);
   };
 
-  const handleSaveMatch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.opponentTeamId?.trim() || !selectedTeamId) return;
-
-    setIsSavingMatch(true);
-    setMatchSaveError(null);
-
-    try {
-      if (editingMatch) {
-        await updateMatch(editingMatch.id, formData);
-      } else {
-        await createMatch({
-          teamId: selectedTeamId,
-          opponentTeamId: formData.opponentTeamId.trim(),
-          competitionName: formData.competitionName || 'U17 League',
-          date: formData.date || new Date().toISOString().split('T')[0],
-          time: formData.time || '18:30',
-          status: formData.status || 'planned',
-          isHome: formData.isHome ?? true,
-          venue: formData.venue || null,
-          location: formData.location || null
-        });
+  const handleMatchSaved = (savedMatch: Match) => {
+    setMatches((prev) => {
+      const exists = prev.some((m) => m.id === savedMatch.id);
+      if (exists) {
+        return prev.map((m) => (m.id === savedMatch.id ? savedMatch : m));
       }
-      
-      const updated = await listMatches(selectedTeamId);
-      setMatches(updated);
-      setIsAddModalOpen(false);
-      setMatchSaveError(null);
-    } catch (error) {
-      console.error('[CompetitionSection] Failed saving match', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save match. Please try again.';
-      setMatchSaveError(errorMessage);
-    } finally {
-      setIsSavingMatch(false);
-    }
+      return [savedMatch, ...prev];
+    });
+    setIsAddModalOpen(false);
   };
 
   const handleDeleteMatch = async (matchId: string) => {
-    if (!confirm('Delete this match?') || !selectedTeamId) return;
+    const matchToDelete = matches.find((m) => m.id === matchId);
+    const opp = matchToDelete?.opponentName || 'este partido';
+    if (!confirm(`¿Estás seguro de que deseas eliminar el partido contra "${opp}"?`)) return;
 
     try {
       await deleteMatch(matchId);
-      const updated = await listMatches(selectedTeamId);
-      setMatches(updated);
+      setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      setIsAddModalOpen(false);
     } catch (error) {
       console.error('[CompetitionSection] Failed deleting match', error);
+      alert('No se pudo eliminar el partido. Por favor, inténtalo de nuevo.');
     }
   };
 

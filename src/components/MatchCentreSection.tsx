@@ -10,7 +10,7 @@ import {
   getMatchEvents,
   updateMatchEvent
 } from '../services/matches/matchEventsService';
-import { getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
+import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
 import {
   createOrUpdateOpponentAnalysis,
   getOpponentAnalysisByOpponentTeamId
@@ -25,6 +25,7 @@ import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squa
 import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics, TeamSide } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { AiMatchEventsModal } from './AiMatchEventsModal';
+import { MatchEditModal } from './MatchEditModal';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -105,13 +106,17 @@ interface MatchCentreSectionProps {
   isLoadingMatches?: boolean;
   matchLoadError?: string | null;
   currentLogo?: string | null;
+  onMatchUpdated?: (updatedMatch: Match) => void;
+  onMatchDeleted?: (deletedMatchId: string) => void;
 }
 
 export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   matches: providedMatches,
   isLoadingMatches,
   matchLoadError,
-  currentLogo
+  currentLogo,
+  onMatchUpdated,
+  onMatchDeleted
 }) => {
   const { selectedTeamId, availableTeams } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
@@ -119,6 +124,10 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(() => getPathMatchId());
   const [activeTab, setActiveTab] = useState<MatchTab>('opponent-analysis');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [isMatchEditModalOpen, setIsMatchEditModalOpen] = useState(false);
+  const [matchToEdit, setMatchToEdit] = useState<Match | null>(null);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'planned' | 'played'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
   const [lineupEntries, setLineupEntries] = useState<MatchLineupEntry[]>([]);
   const [events, setEvents] = useState<MatchEventModel[]>([]);
@@ -350,6 +359,56 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       window.history.pushState({}, '', '/');
     }
     window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  const handleOpenCreateMatch = () => {
+    setMatchToEdit(null);
+    setIsMatchEditModalOpen(true);
+  };
+
+  const handleOpenEditMatch = (match: Match, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setMatchToEdit(match);
+    setIsMatchEditModalOpen(true);
+  };
+
+  const handleDeleteMatch = async (matchId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const matchToDelete = visibleMatches.find((m) => m.id === matchId) || (selectedMatch?.id === matchId ? selectedMatch : null);
+    const oppLabel = matchToDelete?.opponentName || 'este partido';
+
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar el partido contra "${oppLabel}"? Esta acción borrará también sus alineaciones y eventos registrados.`)) {
+      return;
+    }
+
+    try {
+      await deleteMatch(matchId);
+      setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      onMatchDeleted?.(matchId);
+
+      if (selectedMatchId === matchId || selectedMatch?.id === matchId) {
+        closeDetail();
+      }
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed deleting match', error);
+      alert('No se pudo eliminar el partido. Por favor, inténtalo de nuevo.');
+    }
+  };
+
+  const handleMatchSaved = (savedMatch: Match) => {
+    setMatches((prev) => {
+      const exists = prev.some((m) => m.id === savedMatch.id);
+      if (exists) {
+        return prev.map((m) => (m.id === savedMatch.id ? savedMatch : m));
+      }
+      return [savedMatch, ...prev];
+    });
+
+    if (selectedMatch?.id === savedMatch.id || selectedMatchId === savedMatch.id) {
+      setSelectedMatch(savedMatch);
+    }
+
+    onMatchUpdated?.(savedMatch);
   };
 
   const setSaveState = (key: string, state: SaveState, message?: string) => {
@@ -1482,20 +1541,73 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     const tabLabels: Record<MatchTab, string> = { 'opponent-analysis': 'Opposition', 'line-up': 'Line-up', 'match-plan': 'Game Plan', 'set-pieces': 'Set Pieces', events: 'Timeline', statistics: 'Statistics' };
 
     return (
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
         <header className="bg-[#002142] text-white">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
-            <button type="button" onClick={closeDetail} className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white"><ChevronLeft className="h-4 w-4" />All matches</button>
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-200">{selectedMatch.competitionName}</span>
-            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${selectedMatch.status === 'played' ? 'border-white/20 text-slate-300' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'}`}>{formatMatchStatusLabel(selectedMatch.status)}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+            <button
+              type="button"
+              onClick={closeDetail}
+              className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/20 hover:text-white transition"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Todos los partidos</span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-200">
+                {selectedMatch.competitionName}
+              </span>
+              <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${selectedMatch.status === 'played' ? 'border-white/20 text-slate-300' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300'}`}>
+                {formatMatchStatusLabel(selectedMatch.status)}
+              </span>
+
+              <div className="ml-2 flex items-center gap-1.5 border-l border-white/20 pl-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditMatch(selectedMatch)}
+                  title="Editar datos del partido (equipos, horario, fecha, etc.)"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-500/20 px-3 py-1.5 text-xs font-bold text-sky-200 hover:bg-sky-500/30 hover:text-white transition border border-sky-400/30"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  <span>Editar Partido</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => void handleDeleteMatch(selectedMatch.id, e)}
+                  title="Eliminar este partido"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/30 hover:text-white transition border border-rose-400/30"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Eliminar</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)_80px_minmax(0,1fr)] items-center gap-3 px-4 py-6 sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] sm:py-8">
-            <div className="flex min-w-0 flex-col items-center text-center"><TeamCrest name={homeTeam.name} logoUrl={homeTeam.logoUrl} isAlula={homeTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" /><span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{homeTeamName}</span><span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Home</span></div>
-            <div className="text-center">{hasScore ? <div className="text-3xl font-black tabular-nums sm:text-4xl">{homeScore} <span className="text-slate-500">:</span> {awayScore}</div> : <div className="text-xl font-black text-sky-200">VS</div>}<div className="mt-2 text-[10px] font-bold text-slate-300">{selectedMatch.time || 'Time TBD'}</div></div>
-            <div className="flex min-w-0 flex-col items-center text-center"><TeamCrest name={awayTeam.name} logoUrl={awayTeam.logoUrl} isAlula={awayTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" /><span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{awayTeamName}</span><span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Away</span></div>
+            <div className="flex min-w-0 flex-col items-center text-center">
+              <TeamCrest name={homeTeam.name} logoUrl={homeTeam.logoUrl} isAlula={homeTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" />
+              <span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{homeTeamName}</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Home (Local)</span>
+            </div>
+            <div className="text-center">
+              {hasScore ? (
+                <div className="text-3xl font-black tabular-nums sm:text-4xl">{homeScore} <span className="text-slate-500">:</span> {awayScore}</div>
+              ) : (
+                <div className="text-xl font-black text-sky-200">VS</div>
+              )}
+              <div className="mt-2 text-xs font-bold text-sky-300">{selectedMatch.time || 'Horario por definir'}</div>
+            </div>
+            <div className="flex min-w-0 flex-col items-center text-center">
+              <TeamCrest name={awayTeam.name} logoUrl={awayTeam.logoUrl} isAlula={awayTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" />
+              <span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{awayTeamName}</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Away (Visitante)</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 px-4 py-3 text-[11px] font-semibold text-slate-300"><span className="inline-flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-sky-300" />{formatDate(selectedMatch.date)}</span><span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-sky-300" />{selectedMatch.venue || selectedMatch.location || 'Venue TBD'}</span></div>
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 px-4 py-3 text-[11px] font-semibold text-slate-300">
+            <span className="inline-flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-sky-300" />{formatDate(selectedMatch.date)}</span>
+            <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-sky-300" />{selectedMatch.venue || selectedMatch.location || 'Venue TBD'}</span>
+          </div>
         </header>
 
         <nav className="overflow-x-auto border-b border-slate-200 bg-white px-3" aria-label="Match workspace">
@@ -1538,6 +1650,16 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             existingEventsCount={events.length}
           />
         )}
+
+        <MatchEditModal
+          isOpen={isMatchEditModalOpen}
+          onClose={() => setIsMatchEditModalOpen(false)}
+          match={matchToEdit}
+          teamName={teamName}
+          currentTeamId={selectedTeamId || undefined}
+          onSave={handleMatchSaved}
+          onDelete={handleDeleteMatch}
+        />
       </div>
     );
   }
@@ -1559,14 +1681,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     );
   }
 
-  if (visibleMatches.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-        No matches available yet.
-      </div>
-    );
-  }
-
   const opponentClubs = Array.from(
     new Map(visibleMatches.map((match) => [
       match.opponentTeamId,
@@ -1578,80 +1692,203 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     ])).values()
   ).sort((first, second) => first.name.localeCompare(second.name));
 
+  const filteredMatches = visibleMatches.filter((match) => {
+    if (filterStatus === 'planned' && match.status === 'played') return false;
+    if (filterStatus === 'played' && match.status !== 'played') return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const opp = (match.opponentName || '').toLowerCase();
+      const comp = (match.competitionName || '').toLowerCase();
+      const ven = (match.venue || match.location || '').toLowerCase();
+      if (!opp.includes(q) && !comp.includes(q) && !ven.includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   return (
-    <div className="space-y-7">
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {visibleMatches.map((match) => {
-        const opponentName = match.opponentName || 'Opponent';
-        const homeTeam = match.isHome
-          ? { name: teamName, isAlula: true, logoUrl: currentLogo ?? null }
-          : { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl };
-        const awayTeam = match.isHome
-          ? { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl }
-          : { name: teamName, isAlula: true, logoUrl: currentLogo ?? null };
-        const hasScore = match.ourScore !== null && match.ourScore !== undefined
-          && match.opponentScore !== null && match.opponentScore !== undefined;
-        const homeScore = match.isHome ? match.ourScore : match.opponentScore;
-        const awayScore = match.isHome ? match.opponentScore : match.ourScore;
+    <div className="space-y-6">
+      {/* Top Action & Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-base sm:text-lg font-black text-[#002142] font-display">
+            Calendario de Partidos & Fixtures
+          </h2>
+          <p className="text-xs font-medium text-slate-500">
+            {visibleMatches.length} {visibleMatches.length === 1 ? 'partido registrado' : 'partidos registrados'} para la temporada.
+          </p>
+        </div>
 
-        const renderTeam = (team: { name: string; isAlula: boolean; logoUrl?: string | null }, side: 'Home' | 'Away') => (
-          <div className="flex min-w-0 flex-1 flex-col items-center text-center">
-            <TeamCrest name={team.name} logoUrl={team.logoUrl} isAlula={team.isAlula} />
-            <span className="mt-3 text-[10px] font-black uppercase text-slate-400">{side}</span>
-            <span className="mt-1 min-h-10 text-sm font-black leading-5 text-slate-900">{team.name}</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search */}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar rival o estadio..."
+            className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-sky-600 focus:bg-white w-44 sm:w-48"
+          />
+
+          {/* Filter pills */}
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold text-slate-600">
+            <button
+              type="button"
+              onClick={() => setFilterStatus('all')}
+              className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'all' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
+            >
+              Todos ({visibleMatches.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('planned')}
+              className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'planned' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
+            >
+              Programados
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('played')}
+              className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'played' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
+            >
+              Jugados
+            </button>
           </div>
-        );
 
-        return (
-          <article key={match.id} className="flex min-h-[390px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md">
-            <div className="border-b border-slate-100 bg-[#002142] px-5 py-3 text-center text-[10px] font-black uppercase text-white">
-              {match.competitionName}
-            </div>
-
-            <div className="flex flex-1 flex-col p-5">
-              <div className="flex items-start justify-between gap-3">
-                {renderTeam(homeTeam, 'Home')}
-                <div className="flex min-w-12 flex-col items-center pt-5">
-                  {hasScore ? (
-                    <span className="rounded-xl bg-slate-900 px-3 py-2 text-lg font-black text-white">{homeScore} - {awayScore}</span>
-                  ) : (
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800">VS</span>
-                  )}
-                </div>
-                {renderTeam(awayTeam, 'Away')}
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3 border-y border-slate-100 py-4 text-center">
-                <div>
-                  <div className="text-[10px] font-black uppercase text-slate-400">Date</div>
-                  <div className="mt-1 text-sm font-black text-slate-800">{formatDate(match.date)}</div>
-                </div>
-                <div className="border-l border-slate-100">
-                  <div className="text-[10px] font-black uppercase text-slate-400">Kick-off</div>
-                  <div className="mt-1 text-sm font-black text-slate-800">{match.time || 'TBD'}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                <span>{match.venue || match.location || 'Venue TBD'}</span>
-              </div>
-
-              <div className="mt-auto flex items-center justify-between gap-3 pt-5">
-                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase ${match.status === 'played' ? 'border-slate-200 bg-slate-100 text-slate-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                  {formatMatchStatusLabel(match.status)}
-                </span>
-                <button type="button" onClick={() => openMatch(match.id)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-3 py-2 text-[10px] font-black uppercase text-white transition hover:bg-[#0b3a64]">
-                  <Eye className="h-3.5 w-3.5" />
-                  View details
-                </button>
-              </div>
-            </div>
-          </article>
-        );
-        })}
+          <button
+            type="button"
+            onClick={handleOpenCreateMatch}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-sm hover:bg-emerald-500 transition active:scale-95 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Añadir Partido</span>
+          </button>
+        </div>
       </div>
 
+      {filteredMatches.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500 shadow-sm space-y-3">
+          <p className="font-bold text-slate-700">No hay partidos que coincidan con la búsqueda o filtro.</p>
+          <button
+            type="button"
+            onClick={handleOpenCreateMatch}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white hover:bg-sky-900 transition"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Programar un nuevo partido</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredMatches.map((match) => {
+            const opponentName = match.opponentName || 'Opponent';
+            const homeTeam = match.isHome
+              ? { name: teamName, isAlula: true, logoUrl: currentLogo ?? null }
+              : { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl };
+            const awayTeam = match.isHome
+              ? { name: opponentName, isAlula: false, logoUrl: match.opponentLogoUrl }
+              : { name: teamName, isAlula: true, logoUrl: currentLogo ?? null };
+            const hasScore = match.ourScore !== null && match.ourScore !== undefined
+              && match.opponentScore !== null && match.opponentScore !== undefined;
+            const homeScore = match.isHome ? match.ourScore : match.opponentScore;
+            const awayScore = match.isHome ? match.opponentScore : match.ourScore;
+
+            const renderTeam = (team: { name: string; isAlula: boolean; logoUrl?: string | null }, side: 'Home' | 'Away') => (
+              <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+                <TeamCrest name={team.name} logoUrl={team.logoUrl} isAlula={team.isAlula} />
+                <span className="mt-3 text-[10px] font-black uppercase text-slate-400">{side}</span>
+                <span className="mt-1 min-h-10 text-sm font-black leading-5 text-slate-900">{team.name}</span>
+              </div>
+            );
+
+            return (
+              <article key={match.id} className="flex min-h-[400px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md">
+                {/* Card Header with Competition & Action Buttons */}
+                <div className="flex items-center justify-between border-b border-slate-100 bg-[#002142] px-4 py-2.5 text-white">
+                  <span className="text-[10px] font-black uppercase text-sky-200 truncate max-w-[200px]">
+                    {match.competitionName}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenEditMatch(match, e)}
+                      title="Editar partido (nombres de equipo, horario, estadio...)"
+                      className="rounded-lg p-1.5 text-slate-300 hover:bg-white/20 hover:text-white transition"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => void handleDeleteMatch(match.id, e)}
+                      title="Eliminar partido"
+                      className="rounded-lg p-1.5 text-slate-300 hover:bg-rose-500/40 hover:text-rose-200 transition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-1 flex-col p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    {renderTeam(homeTeam, 'Home')}
+                    <div className="flex min-w-12 flex-col items-center pt-5">
+                      {hasScore ? (
+                        <span className="rounded-xl bg-slate-900 px-3 py-2 text-lg font-black text-white">{homeScore} - {awayScore}</span>
+                      ) : (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800">VS</span>
+                      )}
+                    </div>
+                    {renderTeam(awayTeam, 'Away')}
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 border-y border-slate-100 py-4 text-center">
+                    <div>
+                      <div className="text-[10px] font-black uppercase text-slate-400">Date</div>
+                      <div className="mt-1 text-sm font-black text-slate-800">{formatDate(match.date)}</div>
+                    </div>
+                    <div className="border-l border-slate-100">
+                      <div className="text-[10px] font-black uppercase text-slate-400">Kick-off / Horario</div>
+                      <div className="mt-1 text-sm font-black text-slate-800 text-sky-700">{match.time || 'TBD'}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>{match.venue || match.location || 'Venue TBD'}</span>
+                  </div>
+
+                  {/* Card Footer with Edit & Details */}
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-4 border-t border-slate-100">
+                    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black uppercase ${match.status === 'played' ? 'border-slate-200 bg-slate-100 text-slate-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                      {formatMatchStatusLabel(match.status)}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenEditMatch(match, e)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition"
+                      >
+                        <Edit3 className="h-3 w-3 text-slate-500" />
+                        <span>Editar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openMatch(match.id)}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-3 py-1.5 text-[10px] font-black uppercase text-white transition hover:bg-[#0b3a64]"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>Detalles</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Opponent clubs roster */}
       <div className="border-t border-slate-200 pt-6">
         <div className="mb-4">
           <h2 className="text-base font-black text-[#002142]">Clubs / Teams</h2>
@@ -1666,6 +1903,18 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Edit / Create Match Modal */}
+      <MatchEditModal
+        isOpen={isMatchEditModalOpen}
+        onClose={() => setIsMatchEditModalOpen(false)}
+        match={matchToEdit}
+        teamName={teamName}
+        currentTeamId={selectedTeamId || undefined}
+        onSave={handleMatchSaved}
+        onDelete={handleDeleteMatch}
+        existingOpponents={opponentClubs}
+      />
     </div>
   );
 };

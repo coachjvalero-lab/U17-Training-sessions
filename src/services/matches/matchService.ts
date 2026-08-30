@@ -168,7 +168,7 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
  * If the team doesn't exist, creates it with a slug-based ID.
  * Returns the team ID.
  */
-async function ensureOpponentTeam(opponentName: string): Promise<string> {
+export async function ensureOpponentTeam(opponentName: string): Promise<string> {
   if (!opponentName || !opponentName.trim()) {
     throw new Error('Opponent name is required');
   }
@@ -224,11 +224,12 @@ async function ensureOpponentTeam(opponentName: string): Promise<string> {
   return newTeam.id;
 }
 
-export async function createMatch(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' | 'competitionName' | 'date' | 'time' | 'status'>): Promise<Match> {
+export async function createMatch(input: Partial<Match> & Pick<Match, 'teamId' | 'competitionName' | 'date' | 'time' | 'status'> & { opponentTeamId?: string; opponentName?: string }): Promise<Match> {
   const matchId = input.id || crypto.randomUUID();
   
   // Ensure opponent team exists in auth_teams
-  const opponentTeamId = await ensureOpponentTeam(input.opponentTeamId);
+  const oppTarget = input.opponentName?.trim() || input.opponentTeamId || 'Opponent';
+  const opponentTeamId = await ensureOpponentTeam(oppTarget);
   
   const payload = toRow({ 
     ...input, 
@@ -251,13 +252,18 @@ export async function createMatch(input: Partial<Match> & Pick<Match, 'teamId' |
   return fromRow(data as MatchRow);
 }
 
-export async function updateMatch(matchId: string, patch: Partial<Match>): Promise<Match> {
+export async function updateMatch(matchId: string, patch: Partial<Match> & { opponentName?: string }): Promise<Match> {
   const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString()
   };
 
   if (patch.teamId) payload.team_id = patch.teamId;
-  if (patch.opponentTeamId) payload.opponent_team_id = patch.opponentTeamId;
+  if (patch.opponentName && patch.opponentName.trim()) {
+    const oppId = await ensureOpponentTeam(patch.opponentName.trim());
+    payload.opponent_team_id = oppId;
+  } else if (patch.opponentTeamId) {
+    payload.opponent_team_id = patch.opponentTeamId;
+  }
   if (patch.fixtureId !== undefined) payload.fixture_id = patch.fixtureId ?? null;
   if (patch.competitionName !== undefined) payload.competition_name = patch.competitionName;
   if (patch.date !== undefined) payload.date = patch.date;
