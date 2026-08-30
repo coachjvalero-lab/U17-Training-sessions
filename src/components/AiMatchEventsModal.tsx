@@ -99,10 +99,16 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data: any = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (parseErr) {
+        throw new Error(`Respuesta no válida del servidor (HTTP ${response.status}).`);
+      }
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al generar eventos con IA.');
+        throw new Error(data.error || `Error del servidor al generar eventos (HTTP ${response.status}).`);
       }
 
       setAiSummary(data.summary || '');
@@ -124,10 +130,96 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       setGeneratedEvents(initialEvents);
     } catch (err: any) {
       console.error('[AiMatchEventsModal] Generation failed:', err);
-      setError(err?.message || 'No se pudieron generar los eventos.');
+      setError(err?.message || 'No se pudieron generar los eventos con IA. Puedes reintentar o usar la plantilla base sugerida.');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleGenerateFallbackTemplate = () => {
+    setError(null);
+    setAiSummary('Plantilla base sugerida con distribución táctica de eventos estándar (Goles, Córners y Sustituciones).');
+    
+    const p1 = squadPlayers[0];
+    const p2 = squadPlayers[1] || squadPlayers[0];
+    const p3 = squadPlayers[2] || squadPlayers[0];
+
+    const fallbackList: AiGeneratedEvent[] = [
+      {
+        minute: 12,
+        videoTimestampSeconds: 720,
+        eventType: 'corner',
+        teamSide: 'our_team',
+        playerId: p1 ? p1.id : null,
+        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Nuestra jugadora',
+        relatedPlayerId: null,
+        relatedPlayerName: '',
+        description: 'Córner a favor botado desde el sector derecho al primer palo.',
+        selected: true
+      },
+      {
+        minute: 28,
+        videoTimestampSeconds: 1680,
+        eventType: 'goal',
+        teamSide: 'our_team',
+        playerId: p2 ? p2.id : null,
+        playerName: p2 ? `${p2.firstName} ${p2.lastName}` : 'Nuestra jugadora',
+        relatedPlayerId: p1 ? p1.id : null,
+        relatedPlayerName: p1 ? `${p1.firstName} ${p1.lastName}` : '',
+        description: 'Gol tras remate dentro del área culminando una jugada elaborada.',
+        selected: true
+      },
+      {
+        minute: 41,
+        videoTimestampSeconds: 2460,
+        eventType: 'opponent_corner',
+        teamSide: 'opponent',
+        playerId: null,
+        playerName: opponentName,
+        relatedPlayerId: null,
+        relatedPlayerName: '',
+        description: 'Córner rival botado al segundo palo defendido por nuestra zaga.',
+        selected: true
+      },
+      {
+        minute: 55,
+        videoTimestampSeconds: 3300,
+        eventType: 'substitution_in',
+        teamSide: 'our_team',
+        playerId: p3 ? p3.id : null,
+        playerName: p3 ? `${p3.firstName} ${p3.lastName}` : 'Nuestra jugadora',
+        relatedPlayerId: p1 ? p1.id : null,
+        relatedPlayerName: p1 ? `${p1.firstName} ${p1.lastName}` : '',
+        description: 'Sustitución táctica para refrescar el centro del campo.',
+        selected: true
+      },
+      {
+        minute: 68,
+        videoTimestampSeconds: 4080,
+        eventType: 'opponent_goal',
+        teamSide: 'opponent',
+        playerId: null,
+        playerName: opponentName,
+        relatedPlayerId: null,
+        relatedPlayerName: '',
+        description: 'Gol del equipo rival en transición ofensiva rápida.',
+        selected: true
+      },
+      {
+        minute: 82,
+        videoTimestampSeconds: 4920,
+        eventType: 'goal',
+        teamSide: 'our_team',
+        playerId: p1 ? p1.id : null,
+        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Nuestra jugadora',
+        relatedPlayerId: p3 ? p3.id : null,
+        relatedPlayerName: p3 ? `${p3.firstName} ${p3.lastName}` : '',
+        description: 'Gol decisivo en los minutos finales tras disparo ajustado.',
+        selected: true
+      }
+    ];
+
+    setGeneratedEvents(fallbackList);
   };
 
   const toggleEventSelected = (index: number) => {
@@ -332,7 +424,15 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               </button>
             </div>
 
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleGenerateFallbackTemplate}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100"
+              >
+                📋 Cargar Plantilla Base de Eventos
+              </button>
+
               <button
                 type="button"
                 onClick={handleGenerate}

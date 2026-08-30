@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +24,8 @@ async function startServer() {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         return res.status(500).json({
-          error: 'GEMINI_API_KEY is not configured on the server. Please ensure the API key is set.'
+          success: false,
+          error: 'GEMINI_API_KEY is not configured on the server. Please ensure the API key is set in Settings > Secrets.'
         });
       }
 
@@ -39,7 +40,7 @@ async function startServer() {
         }
       });
 
-      const squadList = Array.isArray(matchContext?.squad)
+      const squadList = Array.isArray(matchContext?.squad) && matchContext.squad.length > 0
         ? matchContext.squad.map((p: any) => `- ID: "${p.id}", Name: "${p.name}", #${p.shirtNumber ?? '?'}, Pos: "${p.position || 'UTIL'}"`).join('\n')
         : 'No squad roster provided.';
 
@@ -80,73 +81,109 @@ RULES:
 - Provide an insightful description for each event in Spanish (e.g., "Córner cerrado al primer palo rematado de cabeza", "Gol en transición rápida tras recuperación", "Gol rival en contraataque").
 `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
-        contents: prompt,
-        config: {
-          systemInstruction: 'You are a professional tactical match analyst for an elite football academy. Generate accurate, clean structured JSON match event timelines.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              summary: {
-                type: Type.STRING,
-                description: 'Tactical summary of the match and generated events in Spanish.'
-              },
-              events: {
-                type: Type.ARRAY,
-                description: 'List of chronological match events.',
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    minute: {
-                      type: Type.INTEGER,
-                      description: 'Minute of the match (0 to 120).'
-                    },
-                    videoTimestampSeconds: {
-                      type: Type.INTEGER,
-                      description: 'Timestamp in the video in seconds.'
-                    },
-                    eventType: {
-                      type: Type.STRING,
-                      description: 'Type of event: goal, opponent_goal, corner, opponent_corner, assist, yellow_card, red_card, substitution_in, substitution_out, injury, other.'
-                    },
-                    teamSide: {
-                      type: Type.STRING,
-                      description: 'our_team or opponent'
-                    },
-                    playerId: {
-                      type: Type.STRING,
-                      description: 'Matching squad player ID if for our team, otherwise null.'
-                    },
-                    playerName: {
-                      type: Type.STRING,
-                      description: 'Name of the player involved.'
-                    },
-                    relatedPlayerId: {
-                      type: Type.STRING,
-                      description: 'Related squad player ID (e.g. assister or subbed out player).'
-                    },
-                    relatedPlayerName: {
-                      type: Type.STRING,
-                      description: 'Name of related player.'
-                    },
-                    description: {
-                      type: Type.STRING,
-                      description: 'Short tactical description of the action in Spanish.'
-                    }
-                  },
-                  required: ['minute', 'videoTimestampSeconds', 'eventType', 'teamSide', 'description']
-                }
-              }
-            },
-            required: ['summary', 'events']
-          }
-        }
-      });
+      const candidateModels = [
+        'gemini-3.7-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest'
+      ];
 
-      const responseText = response.text || '{}';
-      const parsedData = JSON.parse(responseText);
+      let lastError: Error | null = null;
+      let responseText = '';
+
+      for (const model of candidateModels) {
+        try {
+          const config: any = {
+            systemInstruction: 'You are a professional tactical match analyst for an elite football academy. Generate accurate, clean structured JSON match event timelines.',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                summary: {
+                  type: Type.STRING,
+                  description: 'Tactical summary of the match and generated events in Spanish.'
+                },
+                events: {
+                  type: Type.ARRAY,
+                  description: 'List of chronological match events.',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      minute: {
+                        type: Type.INTEGER,
+                        description: 'Minute of the match (0 to 120).'
+                      },
+                      videoTimestampSeconds: {
+                        type: Type.INTEGER,
+                        description: 'Timestamp in the video in seconds.'
+                      },
+                      eventType: {
+                        type: Type.STRING,
+                        description: 'Type of event: goal, opponent_goal, corner, opponent_corner, assist, yellow_card, red_card, substitution_in, substitution_out, injury, other.'
+                      },
+                      teamSide: {
+                        type: Type.STRING,
+                        description: 'our_team or opponent'
+                      },
+                      playerId: {
+                        type: Type.STRING,
+                        description: 'Matching squad player ID if for our team, otherwise null.'
+                      },
+                      playerName: {
+                        type: Type.STRING,
+                        description: 'Name of the player involved.'
+                      },
+                      relatedPlayerId: {
+                        type: Type.STRING,
+                        description: 'Related squad player ID (e.g. assister or subbed out player).'
+                      },
+                      relatedPlayerName: {
+                        type: Type.STRING,
+                        description: 'Name of related player.'
+                      },
+                      description: {
+                        type: Type.STRING,
+                        description: 'Short tactical description of the action in Spanish.'
+                      }
+                    },
+                    required: ['minute', 'videoTimestampSeconds', 'eventType', 'teamSide', 'description']
+                  }
+                }
+              },
+              required: ['summary', 'events']
+            }
+          };
+
+          if (model.startsWith('gemini-3')) {
+            config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+          }
+
+          const response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+            config
+          });
+
+          if (response?.text) {
+            responseText = response.text;
+            break; // Success!
+          }
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`[API /api/match/generate-events] Model ${model} failed, trying next fallback:`, err?.message || err);
+        }
+      }
+
+      if (!responseText) {
+        throw lastError || new Error('No se pudo obtener respuesta del modelo de IA.');
+      }
+
+      let parsedData: any = {};
+      try {
+        parsedData = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.error('[API /api/match/generate-events] JSON parse error on responseText:', responseText);
+        throw new Error('Formato de respuesta no válido recibido del modelo.');
+      }
 
       return res.json({
         success: true,
@@ -155,8 +192,18 @@ RULES:
       });
     } catch (error: any) {
       console.error('[API /api/match/generate-events] Error generating match events:', error);
+      let errorMsg = error?.message || 'Error occurred while generating events with AI.';
+      try {
+        // If error message is a stringified JSON with error object, parse it
+        const parsed = JSON.parse(errorMsg);
+        if (parsed?.error?.message) {
+          errorMsg = parsed.error.message;
+        }
+      } catch {}
+
       return res.status(500).json({
-        error: error?.message || 'Error occurred while generating events with AI.'
+        success: false,
+        error: errorMsg
       });
     }
   });
