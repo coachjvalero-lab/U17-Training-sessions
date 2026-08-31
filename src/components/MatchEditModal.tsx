@@ -12,7 +12,7 @@ import {
   Video,
   Check
 } from 'lucide-react';
-import type { Match } from '../services/matches/types';
+import type { Match } from '../types';
 import { updateMatch, createMatch } from '../services/matches/matchService';
 
 interface MatchEditModalProps {

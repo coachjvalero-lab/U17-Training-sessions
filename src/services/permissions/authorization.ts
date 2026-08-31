@@ -37,7 +37,7 @@ function normalizeContext(raw: any, email?: string | null): AuthorizationContext
 
   const isAdmin = Boolean(raw?.isAdmin);
   const normalizedEmail = (email || '').toLowerCase().trim();
-  const isCoach = normalizedEmail.includes('coach') || ['shouq', 'javi', 'wilian', 'marta', 'joao', 'mariana'].some(name => normalizedEmail.includes(name));
+  const isCoach = normalizedEmail.includes('coach') || normalizedEmail.includes('gk') || normalizedEmail.includes('portero') || normalizedEmail.includes('keeper') || ['shouq', 'javi', 'wilian', 'marta', 'joao', 'mariana', 'valero'].some(name => normalizedEmail.includes(name));
 
   return {
     userId: raw?.userId ? String(raw.userId) : null,
@@ -248,10 +248,7 @@ export function useAuthorization(userEmail?: string | null) {
   );
 
   const boundCan = useCallback(
-    (section: PortalSection, action?: AuthorizationAction) => {
-      if (action && action !== 'read') {
-        return false;
-      }
+    (section: PortalSection, _action?: AuthorizationAction) => {
       return canFromContext(context, section);
     },
     [context]

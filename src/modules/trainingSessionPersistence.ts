@@ -39,31 +39,31 @@ function toFitnessSessionRecord(session: TrainingSession): FitnessSession {
 }
 
 function toGkSessionRecord(session: TrainingSession): GkSession {
-  const normalizedSessionUid = (session.id || '').trim();
+  let normalizedSessionUid = (session.id || '').trim();
   if (!normalizedSessionUid || normalizedSessionUid.startsWith('empty-session-')) {
-    throw new Error('Goalkeeper persistence requires a valid session UID.');
+    normalizedSessionUid = `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   }
 
   const now = Date.now();
   const recordId = normalizedSessionUid.startsWith('gk-') ? normalizedSessionUid : `gk-${normalizedSessionUid}`;
   
-  const gkWarmUp = session.gkWarmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] };
-  const gkMainPart = session.gkMainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] };
-  const gkCoolDown = session.gkCoolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] };
-  const gkPlayerGroups = session.gkPlayerGroups || [];
+  const gkWarmUp = session.gkWarmUp || session.warmUp || { id: 'warmup-block-gk', title: 'Warm Up', exercises: [] };
+  const gkMainPart = session.gkMainPart || session.mainPart || { id: 'main-block-gk', title: 'Main Part', exercises: [] };
+  const gkCoolDown = session.gkCoolDown || session.coolDown || { id: 'cooldown-block-gk', title: 'Cool Down', exercises: [] };
+  const gkPlayerGroups = session.gkPlayerGroups || session.playerGroups || [];
 
   return {
     id: recordId,
     sessionUid: normalizedSessionUid,
     legacySessionId: normalizedSessionUid,
-    teamName: session.teamName,
-    date: session.date,
-    time: session.time,
-    sessionNumber: session.sessionNumber,
-    microcycleDay: session.microcycleDay,
-    mainObjective: session.mainObjective,
-    materialsNeeded: session.materialsNeeded,
-    observations: session.observations,
+    teamName: session.teamName || 'U17 Women Al Ula',
+    date: session.date || new Date().toISOString().split('T')[0],
+    time: session.time || '18:30 - 20:00',
+    sessionNumber: session.sessionNumber || '1',
+    microcycleDay: session.microcycleDay || 'MD-3',
+    mainObjective: session.mainObjective || '',
+    materialsNeeded: session.materialsNeeded || '',
+    observations: session.observations || '',
     squadRoster: session.squadRoster || [],
     attendance: session.attendance || [],
     gkWarmUp,

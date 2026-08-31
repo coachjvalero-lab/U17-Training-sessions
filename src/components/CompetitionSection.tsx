@@ -115,10 +115,6 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     })();
   }, [selectedTeamId, activeTab, matches]);
 
-  // Match Edit / Add State
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
-
   // Score Modal State
   const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
   const [ourScore, setOurScore] = useState<number>(0);
@@ -392,6 +388,16 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             isLoadingMatches={isLoadingMatches}
             matchLoadError={matchLoadError}
             currentLogo={currentLogo}
+            onMatchUpdated={(updated) => {
+              setMatches((prev) => {
+                const exists = prev.some((m) => m.id === updated.id);
+                if (exists) return prev.map((m) => (m.id === updated.id ? updated : m));
+                return [updated, ...prev];
+              });
+            }}
+            onMatchDeleted={(deletedId) => {
+              setMatches((prev) => prev.filter((m) => m.id !== deletedId));
+            }}
           />
         </div>
       )}
@@ -632,7 +638,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         match={editingMatch}
-        teamName={teamName}
+        teamName="AlUla FC"
         currentTeamId={selectedTeamId || undefined}
         onSave={handleMatchSaved}
         onDelete={handleDeleteMatch}

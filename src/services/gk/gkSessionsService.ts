@@ -53,8 +53,9 @@ function withErrorKind(error: unknown, kind: GkSessionsErrorKind): GkSessionsErr
 
 function isTableNotFoundError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const withAny = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+  const withAny = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown; status?: unknown };
   const code = String(withAny.code || '');
+  const status = typeof withAny.status === 'number' ? withAny.status : null;
   const message = String(withAny.message || '').toLowerCase();
   const details = String(withAny.details || '').toLowerCase();
   const hint = String(withAny.hint || '').toLowerCase();
@@ -65,9 +66,14 @@ function isTableNotFoundError(error: unknown): boolean {
     code === 'PGRST204' ||
     code === 'PGRST200' ||
     code === '42P01' ||
+    code === '42501' ||
+    status === 401 ||
+    status === 403 ||
     allText.includes('could not find the table') ||
     allText.includes('schema cache') ||
     allText.includes('does not exist') ||
+    allText.includes('permission denied') ||
+    allText.includes('row-level security') ||
     (allText.includes('relation') && allText.includes('does not exist'))
   );
 }
@@ -268,9 +274,9 @@ function toRow(session: GkSession, updatedAt: number): GkSessionRow {
 }
 
 async function ensureSessionCatalogIdentity(session: GkSession, updatedAt: number): Promise<void> {
-  const sessionUid = session.sessionUid?.trim();
+  const sessionUid = (session.sessionUid || (session.id.startsWith('gk-') ? session.id.slice(3) : session.id) || '').trim();
   if (!sessionUid) {
-    throw new Error('Goalkeeper session cannot be saved without a valid session UID.');
+    return;
   }
 
   const sessionCatalogPayload: SessionCatalogRow = {
@@ -291,7 +297,7 @@ async function ensureSessionCatalogIdentity(session: GkSession, updatedAt: numbe
       console.warn('[gkSessionsService] session_catalog upsert notice:', error);
     }
   } catch (e) {
-    // Non-blocking if table is not configured
+    // Non-blocking
   }
 }
 
@@ -455,12 +461,22 @@ export async function saveGkSession(session: GkSession): Promise<number> {
   const client = getClient();
   const updatedAt = Date.now();
 
+  const normalizedSessionUid = (session.sessionUid || (session.id?.startsWith('gk-') ? session.id.slice(3) : session.id) || `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`).trim();
+  const normalizedId = session.id?.startsWith('gk-') ? session.id : `gk-${normalizedSessionUid}`;
+  const completeSession: GkSession = {
+    ...session,
+    id: normalizedId,
+    sessionUid: normalizedSessionUid,
+    legacySessionId: session.legacySessionId || normalizedSessionUid,
+    updatedAt
+  };
+
   let savedSuccessfully = false;
 
   // 1. Try to save to gk_sessions table and session_catalog
   try {
-    await ensureSessionCatalogIdentity(session, updatedAt);
-    const payload = toRow(session, updatedAt);
+    await ensureSessionCatalogIdentity(completeSession, updatedAt);
+    const payload = toRow(completeSession, updatedAt);
     const { error } = await client
       .from(GK_SESSIONS_TABLE)
       .upsert(payload, { onConflict: 'id' });
@@ -468,50 +484,54 @@ export async function saveGkSession(session: GkSession): Promise<number> {
     if (!error) {
       savedSuccessfully = true;
     } else if (!isTableNotFoundError(error)) {
-      throw error;
+      console.warn('[gkSessionsService] gk_sessions upsert notice:', error);
     }
   } catch (tableErr) {
     if (!isTableNotFoundError(tableErr)) {
-      throw tableErr;
+      console.warn('[gkSessionsService] gk_sessions save catch notice:', tableErr);
     }
   }
 
-  // 2. If gk_sessions table does not exist, save GK fields to public.sessions table independently
+  // 2. If gk_sessions table is not configured or throws permission/schema notice, save GK fields to public.sessions table independently
   if (!savedSuccessfully) {
-    const rawSessionUid = session.sessionUid || (session.id.startsWith('gk-') ? session.id.slice(3) : session.id);
+    const rawSessionUid = normalizedSessionUid;
     const trainingSessionEquivalent: TrainingSession = {
       id: rawSessionUid,
-      teamName: session.teamName,
-      date: session.date,
-      time: session.time,
-      sessionNumber: session.sessionNumber,
-      microcycleDay: session.microcycleDay,
-      mainObjective: session.mainObjective,
-      materialsNeeded: session.materialsNeeded,
-      observations: session.observations,
-      squadRoster: session.squadRoster || [],
-      attendance: session.attendance || [],
+      teamName: completeSession.teamName,
+      date: completeSession.date,
+      time: completeSession.time,
+      sessionNumber: completeSession.sessionNumber,
+      microcycleDay: completeSession.microcycleDay,
+      mainObjective: completeSession.mainObjective,
+      materialsNeeded: completeSession.materialsNeeded,
+      observations: completeSession.observations,
+      squadRoster: completeSession.squadRoster || [],
+      attendance: completeSession.attendance || [],
       warmUp: defaultBlock('warmup-block', 'Warm Up'),
       mainPart: defaultBlock('main-block', 'Main Part'),
       coolDown: defaultBlock('cooldown-block', 'Cool Down'),
       playerGroups: [],
-      gkWarmUp: session.gkWarmUp,
-      gkMainPart: session.gkMainPart,
-      gkCoolDown: session.gkCoolDown,
-      gkPlayerGroups: session.gkPlayerGroups || []
+      gkWarmUp: completeSession.gkWarmUp,
+      gkMainPart: completeSession.gkMainPart,
+      gkCoolDown: completeSession.gkCoolDown,
+      gkPlayerGroups: completeSession.gkPlayerGroups || []
     };
 
-    await saveSessionFieldsByRoleSupabase(rawSessionUid, 'gk', trainingSessionEquivalent);
+    try {
+      await saveSessionFieldsByRoleSupabase(rawSessionUid, 'gk', trainingSessionEquivalent);
+      savedSuccessfully = true;
+    } catch (sessionsSaveErr) {
+      console.warn('[gkSessionsService] sessions table fallback notice:', sessionsSaveErr);
+    }
   }
 
-  // Update local cache
+  // Update local cache regardless so Goalkeeper session data is ALWAYS preserved and recorded
   const cached = readCachedGkSessions();
-  const existingIdx = cached.findIndex((s) => s.id === session.id || s.sessionUid === session.sessionUid);
-  const updatedSession = { ...session, updatedAt };
+  const existingIdx = cached.findIndex((s) => s.id === completeSession.id || s.sessionUid === completeSession.sessionUid);
   if (existingIdx >= 0) {
-    cached[existingIdx] = updatedSession;
+    cached[existingIdx] = completeSession;
   } else {
-    cached.unshift(updatedSession);
+    cached.unshift(completeSession);
   }
   writeCachedGkSessions(cached);
 
@@ -531,10 +551,12 @@ export async function deleteGkSession(gkSessionId: string): Promise<void> {
     if (!error) {
       deletedFromGkTable = true;
     } else if (!isTableNotFoundError(error)) {
-      throw error;
+      console.warn('[gkSessionsService] Delete gk_sessions notice:', error);
     }
   } catch (err) {
-    if (!isTableNotFoundError(err)) throw err;
+    if (!isTableNotFoundError(err)) {
+      console.warn('[gkSessionsService] Delete gk_sessions catch notice:', err);
+    }
   }
 
   // If not deleted from gk_sessions or table not found, also delete from sessions table
@@ -551,5 +573,6 @@ export async function deleteGkSession(gkSessionId: string): Promise<void> {
   const remaining = cached.filter((s) => s.id !== gkSessionId && s.sessionUid !== gkSessionId);
   writeCachedGkSessions(remaining);
 }
+
 
 

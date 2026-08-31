@@ -61,6 +61,18 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
+    // Dedicated Goalkeeper sessions
+    // ------------------------------------------------------------------
+    match /gk_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('gk');
+    }
+    match /gkSessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow write: if hasSection('gk');
+    }
+
+    // ------------------------------------------------------------------
     // Football session-card templates / gallery items
     // ------------------------------------------------------------------
     match /sessionCards/{cardId} {

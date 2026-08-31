@@ -85,18 +85,26 @@ function toGkSession(recordId: string, session: TrainingSession, previous?: GkSe
   const gkCoolDown = session.gkCoolDown || session.coolDown || defaultGkBlock('cooldown-block-gk', 'Cool Down');
   const gkPlayerGroups = session.gkPlayerGroups || session.playerGroups || [];
 
+  const validSessionUid = (session.id && !session.id.startsWith('empty-session-')) 
+    ? session.id 
+    : (previous?.sessionUid || `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+
+  const validRecordId = (recordId && !recordId.startsWith('empty-session-'))
+    ? (recordId.startsWith('gk-') ? recordId : `gk-${recordId}`)
+    : `gk-${validSessionUid}`;
+
   return {
-    id: recordId,
-    sessionUid: session.id,
-    legacySessionId: previous?.legacySessionId || session.id,
-    teamName: session.teamName,
-    date: session.date,
-    time: session.time,
-    sessionNumber: session.sessionNumber,
-    microcycleDay: session.microcycleDay,
-    mainObjective: session.mainObjective,
-    materialsNeeded: session.materialsNeeded,
-    observations: session.observations,
+    id: validRecordId,
+    sessionUid: validSessionUid,
+    legacySessionId: previous?.legacySessionId || validSessionUid,
+    teamName: session.teamName || 'U17 Women Al Ula',
+    date: session.date || new Date().toISOString().split('T')[0],
+    time: session.time || '18:30 - 20:00',
+    sessionNumber: session.sessionNumber || '1',
+    microcycleDay: session.microcycleDay || 'MD-3',
+    mainObjective: session.mainObjective || '',
+    materialsNeeded: session.materialsNeeded || '',
+    observations: session.observations || '',
     squadRoster: session.squadRoster || [],
     attendance: session.attendance || [],
     gkWarmUp,
@@ -365,23 +373,17 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
   };
 
   const handleSave = async () => {
-    if (!selectedGk && !editorSession.id) {
-      setSaveValidationError('Open or create a Goalkeeper session before saving.');
-      return;
-    }
-
-    if (!selectedGk && editorSession.id.startsWith('empty-session-')) {
-      setSaveValidationError('Cannot save draft placeholder session. Create a New Goalkeeper Session first.');
-      return;
-    }
-
     try {
       setSaveValidationError(null);
       setIsSaving(true);
-      const recordId = selectedGk?.id || (editorSession.id.startsWith('gk-') ? editorSession.id : `gk-${editorSession.id}`);
+      const rawId = selectedGk?.id || editorSession.id;
+      const recordId = (rawId && !rawId.startsWith('empty-session-')) 
+        ? (rawId.startsWith('gk-') ? rawId : `gk-${rawId}`) 
+        : `gk-session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const payload = toGkSession(recordId, editorSession, selectedGk || undefined);
       await saveGkSession(payload);
       setSelectedGkId(payload.id);
+      setEditorSession(toTrainingSession(payload));
     } catch (error) {
       const err = error as { message?: unknown };
       const message = typeof err?.message === 'string' ? err.message : 'Goalkeeper session save failed.';
