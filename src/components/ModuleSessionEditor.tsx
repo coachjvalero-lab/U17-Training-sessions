@@ -101,7 +101,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   const updateRoster = isSharedDataReadOnly ? (() => {}) : onUpdateRoster;
 
   return (
-    <main className="space-y-6 md:space-y-8 print:space-y-1.5">
+    <main className="session-print-flow space-y-6 md:space-y-8 print:space-y-1.5">
       <HeaderSection
         session={sessionWithSharedHeader}
         onChange={updateHeaderFields}

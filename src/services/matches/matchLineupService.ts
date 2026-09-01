@@ -29,6 +29,8 @@ interface LineupNotesPayload {
   notes?: string | null;
 }
 
+export type ExistingMatchLineupEntryUpdate = Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'id' | 'matchId' | 'playerId'>;
+
 export function parseLineupNotes(rawNotes: string | null): { pitchX: number | null; pitchY: number | null; notes: string | null } {
   if (!rawNotes) return { pitchX: null, pitchY: null, notes: null };
   const trimmed = rawNotes.trim();
@@ -142,6 +144,40 @@ export async function batchUpsertMatchLineupEntries(entries: Array<Partial<Match
 
   if (error) throw error;
   return ((data || []) as MatchLineupRow[]).map(fromRow);
+}
+
+function toUpdatePayload(entry: ExistingMatchLineupEntryUpdate): Record<string, unknown> {
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if (entry.position !== undefined) payload.position = entry.position;
+  if (entry.starter !== undefined) payload.starter = entry.starter;
+  if (entry.shirtNumber !== undefined) payload.shirt_number = entry.shirtNumber;
+  if (entry.captain !== undefined) payload.captain = entry.captain;
+  if (entry.minuteSubbedIn !== undefined) payload.minute_subbed_in = entry.minuteSubbedIn;
+  if (entry.minuteSubbedOut !== undefined) payload.minute_subbed_out = entry.minuteSubbedOut;
+  if ('pitchX' in entry || 'pitchY' in entry || 'notes' in entry) {
+    payload.notes = serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes);
+  }
+
+  return payload;
+}
+
+export async function updateMatchLineupEntry(entry: ExistingMatchLineupEntryUpdate): Promise<MatchLineupEntry> {
+  const { data, error } = await getClient()
+    .from(MATCH_LINEUP_TABLE)
+    .update(toUpdatePayload(entry))
+    .eq('id', entry.id)
+    .eq('match_id', entry.matchId)
+    .eq('player_id', entry.playerId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return fromRow(data as MatchLineupRow);
+}
+
+export async function batchUpdateMatchLineupEntries(entries: ExistingMatchLineupEntryUpdate[]): Promise<MatchLineupEntry[]> {
+  return Promise.all(entries.map(updateMatchLineupEntry));
 }
 
 export async function removeMatchLineupEntry(entryId: string): Promise<void> {

@@ -1909,7 +1909,7 @@ export default function App() {
             onUpdateLogo={handleUpdateTeamLogo}
           />
         ) : (
-          <main className="space-y-6 md:space-y-8 print:space-y-1.5">
+          <main className="session-print-flow space-y-6 md:space-y-8 print:space-y-1.5">
             
             {/* Header Section */}
             <HeaderSection 

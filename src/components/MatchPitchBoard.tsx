@@ -5,21 +5,14 @@ import {
   X, 
   Edit3, 
   ArrowRightLeft, 
-  Shield, 
-  Check, 
-  Search, 
   RotateCcw, 
   Move,
   ChevronDown,
-  UserCheck,
-  UserX,
-  Sparkles,
-  Zap,
-  Layers,
-  HelpCircle
+  Sparkles
 } from 'lucide-react';
 import { MatchLineupEntry } from '../types';
 import { CloudSquadPlayer } from '../services/squad/squadService';
+import type { ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
 import { PlayerPitchAvatar } from './PlayerPitchAvatar';
 import { 
   FormationType, 
@@ -35,11 +28,9 @@ import {
 interface MatchPitchBoardProps {
   matchId: string;
   lineupEntries: MatchLineupEntry[];
-  squadPlayers: CloudSquadPlayer[];
-  onUpdateLineupEntry: (entry: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>) => Promise<void>;
-  onBatchUpdateLineupEntries: (entries: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>>) => Promise<void>;
-  onRemoveLineupEntry: (entryId: string) => Promise<void>;
-  onAddPlayerToMatch: (player: CloudSquadPlayer, asStarter: boolean, slot?: FormationSlot) => Promise<void>;
+  calledUpPlayers: CloudSquadPlayer[];
+  onUpdateLineupEntry: (entry: ExistingMatchLineupEntryUpdate) => Promise<void>;
+  onBatchUpdateLineupEntries: (entries: ExistingMatchLineupEntryUpdate[]) => Promise<void>;
   onOpenEditModal: (entry: MatchLineupEntry) => void;
   saveStatus?: { state: 'idle' | 'saving' | 'saved' | 'error'; message?: string };
 }
@@ -47,11 +38,9 @@ interface MatchPitchBoardProps {
 export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   matchId,
   lineupEntries,
-  squadPlayers,
+  calledUpPlayers,
   onUpdateLineupEntry,
   onBatchUpdateLineupEntries,
-  onRemoveLineupEntry,
-  onAddPlayerToMatch,
   onOpenEditModal,
   saveStatus
 }) => {
@@ -68,9 +57,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   });
   const [activeSlotModal, setActiveSlotModal] = useState<FormationSlot | null>(null);
   const [activeTokenMenuId, setActiveTokenMenuId] = useState<string | null>(null);
-  const [squadSearchQuery, setSquadSearchQuery] = useState('');
-  const [squadFilterTab, setSquadFilterTab] = useState<'all' | 'unselected' | 'bench'>('all');
-  const [positionFilter, setPositionFilter] = useState<'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD'>('ALL');
 
   // Dragging state for pointer drag
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -97,17 +83,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     }
   }, [matchId, starters]);
 
-  // Map of lineup entries by playerId
-  const lineupPlayerIds = useMemo(() => new Set(lineupEntries.map((e) => e.playerId)), [lineupEntries]);
-
-  // Unselected squad players (not in matchday squad)
-  const unselectedPlayers = useMemo(() => {
-    return squadPlayers.filter((p) => !lineupPlayerIds.has(p.id));
-  }, [squadPlayers, lineupPlayerIds]);
-
   const getPlayer = useCallback((playerId: string) => {
-    return squadPlayers.find((p) => p.id === playerId);
-  }, [squadPlayers]);
+    return calledUpPlayers.find((p) => p.id === playerId);
+  }, [calledUpPlayers]);
 
   const getPlayerName = useCallback((playerId: string) => {
     const p = getPlayer(playerId);
@@ -182,7 +160,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     if (!targetConfig || starters.length === 0) return;
 
     const availableSlots = [...targetConfig.slots];
-    const updates: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>> = [];
+    const updates: ExistingMatchLineupEntryUpdate[] = [];
     const startersToAssign = [...starters];
 
     // 1. Assign GK first
@@ -354,23 +332,12 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     await onBatchUpdateLineupEntries(updates);
   };
 
-  // Quick fill remaining formation slots with best available bench/squad players
+  // Quick fill remaining formation slots with called-up substitutes only
   const handleAutoFillFormation = async () => {
     if (unassignedSlots.length === 0) return;
-    const availablePool = [...substitutes, ...unselectedPlayers.map((p) => ({
-      id: undefined,
-      matchId,
-      playerId: p.id,
-      position: p.position || 'UTIL',
-      starter: false,
-      shirtNumber: p.number ? Number(p.number) : null,
-      captain: false,
-      pitchX: null,
-      pitchY: null,
-      notes: null
-    }))];
+    const availablePool = [...substitutes];
 
-    const updates: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>> = [];
+    const updates: ExistingMatchLineupEntryUpdate[] = [];
 
     for (const slot of unassignedSlots) {
       if (availablePool.length === 0) break;
@@ -404,17 +371,37 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     }
   };
 
-  // Remove player from match lineup completely (moves back to unselected pool)
-  const handleRemoveFromLineup = async (entryId: string) => {
-    setActiveTokenMenuId(null);
-    await onRemoveLineupEntry(entryId);
+  const handleSubstituteDragStart = (event: React.DragEvent, entry: MatchLineupEntry) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-match-lineup-entry', entry.id);
   };
 
-  // Add an unselected squad player directly to starting XI or bench
-  const handleAddSquadPlayer = async (player: CloudSquadPlayer, asStarter: boolean, slot?: FormationSlot) => {
-    setActiveSlotModal(null);
-    const targetSlot = slot || (asStarter ? unassignedSlots[0] : undefined);
-    await onAddPlayerToMatch(player, asStarter, targetSlot);
+  const handleSubstituteDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    const entryId = event.dataTransfer.getData('application/x-match-lineup-entry');
+    const entry = substitutes.find((substitute) => substitute.id === entryId);
+    const pitch = pitchRef.current;
+    if (!entry || !pitch) return;
+
+    const rect = pitch.getBoundingClientRect();
+    const pitchX = Math.round(Math.min(94, Math.max(6, ((event.clientX - rect.left) / rect.width) * 100)) * 10) / 10;
+    const pitchY = Math.round(Math.min(94, Math.max(6, ((event.clientY - rect.top) / rect.height) * 100)) * 10) / 10;
+    const nearestSlot = formationSlots.reduce((nearest, slot) => (
+      pitchDistance(pitchX, pitchY, slot.x, slot.y) < pitchDistance(pitchX, pitchY, nearest.x, nearest.y) ? slot : nearest
+    ));
+
+    await onUpdateLineupEntry({
+      id: entry.id,
+      matchId,
+      playerId: entry.playerId,
+      starter: true,
+      position: nearestSlot.position,
+      pitchX,
+      pitchY,
+      shirtNumber: entry.shirtNumber,
+      captain: entry.captain,
+      notes: entry.notes
+    });
   };
 
   // Pointer drag logic for pitch tokens
@@ -562,30 +549,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Filter squad players for sidebar / list
-  const filteredSquadList = useMemo(() => {
-    let list = squadPlayers;
-    if (squadFilterTab === 'unselected') {
-      list = unselectedPlayers;
-    } else if (squadFilterTab === 'bench') {
-      const benchPlayerIds = new Set(substitutes.map((s) => s.playerId));
-      list = squadPlayers.filter((p) => benchPlayerIds.has(p.id));
-    }
-
-    if (positionFilter !== 'ALL') {
-      list = list.filter((p) => getPositionCategory(p.position) === positionFilter);
-    }
-
-    if (!squadSearchQuery.trim()) return list;
-    const q = squadSearchQuery.toLowerCase();
-    return list.filter((p) => 
-      p.firstName.toLowerCase().includes(q) ||
-      p.lastName.toLowerCase().includes(q) ||
-      (p.position && p.position.toLowerCase().includes(q)) ||
-      (p.number !== undefined && String(p.number).includes(q))
-    );
-  }, [squadPlayers, squadFilterTab, positionFilter, unselectedPlayers, substitutes, squadSearchQuery]);
-
   return (
     <div className="space-y-6">
       {/* Header & Predefined Formations Bar */}
@@ -645,7 +608,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                 <span>Auto-alinear</span>
               </button>
 
-              {unassignedSlots.length > 0 && substitutes.length + unselectedPlayers.length > 0 && (
+              {unassignedSlots.length > 0 && substitutes.length > 0 && (
                 <button
                   type="button"
                   onClick={handleAutoFillFormation}
@@ -695,6 +658,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             ref={pitchRef}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => void handleSubstituteDrop(event)}
             className="relative select-none aspect-[3/4] sm:aspect-[4/5] min-h-[580px] w-full overflow-hidden rounded-3xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 p-4 shadow-2xl touch-none"
             style={{
               backgroundImage: `
@@ -875,14 +840,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                           <Edit3 className="h-3.5 w-3.5 text-sky-600" />
                           <span>Edit Details / Shirt #</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFromLineup(entry.id)}
-                          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 text-left transition-colors cursor-pointer"
-                        >
-                          <UserX className="h-3.5 w-3.5 text-rose-600" />
-                          <span>Remove from Call-Up</span>
-                        </button>
                       </div>
                     </div>
                   )}
@@ -935,7 +892,12 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                 {substitutes.map((entry) => {
                   const player = getPlayer(entry.playerId);
                   return (
-                    <div key={entry.id} className="flex items-center justify-between py-2.5 group">
+                    <div
+                      key={entry.id}
+                      draggable
+                      onDragStart={(event) => handleSubstituteDragStart(event, entry)}
+                      className="flex cursor-grab items-center justify-between py-2.5 group active:cursor-grabbing"
+                    >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <PlayerPitchAvatar
                           photoUrl={player?.photoUrl}
@@ -972,14 +934,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         >
                           <Edit3 className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFromLineup(entry.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50 cursor-pointer"
-                          title="Descartar del partido"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
                       </div>
                     </div>
                   );
@@ -988,156 +942,58 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             )}
           </div>
 
-          {/* Full Squad Call-Up & Selection Roster */}
+          {/* Called-up starters summary */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
-                    Full Squad Roster
-                  </span>
-                  <h4 className="text-sm font-black text-[#002142] font-display">
-                    Squad Call-Up & Bench
-                  </h4>
-                </div>
-                <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setSquadFilterTab('all')}
-                    className={`rounded-lg px-2 py-0.5 transition-all cursor-pointer ${
-                      squadFilterTab === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    All ({squadPlayers.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSquadFilterTab('unselected')}
-                    className={`rounded-lg px-2 py-0.5 transition-all cursor-pointer ${
-                      squadFilterTab === 'unselected' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    Unassigned ({unselectedPlayers.length})
-                  </button>
-                </div>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
+                  Called Up
+                </span>
+                <h4 className="text-sm font-black text-[#002142] font-display">
+                  Starting XI ({starters.length})
+                </h4>
               </div>
-
-              {/* Position Filter Pills */}
-              <div className="flex items-center gap-1 overflow-x-auto pt-1">
-                {(['ALL', 'GK', 'DEF', 'MID', 'FWD'] as const).map((pos) => (
-                  <button
-                    key={pos}
-                    type="button"
-                    onClick={() => setPositionFilter(pos)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer ${
-                      positionFilter === pos
-                        ? 'bg-[#002142] text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {pos === 'ALL' ? 'All' : pos === 'GK' ? 'Goalkeepers' : pos === 'DEF' ? 'Defenders' : pos === 'MID' ? 'Midfielders' : 'Forwards'}
-                  </button>
-                ))}
-              </div>
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800">
+                {lineupEntries.length} Called Up
+              </span>
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={squadSearchQuery}
-                onChange={(e) => setSquadSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, dorsal, posición..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none"
-              />
-            </div>
-
-            {/* Squad List */}
             <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto pr-1">
-              {filteredSquadList.length === 0 ? (
+              {starters.length === 0 ? (
                 <div className="py-6 text-center text-xs text-slate-400">
-                  No se encontraron jugadoras con este filtro.
+                  No hay titulares en el campo. Arrastra una suplente al campo o usa un hueco de formación.
                 </div>
               ) : (
-                filteredSquadList.map((player) => {
-                  const existingLineup = lineupEntries.find((e) => e.playerId === player.id);
-                  const isStarter = existingLineup?.starter;
-                  const isBench = existingLineup && !existingLineup.starter;
-
+                starters.map((entry) => {
+                  const player = getPlayer(entry.playerId);
                   return (
-                    <div key={player.id} className="flex items-center justify-between py-2.5 group">
+                    <div key={entry.id} className="flex items-center justify-between py-2.5 group">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <PlayerPitchAvatar
-                          photoUrl={player.photoUrl}
-                          shirtNumber={player.number}
+                          photoUrl={player?.photoUrl}
+                          shirtNumber={entry.shirtNumber ?? player?.number}
                           fallbackNumber="–"
                           sizeClassName="h-8 w-8"
                           className="shrink-0 bg-slate-100 text-xs font-black text-slate-700 border border-slate-200"
-                          alt={`${player.firstName} ${player.lastName}`}
+                          alt={getPlayerName(entry.playerId)}
                         />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-slate-900">
-                            {player.firstName} {player.lastName}
+                            {getPlayerName(entry.playerId)}
                           </p>
                           <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
-                            <span>#{player.number ?? '–'}</span>
-                            <span>•</span>
-                            <span>{player.position || 'Jugadora'}</span>
-                            {isStarter && (
-                              <span className="rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-black text-emerald-800">
-                                Titular
-                              </span>
-                            )}
-                            {isBench && (
-                              <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-black text-amber-800">
-                                Banquillo
-                              </span>
-                            )}
+                            <span>#{entry.shirtNumber ?? player?.number ?? '–'}</span>
+                            <span>{entry.position || player?.position || 'UTIL'}</span>
                           </div>
                         </div>
                       </div>
-
-                      {/* Quick Assign Buttons */}
                       <div className="flex items-center gap-1 shrink-0">
-                        {!existingLineup ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleAddSquadPlayer(player, true)}
-                              className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-white shadow-xs transition-colors cursor-pointer"
-                              title="Colocar como titular en la pizarra"
-                            >
-                              + Titular
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddSquadPlayer(player, false)}
-                              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-700 transition-colors cursor-pointer"
-                              title="Añadir al banquillo"
-                            >
-                              + Banquillo
-                            </button>
-                          </>
-                        ) : isStarter ? (
-                          <button
-                            type="button"
-                            onClick={() => handleMoveToBench(existingLineup)}
-                            className="rounded-lg bg-amber-50 hover:bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-800 border border-amber-200 transition-colors cursor-pointer"
-                            title="Pasar al banquillo"
-                          >
-                            Al Banquillo
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleMoveToStarter(existingLineup)}
-                            className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-                            title="Pasar al 11 titular"
-                          >
-                            A Titular
-                          </button>
-                        )}
+                        <button type="button" onClick={() => handleMoveToBench(entry)} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 hover:bg-amber-100">
+                          Al Banquillo
+                        </button>
+                        <button type="button" onClick={() => onOpenEditModal(entry)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Editar detalles">
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -1171,7 +1027,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             </div>
 
             <p className="text-xs text-slate-500 font-medium">
-              Selecciona una jugadora del banquillo o de la plantilla para colocarla exactamente en la posición de {activeSlotModal.position}.
+              Selecciona una jugadora convocada del banquillo para colocarla en {activeSlotModal.position}.
             </p>
 
             {/* List of candidates */}
@@ -1215,47 +1071,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                 </div>
               )}
 
-              {/* Next list unselected players */}
-              {unselectedPlayers.length > 0 && (
-                <div className="pt-2">
-                  <span className="text-[10px] font-black uppercase text-sky-700">Desde Reservas / Plantilla</span>
-                  {unselectedPlayers.map((player) => {
-                    const isCompat = isPositionCompatible(activeSlotModal.position, player.position);
-                    return (
-                      <button
-                        key={player.id}
-                        type="button"
-                        onClick={() => handleAddSquadPlayer(player, true, activeSlotModal)}
-                        className="flex w-full items-center justify-between py-2 text-left hover:bg-slate-50 px-2 rounded-xl cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <PlayerPitchAvatar
-                            photoUrl={player.photoUrl}
-                            shirtNumber={player.number}
-                            fallbackNumber="–"
-                            sizeClassName="h-7 w-7"
-                            className="bg-slate-100 text-xs font-black text-slate-700"
-                            alt={`${player.firstName} ${player.lastName}`}
-                          />
-                          <div>
-                            <span className="text-xs font-bold text-slate-900">{player.firstName} {player.lastName}</span>
-                            <span className="ml-1 text-[10px] text-slate-400">({player.position || 'Jugadora'})</span>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
-                          isCompat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          Poner como {activeSlotModal.position}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {substitutes.length === 0 && unselectedPlayers.length === 0 && (
+              {substitutes.length === 0 && (
                 <p className="py-6 text-center text-xs text-slate-400">
-                  Todas las jugadoras de la plantilla están ya en el 11 titular.
+                  No hay suplentes convocadas disponibles.
                 </p>
               )}
             </div>

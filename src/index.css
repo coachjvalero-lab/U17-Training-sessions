@@ -160,6 +160,41 @@ html.dark textarea::placeholder {
     overflow: visible !important;
   }
 
+  html.dark .bg-slate-100,
+  html.dark .bg-white {
+    background-color: #ffffff !important;
+  }
+
+  html.dark .bg-slate-50,
+  html.dark .bg-slate-50\/70,
+  html.dark .bg-slate-50\/80 {
+    background-color: #f8fafc !important;
+  }
+
+  html.dark .text-slate-900,
+  html.dark .text-slate-800,
+  html.dark .text-slate-700 {
+    color: #0f172a !important;
+  }
+
+  html.dark .text-slate-600,
+  html.dark .text-slate-500,
+  html.dark .text-slate-400 {
+    color: #475569 !important;
+  }
+
+  html.dark .border-slate-100,
+  html.dark .border-slate-200,
+  html.dark .border-slate-300 {
+    border-color: #cbd5e1 !important;
+  }
+
+  html.dark input,
+  html.dark textarea,
+  html.dark select {
+    color: #0f172a !important;
+  }
+
   #root {
     margin: 0 !important;
     padding: 0 !important;
@@ -177,11 +212,6 @@ html.dark textarea::placeholder {
     background-color: #ffffff !important;
   }
 
-  main > * {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-  }
-
   /* Prevent page breaks inside exercise cards, headers, and player groups */
   .print-no-break,
   .print-avoid-break,
@@ -191,11 +221,19 @@ html.dark textarea::placeholder {
   section,
   footer,
   article,
-  main,
   .border-slate-200,
   .rounded-2xl {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+  }
+
+  main,
+  .session-print-flow,
+  .session-print-block {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
   }
 
   .print-avoid-break-after {

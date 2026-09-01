@@ -257,8 +257,11 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 rows={2}
                 readOnly={readOnly}
                 placeholder="Describe the technical, tactical, or physical focus of this training session..."
-                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-[7pt] print:leading-tight print:mt-0.5 print:h-5 print:min-h-0"
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hidden"
               />
+              <div className="hidden print:block print:mt-0.5 print:text-[7pt] print:font-semibold print:leading-tight print:text-slate-800 whitespace-pre-wrap">
+                {session.mainObjective || '—'}
+              </div>
             </div>
           </div>
 
@@ -279,8 +282,11 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                 rows={2}
                 readOnly={readOnly}
                 placeholder="e.g., 20 Cones (10 Yellow), 12 Bibs (6 Green, 6 Blue), 15 Balls, 2 Portable Goals..."
-                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hover:bg-transparent print:p-0 print:border-none print:text-slate-800 print:text-[7pt] print:leading-tight print:mt-0.5 print:h-5 print:min-h-0"
+                className="w-full bg-transparent text-slate-700 font-semibold text-xs md:text-sm focus:outline-none resize-none mt-1.5 hover:bg-slate-50/50 focus:bg-white rounded-lg p-1.5 transition-all border border-transparent focus:border-slate-200/80 print:hidden"
               />
+              <div className="hidden print:block print:mt-0.5 print:text-[7pt] print:font-semibold print:leading-tight print:text-slate-800 whitespace-pre-wrap">
+                {session.materialsNeeded || '—'}
+              </div>
             </div>
           </div>
 

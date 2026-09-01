@@ -35,18 +35,21 @@ interface MatchCallUpSectionProps {
   selectedTeamId?: string | null;
   currentLogo?: string | null;
   onNavigateToTactics?: (matchId: string) => void;
+  onCallupSummaryChange?: (summary: { matchId: string; count: number }) => void;
 }
 
 export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   matches,
   selectedTeamId,
   currentLogo,
-  onNavigateToTactics
+  onNavigateToTactics,
+  onCallupSummaryChange
 }) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
   const [squadPlayers, setSquadPlayers] = useState<CloudSquadPlayer[]>([]);
   const [injuries, setInjuries] = useState<Injury[]>([]);
   const [lineupEntries, setLineupEntries] = useState<MatchLineupEntry[]>([]);
+  const [loadedLineupMatchId, setLoadedLineupMatchId] = useState<string | null>(null);
   const [isLoadingLineup, setIsLoadingLineup] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState<'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD'>('ALL');
@@ -95,15 +98,21 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
 
     let active = true;
     setIsLoadingLineup(true);
+    setLoadedLineupMatchId(null);
+    setLineupEntries([]);
     void (async () => {
       try {
         const entries = await getMatchLineup(selectedMatchId);
         if (active) {
           setLineupEntries(entries);
+          setLoadedLineupMatchId(selectedMatchId);
         }
       } catch (e) {
         console.error('[MatchCallUpSection] Failed loading match lineup:', e);
-        if (active) setLineupEntries([]);
+        if (active) {
+          setLineupEntries([]);
+          setLoadedLineupMatchId(selectedMatchId);
+        }
       } finally {
         if (active) setIsLoadingLineup(false);
       }
@@ -113,6 +122,11 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
       active = false;
     };
   }, [selectedMatchId]);
+
+  useEffect(() => {
+    if (!selectedMatchId || isLoadingLineup || loadedLineupMatchId !== selectedMatchId) return;
+    onCallupSummaryChange?.({ matchId: selectedMatchId, count: lineupEntries.length });
+  }, [isLoadingLineup, lineupEntries.length, loadedLineupMatchId, onCallupSummaryChange, selectedMatchId]);
 
   const currentMatch = useMemo(() => {
     return matches.find((m) => m.id === selectedMatchId) || null;

@@ -553,7 +553,7 @@ export const ExerciseBlock: React.FC<ExerciseBlockProps> = ({
 
   return (
     <>
-      <div className="hidden print:block print-no-break">
+      <div className="session-print-block hidden print:block">
         <div className="border-b border-slate-300 pb-1 mb-2">
           <h2 className="text-[10pt] font-black uppercase tracking-wide text-[#002142]">{block.title}</h2>
         </div>

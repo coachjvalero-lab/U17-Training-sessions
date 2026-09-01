@@ -15,9 +15,8 @@ import {
   createOrUpdateOpponentAnalysis,
   getOpponentAnalysisByOpponentTeamId
 } from '../services/matches/opponentAnalysisService';
-import { getMatchLineup, removeMatchLineupEntry, upsertMatchLineupEntry, batchUpsertMatchLineupEntries } from '../services/matches/matchLineupService';
+import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
 import { MatchPitchBoard } from './MatchPitchBoard';
-import type { FormationSlot } from '../utils/formations';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
 import { derivePlayerMatchStatsFromData, getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
@@ -26,6 +25,7 @@ import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupE
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
+import { selectCalledUpPlayers } from '../utils/matchLineup';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -184,6 +184,11 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [editingLineupEntry, setEditingLineupEntry] = useState<MatchLineupEntry | null>(null);
   const [isLineupFormOpen, setIsLineupFormOpen] = useState(false);
   const [squadPlayers, setSquadPlayers] = useState<CloudSquadPlayer[]>([]);
+
+  const calledUpPlayers = useMemo(
+    () => selectCalledUpPlayers(squadPlayers, lineupEntries),
+    [lineupEntries, squadPlayers]
+  );
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -570,97 +575,72 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     }
   };
 
-  const openLineupForm = (entry?: MatchLineupEntry) => {
-    setEditingLineupEntry(entry ?? null);
+  const openLineupForm = (entry: MatchLineupEntry) => {
+    setEditingLineupEntry(entry);
     setIsLineupFormOpen(true);
     setLineupForm({
-      playerId: entry?.playerId ?? '',
-      position: entry?.position ?? '',
-      starter: entry?.starter ?? true,
-      shirtNumber: entry?.shirtNumber !== null && entry?.shirtNumber !== undefined ? String(entry.shirtNumber) : '',
-      captain: entry?.captain ?? false,
-      minuteSubbedIn: entry?.minuteSubbedIn !== null && entry?.minuteSubbedIn !== undefined ? String(entry.minuteSubbedIn) : '',
-      minuteSubbedOut: entry?.minuteSubbedOut !== null && entry?.minuteSubbedOut !== undefined ? String(entry.minuteSubbedOut) : '',
-      notes: entry?.notes ?? ''
+      playerId: entry.playerId,
+      position: entry.position,
+      starter: entry.starter,
+      shirtNumber: entry.shirtNumber !== null && entry.shirtNumber !== undefined ? String(entry.shirtNumber) : '',
+      captain: entry.captain,
+      minuteSubbedIn: entry.minuteSubbedIn !== null && entry.minuteSubbedIn !== undefined ? String(entry.minuteSubbedIn) : '',
+      minuteSubbedOut: entry.minuteSubbedOut !== null && entry.minuteSubbedOut !== undefined ? String(entry.minuteSubbedOut) : '',
+      notes: entry.notes ?? ''
     });
   };
 
-  const handleUpdateLineupEntry = async (entry: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>) => {
+  const handleUpdateLineupEntry = async (entry: ExistingMatchLineupEntryUpdate) => {
     if (!selectedMatch) return;
+    const previousEntries = lineupEntries;
     try {
       setSaveState('lineup', 'saving');
-      const saved = await upsertMatchLineupEntry(entry);
       setLineupEntries((current) => {
-        const filtered = current.filter((e) => e.playerId !== saved.playerId);
-        return [...filtered, saved].sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+        return current
+          .map((currentEntry) => currentEntry.id === entry.id ? { ...currentEntry, ...entry } : currentEntry)
+          .sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
       });
+      const saved = await updateMatchLineupEntry(entry);
+      setLineupEntries((current) => current.map((currentEntry) => currentEntry.id === saved.id ? saved : currentEntry));
       setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
       setSaveState('lineup', 'saved');
     } catch (error) {
+      setLineupEntries(previousEntries);
       console.error('[MatchCentreSection] Failed updating lineup entry', error);
       setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to update player.');
     }
   };
 
-  const handleBatchUpdateLineupEntries = async (entries: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>>) => {
+  const handleBatchUpdateLineupEntries = async (entries: ExistingMatchLineupEntryUpdate[]) => {
     if (!selectedMatch || entries.length === 0) return;
+    const previousEntries = lineupEntries;
     try {
       setSaveState('lineup', 'saving');
-      const savedList = await batchUpsertMatchLineupEntries(entries);
       setLineupEntries((current) => {
-        const savedMap = new Map(savedList.map((e) => [e.playerId, e]));
-        const next = current.map((e) => savedMap.get(e.playerId) || e);
-        for (const saved of savedList) {
-          if (!next.some((e) => e.playerId === saved.playerId)) {
-            next.push(saved);
-          }
-        }
-        return next.sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+        const updatesById = new Map(entries.map((entry) => [entry.id, entry]));
+        return current
+          .map((currentEntry) => ({ ...currentEntry, ...updatesById.get(currentEntry.id) }))
+          .sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
       });
+      const savedList = await batchUpdateMatchLineupEntries(entries);
+      const savedById = new Map(savedList.map((entry) => [entry.id, entry]));
+      setLineupEntries((current) => current.map((currentEntry) => savedById.get(currentEntry.id) || currentEntry));
       setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
       setSaveState('lineup', 'saved');
     } catch (error) {
+      setLineupEntries(previousEntries);
       console.error('[MatchCentreSection] Failed batch updating lineup entries', error);
       setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to save formation.');
     }
   };
 
-  const handleAddPlayerToMatch = async (player: CloudSquadPlayer, asStarter: boolean, slot?: FormationSlot) => {
-    if (!selectedMatch) return;
-    try {
-      setSaveState('lineup', 'saving');
-      const shirtNum = player.number !== undefined && player.number !== null && player.number !== ''
-        ? Number(player.number)
-        : null;
-      const saved = await upsertMatchLineupEntry({
-        matchId: selectedMatch.id,
-        playerId: player.id,
-        position: slot?.position || player.position || 'UTIL',
-        starter: asStarter,
-        shirtNumber: Number.isNaN(shirtNum) ? null : shirtNum,
-        captain: false,
-        pitchX: asStarter ? (slot?.x ?? 50) : null,
-        pitchY: asStarter ? (slot?.y ?? 50) : null
-      });
-      setLineupEntries((current) => {
-        const filtered = current.filter((e) => e.playerId !== player.id);
-        return [...filtered, saved].sort((a, b) => Number(b.starter) - Number(a.starter) || (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
-      });
-      setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
-      setSaveState('lineup', 'saved');
-    } catch (error) {
-      console.error('[MatchCentreSection] Failed adding player to match', error);
-      setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to add player.');
-    }
-  };
-
   const handleSaveLineupEntry = async () => {
-    if (!selectedMatch || !lineupForm.playerId.trim()) return;
+    if (!selectedMatch || !editingLineupEntry) return;
 
     try {
       setSaveState('lineup', 'saving');
-      const saved = await upsertMatchLineupEntry({
-        id: editingLineupEntry?.id,
+      const saved = await updateMatchLineupEntry({
+        id: editingLineupEntry.id,
         matchId: selectedMatch.id,
         playerId: lineupForm.playerId.trim(),
         position: lineupForm.position.trim(),
@@ -670,8 +650,8 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         minuteSubbedIn: lineupForm.minuteSubbedIn === '' ? null : Number(lineupForm.minuteSubbedIn),
         minuteSubbedOut: lineupForm.minuteSubbedOut === '' ? null : Number(lineupForm.minuteSubbedOut),
         notes: lineupForm.notes.trim() || null,
-        pitchX: editingLineupEntry?.pitchX ?? (lineupForm.starter ? 50 : null),
-        pitchY: editingLineupEntry?.pitchY ?? (lineupForm.starter ? 50 : null)
+        pitchX: lineupForm.starter ? (editingLineupEntry.pitchX ?? 50) : null,
+        pitchY: lineupForm.starter ? (editingLineupEntry.pitchY ?? 50) : null
       });
       setLineupEntries((current) => {
         const filtered = current.filter((entry) => entry.playerId !== saved.playerId);
@@ -688,20 +668,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     }
   };
 
-  const handleRemoveLineupEntry = async (entryId: string) => {
-    if (!selectedMatch) return;
-
-    try {
-      setSaveState('lineup', 'saving');
-      await removeMatchLineupEntry(entryId);
-      setLineupEntries((current) => current.filter((entry) => entry.id !== entryId));
-      setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
-      setSaveState('lineup', 'saved');
-    } catch (error) {
-      console.error('[MatchCentreSection] Failed removing lineup entry', error);
-      setSaveState('lineup', 'error', error instanceof Error ? error.message : 'Unable to remove player.');
-    }
-  };
 
   const renderOpponentAnalysisTab = () => {
     if (!selectedMatch) return null;
@@ -765,18 +731,16 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const renderLineupTab = () => {
     if (!selectedMatch) return null;
 
-    const getPlayer = (playerId: string) => squadPlayers.find((player) => player.id === playerId);
+    const getPlayer = (playerId: string) => calledUpPlayers.find((player) => player.id === playerId);
 
     return (
       <div className="space-y-5">
         <MatchPitchBoard
           matchId={selectedMatch.id}
           lineupEntries={lineupEntries}
-          squadPlayers={squadPlayers}
+          calledUpPlayers={calledUpPlayers}
           onUpdateLineupEntry={handleUpdateLineupEntry}
           onBatchUpdateLineupEntries={handleBatchUpdateLineupEntries}
-          onRemoveLineupEntry={handleRemoveLineupEntry}
-          onAddPlayerToMatch={handleAddPlayerToMatch}
           onOpenEditModal={openLineupForm}
           saveStatus={saveStates.lineup}
         />
@@ -787,7 +751,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-base font-black text-[#002142] font-display">
-                  {editingLineupEntry ? 'Edit Player Match Details' : 'Add Player to Match'}
+                  Edit Player Match Details
                 </h3>
                 <button
                   type="button"
@@ -804,29 +768,12 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               <div className="grid gap-3 md:grid-cols-3">
                 <label className="text-[10px] font-black uppercase text-slate-500">
                   Player
-                  <select
-                    value={lineupForm.playerId}
-                    disabled={Boolean(editingLineupEntry)}
-                    onChange={(event) => {
-                      const player = getPlayer(event.target.value);
-                      setLineupForm((current) => ({
-                        ...current,
-                        playerId: event.target.value,
-                        position: player?.position ?? current.position,
-                        shirtNumber: player?.number !== undefined ? String(player.number) : current.shirtNumber
-                      }));
-                    }}
-                    className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs normal-case text-slate-900"
-                  >
-                    <option value="">Select squad player</option>
-                    {squadPlayers
-                      .filter((player) => editingLineupEntry?.playerId === player.id || !lineupEntries.some((entry) => entry.playerId === player.id))
-                      .map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.number ? `${player.number} · ` : ''}{player.firstName} {player.lastName}
-                        </option>
-                      ))}
-                  </select>
+                  <div className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs normal-case text-slate-900">
+                    {editingLineupEntry ? (() => {
+                      const player = getPlayer(editingLineupEntry.playerId);
+                      return player ? `${player.number ? `${player.number} · ` : ''}${player.firstName} ${player.lastName}` : 'Called-up player';
+                    })() : 'Called-up player'}
+                  </div>
                 </label>
 
                 <label className="text-[10px] font-black uppercase text-slate-500">
@@ -919,7 +866,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 </button>
                 <button
                   type="button"
-                  disabled={!lineupForm.playerId || saveStates.lineup?.state === 'saving'}
+                  disabled={!editingLineupEntry || saveStates.lineup?.state === 'saving'}
                   onClick={() => void handleSaveLineupEntry()}
                   className="rounded-xl bg-emerald-700 hover:bg-emerald-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50 transition-colors shadow-sm"
                 >

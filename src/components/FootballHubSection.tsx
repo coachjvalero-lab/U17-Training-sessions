@@ -457,7 +457,6 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
       ) : footballSubTab === 'competition' ? (
         <CompetitionSection
           session={session}
-          squadRoster={squadRoster}
           currentLogo={currentLogo}
         />
       ) : footballSubTab === 'library' ? (
@@ -472,7 +471,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         <div className="space-y-6">
           
           {/* SECONDARY NAVIGATION BAR INSIDE TRAINING SESSIONS */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-2.5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="bg-white border border-slate-200 rounded-2xl p-2.5 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 print:hidden">
             <div className="flex items-center space-x-2">
               <button
                 type="button"

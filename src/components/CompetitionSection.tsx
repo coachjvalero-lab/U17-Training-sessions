@@ -32,7 +32,6 @@ import {
 
 interface CompetitionSectionProps {
   session?: TrainingSession;
-  squadRoster?: string[];
   fixtures?: Match[];
   onUpdateFixtures?: (fixtures: Match[]) => void;
   currentLogo?: string | null;
@@ -47,7 +46,6 @@ function formatMatchDate(date: string): string {
 }
 
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
-  squadRoster = [],
   fixtures: fixturesProp,
   onUpdateFixtures,
   currentLogo
@@ -122,8 +120,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   const [isSavingScore, setIsSavingScore] = useState(false);
   const [scoreSaveError, setScoreSaveError] = useState<string | null>(null);
 
-  // Squad Callup State
-  const [selectedCallup, setSelectedCallup] = useState<string[]>(() => squadRoster.slice(0, 18));
+  const [persistedCallupSummary, setPersistedCallupSummary] = useState<{ matchId: string; count: number } | null>(null);
 
   const handleOpenAddModal = () => {
     setEditingMatch(null);
@@ -182,18 +179,6 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       setScoreSaveError(error instanceof Error ? error.message : 'Failed to save match result. Please try again.');
     } finally {
       setIsSavingScore(false);
-    }
-  };
-
-  const toggleCallupPlayer = (playerName: string) => {
-    if (selectedCallup.includes(playerName)) {
-      setSelectedCallup(selectedCallup.filter(p => p !== playerName));
-    } else {
-      if (selectedCallup.length >= 20) {
-        alert('Maximum matchday call-up size reached (20 players).');
-        return;
-      }
-      setSelectedCallup([...selectedCallup, playerName]);
     }
   };
 
@@ -312,7 +297,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Matchday Squad Call-Up ({selectedCallup.length})</span>
+            <span>Matchday Squad Call-Up ({persistedCallupSummary?.count ?? '—'})</span>
           </button>
         </div>
       </div>
@@ -630,6 +615,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
           selectedTeamId={selectedTeamId}
           currentLogo={currentLogo}
           onNavigateToTactics={() => setActiveTab('matches')}
+          onCallupSummaryChange={setPersistedCallupSummary}
         />
       )}
 
