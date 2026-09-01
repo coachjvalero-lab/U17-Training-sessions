@@ -873,7 +873,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                           className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 text-left transition-colors cursor-pointer"
                         >
                           <Edit3 className="h-3.5 w-3.5 text-sky-600" />
-                          <span>Editar Detalles / Dorsal</span>
+                          <span>Edit Details / Shirt #</span>
                         </button>
                         <button
                           type="button"
@@ -881,7 +881,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                           className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 text-left transition-colors cursor-pointer"
                         >
                           <UserX className="h-3.5 w-3.5 text-rose-600" />
-                          <span>Descartar de Convocatoria</span>
+                          <span>Remove from Call-Up</span>
                         </button>
                       </div>
                     </div>
@@ -994,10 +994,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
-                    Plantilla Completa
+                    Full Squad Roster
                   </span>
                   <h4 className="text-sm font-black text-[#002142] font-display">
-                    Convocatoria y Reservas
+                    Squad Call-Up & Bench
                   </h4>
                 </div>
                 <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-bold">
@@ -1008,7 +1008,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                       squadFilterTab === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    Todas ({squadPlayers.length})
+                    All ({squadPlayers.length})
                   </button>
                   <button
                     type="button"
@@ -1017,7 +1017,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                       squadFilterTab === 'unselected' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    Sin asignar ({unselectedPlayers.length})
+                    Unassigned ({unselectedPlayers.length})
                   </button>
                 </div>
               </div>
@@ -1035,7 +1035,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    {pos === 'ALL' ? 'Todas' : pos === 'GK' ? 'Porteras' : pos === 'DEF' ? 'Defensas' : pos === 'MID' ? 'Medios' : 'Delanteras'}
+                    {pos === 'ALL' ? 'All' : pos === 'GK' ? 'Goalkeepers' : pos === 'DEF' ? 'Defenders' : pos === 'MID' ? 'Midfielders' : 'Forwards'}
                   </button>
                 ))}
               </div>

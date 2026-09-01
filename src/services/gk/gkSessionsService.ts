@@ -366,7 +366,7 @@ export async function listGkSessions(): Promise<GkSession[]> {
     console.warn('[gkSessionsService] sessions query fallback notice:', legacyCatchErr);
   }
 
-  // 3. If everything errored or was empty, check local storage cache
+  // 3. If everything was empty, check local storage cache
   if (mappedGk.length === 0) {
     const fallbackCached = readCachedGkSessions();
     if (fallbackCached.length > 0) {
@@ -374,8 +374,8 @@ export async function listGkSessions(): Promise<GkSession[]> {
     }
   }
 
-  if (gkFetchError && mappedGk.length === 0 && hasGkTable) {
-    throw gkFetchError;
+  if (gkFetchError) {
+    console.warn('[gkSessionsService] gk_sessions fetch error (resilient fallback):', gkFetchError);
   }
 
   writeCachedGkSessions(mappedGk);

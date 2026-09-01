@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Users, 
   Check, 
-  Plus, 
   X, 
   Calendar, 
   MapPin, 
@@ -13,13 +12,9 @@ import {
   Search, 
   Shield, 
   ArrowRight, 
-  CheckCircle2, 
   AlertTriangle,
   RotateCcw,
-  SlidersHorizontal,
-  ChevronRight,
   Trophy,
-  Activity,
   HeartPulse
 } from 'lucide-react';
 import { Match, MatchLineupEntry, Injury } from '../types';
@@ -33,7 +28,7 @@ import {
 } from '../services/matches/matchLineupService';
 import { PlayerPitchAvatar } from './PlayerPitchAvatar';
 import { TeamCrest } from './TeamCrest';
-import { getPositionCategory, PREDEFINED_FORMATIONS } from '../utils/formations';
+import { getPositionCategory } from '../utils/formations';
 
 interface MatchCallUpSectionProps {
   matches: Match[];
@@ -55,12 +50,11 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   const [isLoadingLineup, setIsLoadingLineup] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [positionFilter, setPositionFilter] = useState<'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CALLED' | 'STARTER' | 'BENCH' | 'UNCALLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'CALLED' | 'UNCALLED'>('ALL');
   const [isCopied, setIsCopied] = useState(false);
   const [meetingTime, setMeetingTime] = useState('16:45');
-  const [meetingLocation, setMeetingLocation] = useState('Al Ula Sports Complex - Vestuario Local');
-  const [callupNotes, setCallupNotes] = useState('Uniforme 1 (Verde/Amarillo). Traer botas de tacos mixtos y espinilleras.');
-  const [showPrintView, setShowPrintView] = useState(false);
+  const [meetingLocation, setMeetingLocation] = useState('Al Ula Sports Complex - Home Dressing Room');
+  const [callupNotes, setCallupNotes] = useState('Official Kit 1 (Green/Yellow). Bring shin guards and mixed-stud boots.');
   const [targetQuota, setTargetQuota] = useState<18 | 20>(18);
 
   // Set default selected match to the next upcoming match or the first one
@@ -135,9 +129,6 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
     return map;
   }, [injuries]);
 
-  // Categorized call-up entries
-  const starters = useMemo(() => lineupEntries.filter((e) => e.starter), [lineupEntries]);
-  const substitutes = useMemo(() => lineupEntries.filter((e) => !e.starter), [lineupEntries]);
   const calledPlayerIds = useMemo(() => new Set(lineupEntries.map((e) => e.playerId)), [lineupEntries]);
 
   // Positional breakdown of called-up squad
@@ -160,50 +151,28 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
     return { gk, def, mid, fwd, total: lineupEntries.length };
   }, [lineupEntries, squadPlayers]);
 
-  // Handle setting a player's call-up status
-  const handleSetPlayerStatus = async (
-    player: CloudSquadPlayer, 
-    status: 'starter' | 'bench' | 'uncalled'
-  ) => {
+  // Handle setting a player's call-up status (Called Up vs Not Called Up)
+  const handleSetCallupStatus = async (player: CloudSquadPlayer, isCalled: boolean) => {
     if (!selectedMatchId) return;
 
     const existing = lineupEntries.find((e) => e.playerId === player.id);
 
     try {
-      if (status === 'uncalled') {
+      if (!isCalled) {
         if (existing) {
           setLineupEntries((prev) => prev.filter((e) => e.id !== existing.id));
           await removeMatchLineupEntry(existing.id);
         }
-      } else if (status === 'starter') {
+      } else {
         const entryPayload: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'> = {
           id: existing?.id,
           matchId: selectedMatchId,
           playerId: player.id,
-          starter: true,
-          position: player.position || 'UTIL',
-          shirtNumber: player.number ? Number(player.number) : null,
-          pitchX: existing?.pitchX ?? 50,
-          pitchY: existing?.pitchY ?? 50,
-          captain: existing?.captain ?? false,
-          notes: existing?.notes ?? null
-        };
-
-        const saved = await upsertMatchLineupEntry(entryPayload);
-        setLineupEntries((prev) => {
-          const filtered = prev.filter((e) => e.playerId !== player.id);
-          return [...filtered, saved];
-        });
-      } else if (status === 'bench') {
-        const entryPayload: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'> = {
-          id: existing?.id,
-          matchId: selectedMatchId,
-          playerId: player.id,
-          starter: false,
-          position: player.position || 'SUB',
-          shirtNumber: player.number ? Number(player.number) : null,
-          pitchX: null,
-          pitchY: null,
+          starter: existing?.starter ?? false,
+          position: existing?.position || player.position || 'UTIL',
+          shirtNumber: player.number ? Number(player.number) : (existing?.shirtNumber ?? null),
+          pitchX: existing?.pitchX ?? null,
+          pitchY: existing?.pitchY ?? null,
           captain: existing?.captain ?? false,
           notes: existing?.notes ?? null
         };
@@ -216,7 +185,6 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
       }
     } catch (err) {
       console.error('[MatchCallUpSection] Error updating callup status:', err);
-      // Reload on error to ensure sync
       const fresh = await getMatchLineup(selectedMatchId);
       setLineupEntries(fresh);
     }
@@ -236,7 +204,6 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
     const defs = available.filter((p) => getPositionCategory(p.position) === 'DEF');
     const mids = available.filter((p) => getPositionCategory(p.position) === 'MID');
     const fwds = available.filter((p) => getPositionCategory(p.position) === 'FWD');
-    const others = available.filter((p) => getPositionCategory(p.position) === 'OTHER');
 
     const selectedList: CloudSquadPlayer[] = [];
 
@@ -263,23 +230,19 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
       selectedList.push(leftovers.shift()!);
     }
 
-    // Assign first 11 to standard formation slots (1-4-3-3) if starters don't exist
-    const defaultSlots = PREDEFINED_FORMATIONS['1-4-3-3'].slots;
     const batchPayload: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>> = [];
 
-    selectedList.forEach((player, idx) => {
-      const isStarter = idx < 11;
-      const slot = isStarter ? defaultSlots[idx] : undefined;
+    selectedList.forEach((player) => {
       const existing = lineupEntries.find((e) => e.playerId === player.id);
 
       batchPayload.push({
         id: existing?.id,
         matchId: selectedMatchId,
         playerId: player.id,
-        starter: isStarter,
-        position: slot ? slot.position : (player.position || 'SUB'),
-        pitchX: slot ? slot.x : null,
-        pitchY: slot ? slot.y : null,
+        starter: existing?.starter ?? false,
+        position: existing?.position || player.position || 'UTIL',
+        pitchX: existing?.pitchX ?? null,
+        pitchY: existing?.pitchY ?? null,
         shirtNumber: player.number ? Number(player.number) : null,
         captain: existing?.captain ?? false,
         notes: existing?.notes ?? null
@@ -298,7 +261,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   // Clear all call-up entries for the match
   const handleClearCallup = async () => {
     if (!selectedMatchId || lineupEntries.length === 0) return;
-    if (!confirm('¿Estás seguro de que deseas vaciar la convocatoria de este partido?')) return;
+    if (!confirm('Are you sure you want to clear the matchday call-up list for this match?')) return;
 
     try {
       for (const entry of lineupEntries) {
@@ -310,40 +273,32 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
     }
   };
 
-  // Copy formatted call-up to clipboard for WhatsApp/Messaging
+  // Copy formatted call-up to clipboard for WhatsApp / Team Messaging in English
   const handleCopyCallupText = () => {
     if (!currentMatch) return;
 
     const opp = currentMatch.opponentName || currentMatch.opponentTeamId;
     const dateStr = currentMatch.date;
     const timeStr = currentMatch.time || '18:30';
-    const venueStr = currentMatch.venue || 'Estadio Al Ula';
+    const venueStr = currentMatch.venue || 'Al Ula Sports Complex';
 
-    let text = `📢 *CONVOCATORIA OFICIAL - AL ULA FC U17*\n`;
-    text += `⚽ *Partido:* Al Ula FC vs ${opp}\n`;
-    text += `🏆 *Competición:* ${currentMatch.competitionName}\n`;
-    text += `📅 *Fecha:* ${dateStr} | ⏰ *Hora:* ${timeStr}\n`;
-    text += `📍 *Lugar:* ${venueStr}\n`;
-    text += `🕒 *Citación:* ${meetingTime} en ${meetingLocation}\n\n`;
+    let text = `📢 *OFFICIAL MATCH CALL-UP - AL ULA FC U17*\n`;
+    text += `⚽ *Match:* Al Ula FC vs ${opp}\n`;
+    text += `🏆 *Competition:* ${currentMatch.competitionName}\n`;
+    text += `📅 *Date:* ${dateStr} | ⏰ *Kick-off:* ${timeStr}\n`;
+    text += `📍 *Venue:* ${venueStr}\n`;
+    text += `🕒 *Meeting:* ${meetingTime} at ${meetingLocation}\n\n`;
 
-    text += `🟢 *TITULARES (XI INICIAL):*\n`;
-    starters.forEach((entry, i) => {
+    text += `📋 *CALLED-UP SQUAD (${lineupEntries.length} Players):*\n`;
+    lineupEntries.forEach((entry, i) => {
       const p = squadPlayers.find((sp) => sp.id === entry.playerId);
-      const name = p ? `${p.firstName} ${p.lastName}` : 'Jugadora';
+      const name = p ? `${p.firstName} ${p.lastName}` : 'Player';
       const num = entry.shirtNumber ?? p?.number ?? '-';
       text += `${i + 1}. #${num} ${name} (${entry.position || p?.position || '–'})\n`;
     });
 
-    text += `\n🟡 *SUPLENTES:*\n`;
-    substitutes.forEach((entry, i) => {
-      const p = squadPlayers.find((sp) => sp.id === entry.playerId);
-      const name = p ? `${p.firstName} ${p.lastName}` : 'Jugadora';
-      const num = entry.shirtNumber ?? p?.number ?? '-';
-      text += `${i + 1}. #${num} ${name} (${entry.position || p?.position || 'SUB'})\n`;
-    });
-
     if (callupNotes.trim()) {
-      text += `\n📝 *Instrucciones:* ${callupNotes}\n`;
+      text += `\n📝 *Instructions & Notes:* ${callupNotes}\n`;
     }
 
     navigator.clipboard.writeText(text).then(() => {
@@ -361,14 +316,9 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   const filteredSquad = useMemo(() => {
     return squadPlayers.filter((player) => {
       const isCalled = calledPlayerIds.has(player.id);
-      const entry = lineupEntries.find((e) => e.playerId === player.id);
-      const isStarter = entry?.starter;
-      const isBench = entry && !entry.starter;
 
-      // Status filter
+      // Status filter (ALL, CALLED, UNCALLED)
       if (statusFilter === 'CALLED' && !isCalled) return false;
-      if (statusFilter === 'STARTER' && !isStarter) return false;
-      if (statusFilter === 'BENCH' && !isBench) return false;
       if (statusFilter === 'UNCALLED' && isCalled) return false;
 
       // Position filter
@@ -389,97 +339,70 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
 
       return true;
     });
-  }, [squadPlayers, calledPlayerIds, lineupEntries, statusFilter, positionFilter, searchQuery]);
+  }, [squadPlayers, calledPlayerIds, statusFilter, positionFilter, searchQuery]);
 
   return (
     <div className="space-y-6 animate-fadeIn pb-10">
-      {/* Printable Sheet (hidden in screen, visible in print) */}
+      {/* Printable Sheet (hidden on screen, formatted for official printing) */}
       <div className="hidden print:block print:p-8 bg-white text-black font-sans">
         <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-6">
           <div className="flex items-center gap-4">
             <TeamCrest name="Al Ula FC" logoUrl={currentLogo} isAlula className="h-16 w-16" />
             <div>
-              <h1 className="text-2xl font-black uppercase tracking-wide">AL ULA FC - ACTA DE CONVOCATORIA</h1>
-              <p className="text-sm font-bold text-slate-700">{currentMatch?.competitionName} • Temporada Oficial</p>
+              <h1 className="text-2xl font-black uppercase tracking-wide">AL ULA FC - OFFICIAL MATCH CALL-UP SHEET</h1>
+              <p className="text-sm font-bold text-slate-700">{currentMatch?.competitionName} • Official Season</p>
             </div>
           </div>
           <div className="text-right text-xs">
-            <p className="font-bold">Fecha: {currentMatch?.date}</p>
-            <p className="font-bold">Hora Partido: {currentMatch?.time || '18:30'}</p>
-            <p className="text-slate-600">Citación: {meetingTime}</p>
+            <p className="font-bold">Date: {currentMatch?.date}</p>
+            <p className="font-bold">Kick-off: {currentMatch?.time || '18:30'}</p>
+            <p className="text-slate-600">Meeting: {meetingTime}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-6 mb-6 text-xs border border-slate-300 rounded-lg p-3 bg-slate-50">
           <div>
-            <p><strong>Partido:</strong> Al Ula FC vs {currentMatch?.opponentName || currentMatch?.opponentTeamId}</p>
-            <p><strong>Estadio/Campo:</strong> {currentMatch?.venue || 'Al Ula Sports Complex'}</p>
+            <p><strong>Match:</strong> Al Ula FC vs {currentMatch?.opponentName || currentMatch?.opponentTeamId}</p>
+            <p><strong>Venue / Stadium:</strong> {currentMatch?.venue || 'Al Ula Sports Complex'}</p>
           </div>
           <div>
-            <p><strong>Lugar de Encuentro:</strong> {meetingLocation}</p>
-            <p><strong>Total Convocadas:</strong> {lineupEntries.length} jugadoras</p>
+            <p><strong>Meeting Point:</strong> {meetingLocation}</p>
+            <p><strong>Total Called-Up:</strong> {lineupEntries.length} players</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 mb-6">
-          <div>
-            <h2 className="text-sm font-black uppercase border-b-2 border-emerald-700 pb-1 mb-3 text-emerald-900">
-              Titulares (XI Inicial) - {starters.length}
-            </h2>
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-300">
-                  <th className="py-1 w-8">#</th>
-                  <th className="py-1">Nombre</th>
-                  <th className="py-1 text-right">Posición</th>
-                </tr>
-              </thead>
-              <tbody>
-                {starters.map((entry, idx) => {
-                  const p = squadPlayers.find((sp) => sp.id === entry.playerId);
-                  return (
-                    <tr key={entry.id} className="border-b border-slate-100">
-                      <td className="py-1.5 font-bold font-mono">{entry.shirtNumber ?? p?.number ?? idx + 1}</td>
-                      <td className="py-1.5 font-semibold">{p ? `${p.firstName} ${p.lastName}` : 'Jugadora'}</td>
-                      <td className="py-1.5 text-right font-mono text-slate-600">{entry.position || p?.position || '–'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div>
-            <h2 className="text-sm font-black uppercase border-b-2 border-amber-600 pb-1 mb-3 text-amber-900">
-              Suplentes (Banquillo) - {substitutes.length}
-            </h2>
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-300">
-                  <th className="py-1 w-8">#</th>
-                  <th className="py-1">Nombre</th>
-                  <th className="py-1 text-right">Posición</th>
-                </tr>
-              </thead>
-              <tbody>
-                {substitutes.map((entry, idx) => {
-                  const p = squadPlayers.find((sp) => sp.id === entry.playerId);
-                  return (
-                    <tr key={entry.id} className="border-b border-slate-100">
-                      <td className="py-1.5 font-bold font-mono">{entry.shirtNumber ?? p?.number ?? '-'}</td>
-                      <td className="py-1.5 font-semibold">{p ? `${p.firstName} ${p.lastName}` : 'Jugadora'}</td>
-                      <td className="py-1.5 text-right font-mono text-slate-600">{entry.position || p?.position || 'SUB'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="mb-6">
+          <h2 className="text-sm font-black uppercase border-b-2 border-emerald-700 pb-1 mb-3 text-emerald-900">
+            Called-Up Squad ({lineupEntries.length} Players)
+          </h2>
+          <table className="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-300">
+                <th className="py-1 w-10">#</th>
+                <th className="py-1">Player Name</th>
+                <th className="py-1 text-center">Position</th>
+                <th className="py-1 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineupEntries.map((entry, idx) => {
+                const p = squadPlayers.find((sp) => sp.id === entry.playerId);
+                return (
+                  <tr key={entry.id} className="border-b border-slate-100">
+                    <td className="py-1.5 font-bold font-mono">{entry.shirtNumber ?? p?.number ?? idx + 1}</td>
+                    <td className="py-1.5 font-semibold">{p ? `${p.firstName} ${p.lastName}` : 'Player'}</td>
+                    <td className="py-1.5 text-center font-mono text-slate-600">{entry.position || p?.position || '–'}</td>
+                    <td className="py-1.5 text-right font-bold text-emerald-700">Called Up</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
         {callupNotes && (
           <div className="border-t border-slate-300 pt-3 text-xs">
-            <p className="font-bold text-slate-700">Observaciones e Instrucciones del Cuerpo Técnico:</p>
+            <p className="font-bold text-slate-700">Technical Staff Notes & Instructions:</p>
             <p className="text-slate-600 italic">{callupNotes}</p>
           </div>
         )}
@@ -487,15 +410,15 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
         <div className="grid grid-cols-3 gap-8 mt-12 pt-6 border-t border-slate-300 text-center text-xs">
           <div>
             <div className="border-b border-slate-400 mb-2 h-12" />
-            <p className="font-bold">Firma Primer Entrenador</p>
+            <p className="font-bold">Head Coach Signature</p>
           </div>
           <div>
             <div className="border-b border-slate-400 mb-2 h-12" />
-            <p className="font-bold">Firma Delegado de Equipo</p>
+            <p className="font-bold">Team Delegate Signature</p>
           </div>
           <div>
             <div className="border-b border-slate-400 mb-2 h-12" />
-            <p className="font-bold">Firma Capitana</p>
+            <p className="font-bold">Team Captain Signature</p>
           </div>
         </div>
       </div>
@@ -508,17 +431,17 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                  Gestor de Convocatorias
+                  Squad Call-Up Manager
                 </span>
                 <span className="text-xs font-bold text-slate-500">
-                  Plantilla Oficial de Partido
+                  Official Match Roster
                 </span>
               </div>
               <h2 className="mt-1 text-xl font-black text-[#002142] font-display">
-                Convocatoria y Lista Oficial de Partido
+                Matchday Call-Up & Official Squad
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Selecciona las jugadoras citadas para el partido, define titulares y suplentes, y exporta el acta oficial para jugadoras y cuerpo técnico.
+                Select players called up for the match, manage squad quotas, and export the official call-up sheet for players and technical staff.
               </p>
             </div>
 
@@ -526,7 +449,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               <div className="space-y-1">
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Seleccionar Partido:
+                  Select Match:
                 </label>
                 <select
                   value={selectedMatchId}
@@ -550,10 +473,10 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   type="button"
                   onClick={() => onNavigateToTactics(selectedMatchId)}
                   className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-[#002142] hover:bg-[#09355e] px-4 py-2.5 text-xs font-black text-white shadow-sm transition-all cursor-pointer"
-                  title="Abrir pizarra táctica de este partido"
+                  title="Open tactical board for this match"
                 >
                   <Shield className="h-4 w-4 text-emerald-400" />
-                  <span>Ir a Pizarra Táctica</span>
+                  <span>Go to Tactical Board</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -574,7 +497,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                         {currentMatch.competitionName}
                       </span>
                       <span className="text-[10px] text-slate-300 font-bold">
-                        {currentMatch.isHome ? '• Partido en Casa' : '• Partido a Domicilio'}
+                        {currentMatch.isHome ? '• Home Match' : '• Away Match'}
                       </span>
                     </div>
                     <p className="text-sm font-black font-display">
@@ -602,19 +525,19 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
           )}
         </div>
 
-        {/* Quota Stats & Quick Actions Toolbar */}
+        {/* Quota Stats & Positional Breakdown */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Total Counter Card */}
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm flex items-center justify-between">
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Convocatoria Total
+                Total Call-Up
               </span>
               <div className="flex items-baseline gap-1.5 mt-0.5">
                 <span className="text-2xl font-black text-[#002142] font-display">
                   {lineupEntries.length}
                 </span>
-                <span className="text-xs font-bold text-slate-400">/ {targetQuota} objetivo</span>
+                <span className="text-xs font-bold text-slate-400">/ {targetQuota} target</span>
               </div>
             </div>
             <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
@@ -628,19 +551,21 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
             </div>
           </div>
 
-          {/* Starters vs Bench Card */}
+          {/* Call-up Status Summary */}
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm flex items-center justify-between">
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Distribución
+                Call-Up Status
               </span>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">
-                  {starters.length}/11 Titulares
-                </span>
-                <span className="rounded-lg bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">
-                  {substitutes.length} Suplentes
-                </span>
+              <div className="flex flex-col gap-1 mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">
+                    {lineupEntries.length} Called Up
+                  </span>
+                  <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                    {Math.max(0, squadPlayers.length - lineupEntries.length)} Not Called
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -651,23 +576,23 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
           {/* Positional Balance Card */}
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm col-span-1 md:col-span-2">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              Equilibrio por Líneas
+              Positional Balance
             </span>
             <div className="grid grid-cols-4 gap-2 mt-1.5 text-center">
               <div className="rounded-xl bg-slate-50 p-1.5 border border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Porteras</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Goalkeepers</span>
                 <p className="text-sm font-black text-slate-800">{positionalCounts.gk}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-1.5 border border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Defensas</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Defenders</span>
                 <p className="text-sm font-black text-slate-800">{positionalCounts.def}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-1.5 border border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Medios</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Midfielders</span>
                 <p className="text-sm font-black text-slate-800">{positionalCounts.mid}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-1.5 border border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Delanteras</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Forwards</span>
                 <p className="text-sm font-black text-slate-800">{positionalCounts.fwd}</p>
               </div>
             </div>
@@ -679,7 +604,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
           {/* Left Actions: Auto Callup & Target Quota */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
-              <span className="px-2 text-[10px] uppercase font-black text-slate-400">Cupo:</span>
+              <span className="px-2 text-[10px] uppercase font-black text-slate-400">Quota:</span>
               <button
                 type="button"
                 onClick={() => setTargetQuota(18)}
@@ -687,7 +612,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   targetQuota === 18 ? 'bg-white text-slate-900 shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                18 Jugadoras
+                18 Players
               </button>
               <button
                 type="button"
@@ -696,7 +621,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   targetQuota === 20 ? 'bg-white text-slate-900 shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                20 Jugadoras
+                20 Players
               </button>
             </div>
 
@@ -704,10 +629,10 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
               type="button"
               onClick={handleAutoCallup}
               className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-black text-white shadow-xs transition-colors cursor-pointer"
-              title="Generar convocatoria equilibrada automáticamente (excluyendo lesionadas)"
+              title="Automatically select balanced squad (excluding injured players)"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Auto-Convocar ({targetQuota})</span>
+              <span>Auto Call-Up ({targetQuota})</span>
             </button>
 
             {lineupEntries.length > 0 && (
@@ -715,10 +640,10 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                 type="button"
                 onClick={handleClearCallup}
                 className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors cursor-pointer"
-                title="Vaciar lista de convocadas"
+                title="Clear all called-up players"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span>Vaciar Lista</span>
+                <span>Clear List</span>
               </button>
             )}
           </div>
@@ -733,42 +658,42 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   ? 'bg-emerald-700 text-white'
                   : 'bg-slate-800 hover:bg-slate-700 text-white'
               }`}
-              title="Copiar texto con formato para WhatsApp o mensajería del equipo"
+              title="Copy formatted squad call-up text for WhatsApp or team messaging"
             >
               {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              <span>{isCopied ? '¡Copiado al Portapapeles!' : 'Copiar para WhatsApp'}</span>
+              <span>{isCopied ? 'Copied to Clipboard!' : 'Copy for WhatsApp'}</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
-              title="Imprimir o guardar como PDF la hoja oficial de convocatoria"
+              title="Print or export as PDF official match call-up sheet"
             >
               <Printer className="h-3.5 w-3.5 text-slate-500" />
-              <span>Imprimir Hoja Oficial</span>
+              <span>Print Official Sheet</span>
             </button>
           </div>
         </div>
 
-        {/* Meeting & Logistics Details Accordion */}
+        {/* Meeting & Logistics Details */}
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-emerald-600" />
               <h3 className="text-sm font-black text-[#002142] font-display">
-                Detalles de Citación y Logística de Partido
+                Meeting Details & Match Logistics
               </h3>
             </div>
             <span className="text-[10px] font-bold text-slate-400">
-              Se incluirán en el mensaje de WhatsApp y en el acta impresa
+              Included in the WhatsApp message and printed call-up sheet
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <div>
               <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                Hora de Citación / Llegada:
+                Meeting / Arrival Time:
               </label>
               <input
                 type="text"
@@ -780,25 +705,25 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                Lugar de Encuentro / Vestuario:
+                Meeting Location / Dressing Room:
               </label>
               <input
                 type="text"
                 value={meetingLocation}
                 onChange={(e) => setMeetingLocation(e.target.value)}
-                placeholder="Al Ula Sports Complex - Vestuario Local"
+                placeholder="Al Ula Sports Complex - Home Dressing Room"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
               />
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                Indumentaria / Notas del Staff:
+                Kit / Staff Instructions:
               </label>
               <input
                 type="text"
                 value={callupNotes}
                 onChange={(e) => setCallupNotes(e.target.value)}
-                placeholder="Uniforme 1 (Verde/Amarillo). Traer espinilleras."
+                placeholder="Official Kit 1 (Green/Yellow). Bring shin guards."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
               />
             </div>
@@ -810,60 +735,42 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-black text-[#002142] font-display">
-                Plantilla y Selección de Jugadoras ({squadPlayers.length})
+                Squad Roster & Player Selection ({squadPlayers.length})
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Asigna el rol de cada jugadora para este partido: Titular, Banquillo o No Convocada.
+                Assign each player's status for this match: Called Up or Not Called Up.
               </p>
             </div>
 
-            {/* Filter Tabs */}
+            {/* Filter Tabs: ALL, CALLED UP, NOT CALLED UP */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1 text-[11px] font-bold">
                 <button
                   type="button"
                   onClick={() => setStatusFilter('ALL')}
-                  className={`rounded-xl px-2.5 py-1 transition-all cursor-pointer ${
+                  className={`rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
                     statusFilter === 'ALL' ? 'bg-white text-slate-900 shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Todas ({squadPlayers.length})
+                  All ({squadPlayers.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter('CALLED')}
-                  className={`rounded-xl px-2.5 py-1 transition-all cursor-pointer ${
+                  className={`rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
                     statusFilter === 'CALLED' ? 'bg-emerald-600 text-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  Convocadas ({lineupEntries.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('STARTER')}
-                  className={`rounded-xl px-2.5 py-1 transition-all cursor-pointer ${
-                    statusFilter === 'STARTER' ? 'bg-[#002142] text-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Titulares ({starters.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('BENCH')}
-                  className={`rounded-xl px-2.5 py-1 transition-all cursor-pointer ${
-                    statusFilter === 'BENCH' ? 'bg-amber-500 text-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Banquillo ({substitutes.length})
+                  Called Up ({lineupEntries.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setStatusFilter('UNCALLED')}
-                  className={`rounded-xl px-2.5 py-1 transition-all cursor-pointer ${
+                  className={`rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
                     statusFilter === 'UNCALLED' ? 'bg-white text-slate-900 shadow-2xs font-black' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  No Convocadas ({squadPlayers.length - lineupEntries.length})
+                  Not Called Up ({Math.max(0, squadPlayers.length - lineupEntries.length)})
                 </button>
               </div>
             </div>
@@ -883,7 +790,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {pos === 'ALL' ? 'Todas las Posiciones' : pos === 'GK' ? 'Porteras' : pos === 'DEF' ? 'Defensas' : pos === 'MID' ? 'Centrocampistas' : 'Delanteras'}
+                  {pos === 'ALL' ? 'All Positions' : pos === 'GK' ? 'Goalkeepers' : pos === 'DEF' ? 'Defenders' : pos === 'MID' ? 'Midfielders' : 'Forwards'}
                 </button>
               ))}
             </div>
@@ -894,7 +801,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, dorsal..."
+                placeholder="Search by name, number, position..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none"
               />
             </div>
@@ -904,20 +811,16 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredSquad.map((player) => {
               const entry = lineupEntries.find((e) => e.playerId === player.id);
-              const isStarter = entry?.starter;
-              const isBench = entry && !entry.starter;
-              const isCalled = isStarter || isBench;
+              const isCalled = Boolean(entry);
               const injury = injuryMap.get(player.id);
               const isInjured = Boolean(injury);
 
               return (
                 <div
                   key={player.id}
-                  className={`rounded-2xl border p-3.5 transition-all flex flex-col justify-between gap-3 ${
-                    isStarter
+                  className={`rounded-2xl border p-3.5 transition-all flex flex-col justify-between gap-3.5 ${
+                    isCalled
                       ? 'bg-emerald-50/70 border-emerald-300 shadow-xs'
-                      : isBench
-                      ? 'bg-amber-50/60 border-amber-300 shadow-xs'
                       : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -938,9 +841,9 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold">
                           <span>#{player.number ?? '–'}</span>
                           <span>•</span>
-                          <span>{player.position || 'Jugadora'}</span>
+                          <span>{player.position || 'Player'}</span>
                           {entry?.shirtNumber && entry.shirtNumber !== player.number && (
-                            <span className="text-emerald-700">(Dorsal #{entry.shirtNumber})</span>
+                            <span className="text-emerald-700 font-black">(Squad #{entry.shirtNumber})</span>
                           )}
                         </div>
                       </div>
@@ -948,22 +851,18 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
 
                     {/* Status indicator badge */}
                     <div>
-                      {isStarter ? (
+                      {isCalled ? (
                         <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase text-white shadow-2xs">
-                          Titular
-                        </span>
-                      ) : isBench ? (
-                        <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-white shadow-2xs">
-                          Banquillo
+                          Called Up
                         </span>
                       ) : isInjured ? (
                         <span className="flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
                           <HeartPulse className="h-3 w-3 text-rose-600" />
-                          Lesionada
+                          Injured
                         </span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                          No citada
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
+                          Not Called Up
                         </span>
                       )}
                     </div>
@@ -973,44 +872,35 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   {isInjured && injury && (
                     <div className="flex items-center gap-1.5 rounded-xl bg-rose-50 border border-rose-200 p-2 text-[10px] font-bold text-rose-800">
                       <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
-                      <span className="truncate">Parte Médico: {injury.clinicalDiagnosis || injury.finalDiagnosis || injury.location || 'En recuperación'}</span>
+                      <span className="truncate">Medical Alert: {injury.clinicalDiagnosis || injury.finalDiagnosis || injury.location || 'In recovery'}</span>
                     </div>
                   )}
 
-                  {/* 3-State Role Selector Buttons */}
-                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-[10px] font-black">
+                  {/* 2-Option Selector: Called Up vs Not Called Up */}
+                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-[11px] font-black">
                     <button
                       type="button"
-                      onClick={() => handleSetPlayerStatus(player, 'starter')}
-                      className={`rounded-lg py-1 transition-all cursor-pointer ${
-                        isStarter
+                      onClick={() => handleSetCallupStatus(player, true)}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 transition-all cursor-pointer ${
+                        isCalled
                           ? 'bg-emerald-600 text-white shadow-2xs'
                           : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                       }`}
                     >
-                      Titular
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Called Up</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSetPlayerStatus(player, 'bench')}
-                      className={`rounded-lg py-1 transition-all cursor-pointer ${
-                        isBench
-                          ? 'bg-amber-500 text-white shadow-2xs'
-                          : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                      }`}
-                    >
-                      Banquillo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetPlayerStatus(player, 'uncalled')}
-                      className={`rounded-lg py-1 transition-all cursor-pointer ${
+                      onClick={() => handleSetCallupStatus(player, false)}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 transition-all cursor-pointer ${
                         !isCalled
-                          ? 'bg-white text-slate-700 shadow-2xs'
+                          ? 'bg-white text-slate-800 shadow-2xs font-bold'
                           : 'text-slate-400 hover:bg-slate-200 hover:text-slate-800'
                       }`}
                     >
-                      Descartar
+                      <X className="h-3.5 w-3.5" />
+                      <span>Not Called Up</span>
                     </button>
                   </div>
                 </div>
@@ -1020,7 +910,7 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
 
           {filteredSquad.length === 0 && (
             <div className="py-12 text-center text-xs text-slate-400">
-              No se encontraron jugadoras con los filtros seleccionados.
+              No players found matching the selected filters.
             </div>
           )}
         </div>

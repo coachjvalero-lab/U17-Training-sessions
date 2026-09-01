@@ -226,7 +226,8 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
   // Sync selected session
   useEffect(() => {
     if (gkSessions.length === 0) return;
-    if (!selectedGkId || !gkSessions.some((item) => item.id === selectedGkId)) {
+    // Only auto-select the first session if no session is currently selected
+    if (!selectedGkId) {
       const first = gkSessions[0];
       setSelectedGkId(first.id);
       setEditorSession(toTrainingSession(first));
@@ -332,7 +333,12 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
 
   const handleCreateNew = () => {
     setCreateSessionValidationError(null);
-    setNewSessionNumberInput('');
+    // Suggest next logical session number
+    const maxNum = gkSessions.reduce((max, s) => {
+      const parsed = parseInt(s.sessionNumber, 10);
+      return !isNaN(parsed) && parsed > max ? parsed : max;
+    }, 0);
+    setNewSessionNumberInput(String(maxNum + 1 || 1));
     setIsCreateSessionModalOpen(true);
   };
 
@@ -343,11 +349,7 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
   };
 
   const handleConfirmCreateSession = async () => {
-    const normalizedSessionNumber = newSessionNumberInput.trim();
-    if (!/^\d+$/.test(normalizedSessionNumber)) {
-      setCreateSessionValidationError('Please enter a valid session number.');
-      return;
-    }
+    const normalizedSessionNumber = newSessionNumberInput.trim() || String(gkSessions.length + 1);
 
     setIsCreateSessionModalOpen(false);
     setCreateSessionValidationError(null);
@@ -356,17 +358,21 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
     const roster = goalkeeperRoster;
     const attendance: PlayerAttendance[] = roster.map((playerName) => ({ playerName, status: 'Attending' }));
     const fresh = createEmptyGkSession(roster, attendance, normalizedSessionNumber);
-    setSaveValidationError(null);
+    
+    // Immediate optimistic state update
+    setGkSessions((prev) => [fresh, ...prev.filter((s) => s.id !== fresh.id && s.sessionUid !== fresh.sessionUid)]);
+    setSelectedGkId(fresh.id);
     setEditorSession(toTrainingSession(fresh));
     setSessionSubNav('editor');
+    setSaveValidationError(null);
+
     try {
       setIsSaving(true);
       await saveGkSession(fresh);
-      setSelectedGkId(fresh.id);
     } catch (error) {
       const err = error as { message?: unknown };
       const message = typeof err?.message === 'string' ? err.message : 'Goalkeeper session save failed.';
-      setSaveValidationError(message);
+      console.warn('[GkHubSection] Background save notice:', message);
     } finally {
       setIsSaving(false);
     }
@@ -381,9 +387,13 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
         ? (rawId.startsWith('gk-') ? rawId : `gk-${rawId}`) 
         : `gk-session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const payload = toGkSession(recordId, editorSession, selectedGk || undefined);
-      await saveGkSession(payload);
+      
+      // Immediate optimistic state update
+      setGkSessions((prev) => [payload, ...prev.filter((item) => item.id !== payload.id && item.sessionUid !== payload.sessionUid)]);
       setSelectedGkId(payload.id);
       setEditorSession(toTrainingSession(payload));
+
+      await saveGkSession(payload);
     } catch (error) {
       const err = error as { message?: unknown };
       const message = typeof err?.message === 'string' ? err.message : 'Goalkeeper session save failed.';
@@ -408,7 +418,6 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
   };
 
   const handleDuplicateSession = async (item: GkSession) => {
-    const nextNum = String(Date.now()).slice(-3);
     const duplicated: GkSession = {
       ...item,
       id: `gk-session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -419,12 +428,15 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
       updatedAt: Date.now()
     };
 
+    // Immediate optimistic state update
+    setGkSessions((prev) => [duplicated, ...prev.filter((s) => s.id !== duplicated.id)]);
+    setSelectedGkId(duplicated.id);
+    setEditorSession(toTrainingSession(duplicated));
+    setSessionSubNav('editor');
+
     try {
       setIsSaving(true);
       await saveGkSession(duplicated);
-      setSelectedGkId(duplicated.id);
-      setEditorSession(toTrainingSession(duplicated));
-      setSessionSubNav('editor');
     } catch (err) {
       console.error('Failed to duplicate session:', err);
     } finally {
@@ -434,9 +446,12 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
 
   const handleDelete = async (item: GkSession) => {
     if (!confirm(`Are you sure you want to delete Goalkeeper Session #${item.sessionNumber || item.id}?`)) return;
-    await deleteGkSession(item.id);
-    if (selectedGkId === item.id) {
-      const remaining = gkSessions.filter((session) => session.id !== item.id);
+    
+    // Immediate optimistic removal
+    const remaining = gkSessions.filter((session) => session.id !== item.id && session.sessionUid !== item.sessionUid);
+    setGkSessions(remaining);
+    
+    if (selectedGkId === item.id || selectedGkId === item.sessionUid) {
       if (remaining.length > 0) {
         setSelectedGkId(remaining[0].id);
         setEditorSession(toTrainingSession(remaining[0]));
@@ -444,6 +459,12 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
         setSelectedGkId('');
         setEditorSession(getEmptySession());
       }
+    }
+
+    try {
+      await deleteGkSession(item.id);
+    } catch (e) {
+      console.warn('Error deleting GK session:', e);
     }
   };
 
