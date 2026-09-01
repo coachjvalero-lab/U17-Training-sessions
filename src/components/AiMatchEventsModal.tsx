@@ -48,6 +48,53 @@ function formatVideoTimestamp(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+type MatchEventInput = Omit<MatchEvent, 'id' | 'createdAt'>;
+
+const ALLOWED_EVENT_TYPES: MatchEventType[] = [
+  'goal',
+  'opponent_goal',
+  'corner',
+  'opponent_corner',
+  'assist',
+  'yellow_card',
+  'red_card',
+  'substitution_in',
+  'substitution_out',
+  'own_goal',
+  'injury',
+  'other'
+];
+
+const substitutionKey = (event: MatchEventInput): string =>
+  `${event.eventType}|${event.minute}|${event.playerId}|${event.relatedPlayerId}`;
+
+/**
+ * The minutes-played logic pairs each substitution_out with its mirrored substitution_in,
+ * so complete the missing counterpart when the AI only returns one side.
+ */
+function withMirroredSubstitutions(inputs: MatchEventInput[]): MatchEventInput[] {
+  const existingKeys = new Set(inputs.map(substitutionKey));
+  const mirrored: MatchEventInput[] = [];
+
+  for (const event of inputs) {
+    if (event.eventType !== 'substitution_in' && event.eventType !== 'substitution_out') continue;
+    if (event.teamSide !== 'our_team' || !event.playerId || !event.relatedPlayerId) continue;
+
+    const counterpart: MatchEventInput = {
+      ...event,
+      eventType: event.eventType === 'substitution_out' ? 'substitution_in' : 'substitution_out',
+      playerId: event.relatedPlayerId,
+      relatedPlayerId: event.playerId
+    };
+    const key = substitutionKey(counterpart);
+    if (existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    mirrored.push(counterpart);
+  }
+
+  return [...inputs, ...mirrored];
+}
+
 export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   isOpen,
   onClose,
@@ -62,6 +109,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [generatedEvents, setGeneratedEvents] = useState<AiGeneratedEvent[]>([]);
   const [replaceExisting, setReplaceExisting] = useState(false);
 
@@ -74,6 +122,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     setError(null);
+    setAiWarning(null);
 
     try {
       const response = await fetch('/api/match/generate-events', {
@@ -112,14 +161,29 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       }
 
       setAiSummary(data.summary || '');
+      setAiWarning(data.isFallback ? (data.fallbackReason || 'La IA no está disponible: se muestra una plantilla táctica base editable.') : null);
+
+      const knownPlayerIds = new Set(squadPlayers.map((p) => p.id));
+      const playerIdByName = new Map(
+        squadPlayers.map((p) => [`${p.firstName} ${p.lastName}`.trim().toLowerCase(), p.id])
+      );
+      // player_id / related_player_id are foreign keys to squad_players, so drop unknown ids.
+      const resolvePlayerId = (id: unknown, name: unknown): string | null => {
+        if (typeof id === 'string' && knownPlayerIds.has(id)) return id;
+        if (typeof name === 'string') {
+          return playerIdByName.get(name.trim().toLowerCase()) ?? null;
+        }
+        return null;
+      };
+
       const initialEvents: AiGeneratedEvent[] = (data.events || []).map((e: any) => ({
         minute: typeof e.minute === 'number' ? e.minute : 0,
         videoTimestampSeconds: typeof e.videoTimestampSeconds === 'number' ? e.videoTimestampSeconds : (Number(e.minute) || 0) * 60,
-        eventType: (e.eventType || 'other') as MatchEventType,
+        eventType: (ALLOWED_EVENT_TYPES.includes(e.eventType) ? e.eventType : 'other') as MatchEventType,
         teamSide: (e.teamSide === 'opponent' ? 'opponent' : 'our_team') as TeamSide,
-        playerId: e.playerId || null,
+        playerId: resolvePlayerId(e.playerId, e.playerName),
         playerName: e.playerName || '',
-        relatedPlayerId: e.relatedPlayerId || null,
+        relatedPlayerId: resolvePlayerId(e.relatedPlayerId, e.relatedPlayerName),
         relatedPlayerName: e.relatedPlayerName || '',
         description: e.description || '',
         selected: true
@@ -138,6 +202,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
 
   const handleGenerateFallbackTemplate = () => {
     setError(null);
+    setAiWarning(null);
     setAiSummary('Plantilla base sugerida con distribución táctica de eventos estándar (Goles, Córners y Sustituciones).');
     
     const p1 = squadPlayers[0];
@@ -261,7 +326,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
     setError(null);
 
     try {
-      const inputs: Array<Omit<MatchEvent, 'id' | 'createdAt'>> = selectedList.map((e) => ({
+      const inputs: MatchEventInput[] = selectedList.map((e) => ({
         matchId: match.id,
         playerId: e.playerId || null,
         teamSide: e.teamSide,
@@ -272,7 +337,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         description: e.description
       }));
 
-      await onApplyEvents(inputs, replaceExisting);
+      await onApplyEvents(withMirroredSubstitutions(inputs), replaceExisting);
       onClose();
     } catch (err: any) {
       console.error('[AiMatchEventsModal] Apply failed:', err);
@@ -448,6 +513,11 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
           {/* Generated Events Section */}
           {generatedEvents.length > 0 && (
             <div className="space-y-4">
+              {aiWarning && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] font-semibold text-amber-900">
+                  ⚠️ Eventos de plantilla base (no analizados por IA): {aiWarning}
+                </div>
+              )}
               {aiSummary && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-4">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-900">

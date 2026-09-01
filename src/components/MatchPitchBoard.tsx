@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, 
-  Plus, 
   X, 
   Edit3, 
   ArrowRightLeft, 
   RotateCcw, 
   Move,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  GripVertical
 } from 'lucide-react';
 import { MatchLineupEntry } from '../types';
 import { CloudSquadPlayer } from '../services/squad/squadService';
@@ -22,7 +22,9 @@ import {
   getPositionCategory,
   isPositionCompatible,
   pitchDistance,
-  detectFormation
+  detectFormation,
+  findSlotOccupant,
+  resolveStablePitchPosition
 } from '../utils/formations';
 
 interface MatchPitchBoardProps {
@@ -45,6 +47,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   saveStatus
 }) => {
   const pitchRef = useRef<HTMLDivElement | null>(null);
+  const initializedFormationMatchRef = useRef<string | null>(null);
   const [selectedFormation, setSelectedFormation] = useState<FormationType>(() => {
     if (typeof window !== 'undefined' && matchId) {
       const saved = localStorage.getItem(`tactical_formation_${matchId}`);
@@ -57,6 +60,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   });
   const [activeSlotModal, setActiveSlotModal] = useState<FormationSlot | null>(null);
   const [activeTokenMenuId, setActiveTokenMenuId] = useState<string | null>(null);
+  const [draggedSubstituteId, setDraggedSubstituteId] = useState<string | null>(null);
+  const [highlightedSlotId, setHighlightedSlotId] = useState<string | null>(null);
 
   // Dragging state for pointer drag
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -68,19 +73,20 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const starters = useMemo(() => lineupEntries.filter((e) => e.starter), [lineupEntries]);
   const substitutes = useMemo(() => lineupEntries.filter((e) => !e.starter), [lineupEntries]);
 
-  // Synchronize formation when matchId changes or when new starters load without stored preference
+  // Formation is the stable map. Normal lineup changes must never redetect or move it.
   useEffect(() => {
+    if (initializedFormationMatchRef.current === matchId) return;
     if (typeof window !== 'undefined' && matchId) {
       const saved = localStorage.getItem(`tactical_formation_${matchId}`);
       if (saved && FORMATION_KEYS.includes(saved as FormationType)) {
         setSelectedFormation(saved as FormationType);
+        initializedFormationMatchRef.current = matchId;
         return;
       }
     }
-    if (starters.length > 0) {
-      const detected = detectFormation(starters);
-      setSelectedFormation(detected);
-    }
+    if (starters.length === 0) return;
+    setSelectedFormation(detectFormation(starters));
+    initializedFormationMatchRef.current = matchId;
   }, [matchId, starters]);
 
   const getPlayer = useCallback((playerId: string) => {
@@ -102,53 +108,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const formationConfig = PREDEFINED_FORMATIONS[selectedFormation] || PREDEFINED_FORMATIONS['1-4-3-3'];
   const formationSlots = formationConfig.slots;
 
-  // Accurately calculate which formation slots are occupied vs unassigned.
-  // CRITICAL: If 11 starters are already on the pitch, there are ZERO unassigned slots to show!
-  const { occupiedSlots, unassignedSlots } = useMemo(() => {
-    const occupied = new Map<string, MatchLineupEntry>();
-    const unassigned: FormationSlot[] = [];
-
-    // If all 11 starters are on the pitch, do not render ghost empty slots!
-    if (starters.length >= 11) {
-      return { occupiedSlots: occupied, unassignedSlots: [] };
-    }
-
-    // Available starters to match against slots
-    const availableStarters = [...starters];
-
-    for (const slot of formationSlots) {
-      // Find starter closest to this slot or matching exact position
-      let bestIndex = -1;
-      let minDistance = 18.0; // Distance threshold %
-
-      for (let i = 0; i < availableStarters.length; i++) {
-        const starter = availableStarters[i];
-        if (typeof starter.pitchX === 'number' && typeof starter.pitchY === 'number') {
-          const dist = pitchDistance(starter.pitchX, starter.pitchY, slot.x, slot.y);
-          if (dist < minDistance) {
-            minDistance = dist;
-            bestIndex = i;
-          }
-        } else if (starter.position?.toUpperCase() === slot.position.toUpperCase()) {
-          bestIndex = i;
-          break;
-        }
-      }
-
-      if (bestIndex !== -1) {
-        const matchedStarter = availableStarters.splice(bestIndex, 1)[0];
-        occupied.set(slot.id, matchedStarter);
-      } else {
-        unassigned.push(slot);
-      }
-    }
-
-    // Only show unassigned slots up to the number of missing starters (11 - starters.length)
-    const neededEmptySlots = Math.max(0, 11 - starters.length);
-    const trimmedUnassigned = unassigned.slice(0, neededEmptySlots);
-
-    return { occupiedSlots: occupied, unassignedSlots: trimmedUnassigned };
-  }, [formationSlots, starters]);
+  const unassignedSlots = useMemo(
+    () => formationSlots.filter((slot) => !findSlotOccupant(slot, starters, formationSlots)),
+    [formationSlots, starters]
+  );
 
   // Apply a predefined formation layout with intelligent spatial and positional matching
   const handleSelectFormation = async (formationKey: FormationType) => {
@@ -282,12 +245,13 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   // Move starter to bench (does NOT delete from squad)
   const handleMoveToBench = async (entry: MatchLineupEntry) => {
     setActiveTokenMenuId(null);
+    const player = getPlayer(entry.playerId);
     await onUpdateLineupEntry({
       id: entry.id,
       matchId,
       playerId: entry.playerId,
       starter: false,
-      position: entry.position || 'SUB',
+      position: player?.position || entry.position || 'SUB',
       shirtNumber: entry.shirtNumber,
       captain: entry.captain,
       pitchX: null,
@@ -374,34 +338,70 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const handleSubstituteDragStart = (event: React.DragEvent, entry: MatchLineupEntry) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/x-match-lineup-entry', entry.id);
+    setDraggedSubstituteId(entry.id);
+
+    const player = getPlayer(entry.playerId);
+    const preview = document.createElement('div');
+    preview.style.cssText = 'position:fixed;left:-9999px;top:-9999px;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:#002142;color:white;font:700 12px Inter,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25)';
+    const avatar = document.createElement('div');
+    avatar.style.cssText = `width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#0f5981 center/cover no-repeat;border:2px solid white;${player?.photoUrl ? `background-image:url("${player.photoUrl}")` : ''}`;
+    avatar.textContent = player?.photoUrl ? '' : String(entry.shirtNumber ?? player?.number ?? '–');
+    const label = document.createElement('div');
+    label.innerHTML = `<div>${getPlayerName(entry.playerId)}</div><div style="font-size:10px;color:#bae6fd;margin-top:2px">${entry.position || player?.position || 'SUB'}</div>`;
+    preview.append(avatar, label);
+    document.body.appendChild(preview);
+    event.dataTransfer.setDragImage(preview, 20, 20);
+    requestAnimationFrame(() => preview.remove());
   };
 
-  const handleSubstituteDrop = async (event: React.DragEvent) => {
+  const handleSubstituteDragEnd = () => {
+    setDraggedSubstituteId(null);
+    setHighlightedSlotId(null);
+  };
+
+  const handleSubstituteDrop = async (event: React.DragEvent, slot: FormationSlot) => {
     event.preventDefault();
+    event.stopPropagation();
     const entryId = event.dataTransfer.getData('application/x-match-lineup-entry');
     const entry = substitutes.find((substitute) => substitute.id === entryId);
-    const pitch = pitchRef.current;
-    if (!entry || !pitch) return;
+    setDraggedSubstituteId(null);
+    setHighlightedSlotId(null);
+    if (!entry) return;
 
-    const rect = pitch.getBoundingClientRect();
-    const pitchX = Math.round(Math.min(94, Math.max(6, ((event.clientX - rect.left) / rect.width) * 100)) * 10) / 10;
-    const pitchY = Math.round(Math.min(94, Math.max(6, ((event.clientY - rect.top) / rect.height) * 100)) * 10) / 10;
-    const nearestSlot = formationSlots.reduce((nearest, slot) => (
-      pitchDistance(pitchX, pitchY, slot.x, slot.y) < pitchDistance(pitchX, pitchY, nearest.x, nearest.y) ? slot : nearest
-    ));
-
-    await onUpdateLineupEntry({
+    const displacedStarter = findSlotOccupant(slot, starters, formationSlots);
+    const promotedEntry: ExistingMatchLineupEntryUpdate = {
       id: entry.id,
       matchId,
       playerId: entry.playerId,
       starter: true,
-      position: nearestSlot.position,
-      pitchX,
-      pitchY,
+      position: slot.position,
+      pitchX: slot.x,
+      pitchY: slot.y,
       shirtNumber: entry.shirtNumber,
       captain: entry.captain,
       notes: entry.notes
-    });
+    };
+
+    if (!displacedStarter) {
+      await onUpdateLineupEntry(promotedEntry);
+      return;
+    }
+
+    await onBatchUpdateLineupEntries([
+      promotedEntry,
+      {
+        id: displacedStarter.id,
+        matchId,
+        playerId: displacedStarter.playerId,
+        starter: false,
+        pitchX: null,
+        pitchY: null,
+        position: getPlayer(displacedStarter.playerId)?.position || displacedStarter.position,
+        shirtNumber: displacedStarter.shirtNumber,
+        captain: displacedStarter.captain,
+        notes: displacedStarter.notes
+      }
+    ]);
   };
 
   // Pointer drag logic for pitch tokens
@@ -434,16 +434,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
     setDragCoords({ x, y });
 
-    // Check if dragging near another starter to show swap target indicator
     const currentId = activeDragIdRef.current;
-    const otherStarter = starters.find((s) => {
-      if (s.id === currentId) return false;
-      const sx = s.pitchX ?? 50;
-      const sy = s.pitchY ?? 50;
-      return pitchDistance(x, y, sx, sy) < 7.5;
-    });
+    const nearestSlot = formationSlots.reduce((nearest, slot) => (
+      pitchDistance(x, y, slot.x, slot.y) < pitchDistance(x, y, nearest.x, nearest.y) ? slot : nearest
+    ));
+    const otherStarter = findSlotOccupant(nearestSlot, starters, formationSlots, currentId);
 
     setHoverTargetId(otherStarter ? otherStarter.id : null);
+    setHighlightedSlotId(nearestSlot.id);
   };
 
   const handlePointerUp = async (e: React.PointerEvent) => {
@@ -453,6 +451,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     activeDragIdRef.current = null;
     setDraggingId(null);
     setHoverTargetId(null);
+    setHighlightedSlotId(null);
 
     const pitchEl = pitchRef.current;
     if (pitchEl) {
@@ -462,33 +461,21 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
       const draggedEntry = starters.find((s) => s.id === draggedEntryId);
       if (draggedEntry) {
-        // Check if dropped onto another starter -> SWAP positions!
-        const targetStarter = starters.find((s) => {
-          if (s.id === draggedEntryId) return false;
-          const sx = s.pitchX ?? 50;
-          const sy = s.pitchY ?? 50;
-          return pitchDistance(finalX, finalY, sx, sy) < 8.0;
-        });
+        const targetSlot = formationSlots.reduce((nearest, slot) => (
+          pitchDistance(finalX, finalY, slot.x, slot.y) < pitchDistance(finalX, finalY, nearest.x, nearest.y) ? slot : nearest
+        ));
+        const targetStarter = findSlotOccupant(targetSlot, starters, formationSlots, draggedEntry.id);
 
         if (targetStarter) {
-          // Swap positions and coordinates
-          const origX = draggedEntry.pitchX ?? 50;
-          const origY = draggedEntry.pitchY ?? 50;
-          const origPos = draggedEntry.position;
-
-          const targetX = targetStarter.pitchX ?? 50;
-          const targetY = targetStarter.pitchY ?? 50;
-          const targetPos = targetStarter.position;
-
           await onBatchUpdateLineupEntries([
             {
               id: draggedEntry.id,
               matchId,
               playerId: draggedEntry.playerId,
               starter: true,
-              position: targetPos,
-              pitchX: targetX,
-              pitchY: targetY,
+              position: targetSlot.position,
+              pitchX: targetSlot.x,
+              pitchY: targetSlot.y,
               shirtNumber: draggedEntry.shirtNumber,
               captain: draggedEntry.captain,
               notes: draggedEntry.notes
@@ -497,41 +484,26 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               id: targetStarter.id,
               matchId,
               playerId: targetStarter.playerId,
-              starter: true,
-              position: origPos,
-              pitchX: origX,
-              pitchY: origY,
+              starter: false,
+              position: getPlayer(targetStarter.playerId)?.position || targetStarter.position,
+              pitchX: null,
+              pitchY: null,
               shirtNumber: targetStarter.shirtNumber,
               captain: targetStarter.captain,
               notes: targetStarter.notes
             }
           ]);
         } else {
-          // Check if dropped very close to an empty formation slot -> Snap to slot!
-          let snapX = finalX;
-          let snapY = finalY;
-          let snapPos = draggedEntry.position;
-
-          for (const slot of formationSlots) {
-            const isSlotTaken = starters.some((s) => s.id !== draggedEntry.id && s.pitchX === slot.x && s.pitchY === slot.y);
-            if (!isSlotTaken && pitchDistance(finalX, finalY, slot.x, slot.y) < 6.0) {
-              snapX = slot.x;
-              snapY = slot.y;
-              snapPos = slot.position;
-              break;
-            }
-          }
-
           await onUpdateLineupEntry({
             id: draggedEntry.id,
             matchId,
             playerId: draggedEntry.playerId,
-            position: snapPos,
+            position: targetSlot.position,
             starter: true,
             shirtNumber: draggedEntry.shirtNumber,
             captain: draggedEntry.captain,
-            pitchX: snapX,
-            pitchY: snapY,
+            pitchX: targetSlot.x,
+            pitchY: targetSlot.y,
             notes: draggedEntry.notes
           });
         }
@@ -548,6 +520,72 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
+
+  const renderMatchSquadRow = (entry: MatchLineupEntry, state: 'starter' | 'substitute') => {
+    const player = getPlayer(entry.playerId);
+    const isSubstitute = state === 'substitute';
+    const isBeingDragged = draggedSubstituteId === entry.id;
+
+    return (
+      <div
+        key={entry.id}
+        draggable={isSubstitute}
+        onDragStart={isSubstitute ? (event) => handleSubstituteDragStart(event, entry) : undefined}
+        onDragEnd={isSubstitute ? handleSubstituteDragEnd : undefined}
+        className={`flex min-h-12 items-center gap-2.5 px-1 py-2 transition-opacity ${
+          isBeingDragged ? 'opacity-45' : 'opacity-100'
+        } ${isSubstitute ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      >
+        {isSubstitute && <GripVertical className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />}
+        <PlayerPitchAvatar
+          photoUrl={player?.photoUrl}
+          shirtNumber={entry.shirtNumber ?? player?.number}
+          fallbackNumber="–"
+          sizeClassName="h-8 w-8"
+          className="shrink-0 border border-slate-200 bg-slate-100 text-xs font-black text-slate-700"
+          alt={getPlayerName(entry.playerId)}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-black text-slate-900">{getPlayerName(entry.playerId)}</p>
+          <p className="text-[10px] font-bold text-slate-400">
+            #{entry.shirtNumber ?? player?.number ?? '–'} · {entry.position || player?.position || (isSubstitute ? 'SUB' : 'UTIL')}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {isSubstitute ? (
+            <button
+              type="button"
+              onClick={() => handleMoveToStarter(entry)}
+              disabled={unassignedSlots.length === 0}
+              className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={`Make ${getPlayerName(entry.playerId)} a starter`}
+              title={unassignedSlots.length === 0 ? 'XI completo: arrastra sobre una titular para sustituirla' : 'Colocar en la primera posición disponible'}
+            >
+              Al campo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleMoveToBench(entry)}
+              className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 hover:bg-amber-100"
+              aria-label={`Move ${getPlayerName(entry.playerId)} to substitutes`}
+            >
+              Al banquillo
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onOpenEditModal(entry)}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            title="Editar detalles"
+            aria-label={`Edit ${getPlayerName(entry.playerId)}`}
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -658,9 +696,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             ref={pitchRef}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => void handleSubstituteDrop(event)}
-            className="relative select-none aspect-[3/4] sm:aspect-[4/5] min-h-[580px] w-full overflow-hidden rounded-3xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 p-4 shadow-2xl touch-none"
+            className="relative mx-auto aspect-[3/4] w-full max-w-[680px] select-none overflow-hidden rounded-3xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 p-4 shadow-2xl touch-none sm:aspect-[4/5]"
             style={{
               backgroundImage: `
                 linear-gradient(to bottom, rgba(16, 185, 129, 0.08) 50%, transparent 50%),
@@ -717,38 +753,57 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               Nuestra Portería
             </div>
 
-            {/* Render Empty Formation Slots */}
-            {unassignedSlots.map((slot) => (
-              <button
-                key={slot.id}
-                type="button"
-                onClick={() => setActiveSlotModal(slot)}
-                style={{
-                  left: `${slot.x}%`,
-                  top: `${slot.y}%`
-                }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 group flex flex-col items-center cursor-pointer transition-transform hover:scale-110 z-10"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-emerald-300/80 bg-emerald-950/50 text-emerald-200 shadow-md backdrop-blur-xs group-hover:border-white group-hover:bg-emerald-600/70">
-                  <Plus className="h-4 w-4" />
-                </div>
-                <span className="mt-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-emerald-200 group-hover:bg-emerald-900 group-hover:text-white">
-                  + {slot.position}
-                </span>
-              </button>
-            ))}
+            {/* Stable formation map: all 11 slots remain mounted at fixed coordinates. */}
+            {formationSlots.map((slot) => {
+              const occupant = findSlotOccupant(slot, starters, formationSlots, draggingId);
+              const isHighlighted = highlightedSlotId === slot.id;
+              const isDragActive = Boolean(draggedSubstituteId || draggingId);
+              return (
+                <button
+                  key={slot.id}
+                  type="button"
+                  aria-label={`${occupant ? 'Occupied' : 'Empty'} ${slot.position} tactical position`}
+                  onClick={() => !occupant && setActiveSlotModal(slot)}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setHighlightedSlotId(slot.id);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    setHighlightedSlotId(slot.id);
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setHighlightedSlotId((current) => current === slot.id ? null : current);
+                    }
+                  }}
+                  onDrop={(event) => void handleSubstituteDrop(event, slot)}
+                  style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
+                  className={`absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full transition-[transform,background-color,border-color,opacity,box-shadow] duration-150 ${
+                    isDragActive ? 'z-30' : 'z-10'
+                  } ${
+                    isHighlighted
+                      ? 'scale-110 border-2 border-white bg-sky-400/80 text-slate-950 shadow-[0_0_0_6px_rgba(125,211,252,0.25)]'
+                      : occupant
+                        ? 'border border-transparent bg-transparent text-transparent opacity-0'
+                        : 'border-2 border-dashed border-white/45 bg-emerald-950/30 text-white/80 hover:border-white/80 hover:bg-emerald-950/50'
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-current opacity-70" />
+                  <span className="mt-1 text-[9px] font-black uppercase">{slot.position}</span>
+                </button>
+              );
+            })}
 
             {/* Render Starter Player Tokens */}
             {starters.map((entry, index) => {
               const player = getPlayer(entry.playerId);
               const isBeingDragged = draggingId === entry.id;
               const isHoveredTarget = hoverTargetId === entry.id;
-              
-              // Coordinates: drag state > persisted pitchX/Y > formation slot fallback matching position
-              const matchingSlot = formationSlots.find((s) => s.position.toUpperCase() === (entry.position || '').toUpperCase());
-              const fallbackSlot = matchingSlot || formationSlots[index] || { x: 50, y: 50 };
-              const posX = isBeingDragged && dragCoords ? dragCoords.x : (entry.pitchX ?? fallbackSlot.x);
-              const posY = isBeingDragged && dragCoords ? dragCoords.y : (entry.pitchY ?? fallbackSlot.y);
+              const stablePosition = resolveStablePitchPosition(entry, formationSlots);
+              const posX = isBeingDragged && dragCoords ? dragCoords.x : stablePosition.x;
+              const posY = isBeingDragged && dragCoords ? dragCoords.y : stablePosition.y;
               const isMenuOpen = activeTokenMenuId === entry.id;
 
               return (
@@ -865,143 +920,45 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Bench & Matchday Squad Selector */}
-        <div className="space-y-5">
-          {/* Bench Section */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">
-                  Banquillo
-                </span>
-                <h4 className="text-sm font-black text-[#002142] font-display">
-                  Suplentes ({substitutes.length})
-                </h4>
+        {/* Unified called-up match squad panel */}
+        <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-[#002142] px-4 py-3.5 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-sky-300" />
+                <h4 className="text-sm font-black uppercase tracking-wide">Match Squad</h4>
               </div>
-              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200">
-                {substitutes.length} Disponibles
-              </span>
+              <span className="rounded-md bg-white/10 px-2 py-1 text-sm font-black tabular-nums">{lineupEntries.length}</span>
             </div>
-
-            {substitutes.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
-                No hay jugadoras en el banquillo. Añade jugadoras desde la plantilla de abajo.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto pr-1">
-                {substitutes.map((entry) => {
-                  const player = getPlayer(entry.playerId);
-                  return (
-                    <div
-                      key={entry.id}
-                      draggable
-                      onDragStart={(event) => handleSubstituteDragStart(event, entry)}
-                      className="flex cursor-grab items-center justify-between py-2.5 group active:cursor-grabbing"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <PlayerPitchAvatar
-                          photoUrl={player?.photoUrl}
-                          shirtNumber={entry.shirtNumber ?? player?.number}
-                          fallbackNumber="–"
-                          sizeClassName="h-8 w-8"
-                          className="shrink-0 bg-slate-100 text-xs font-black text-slate-700 border border-slate-200"
-                          alt={getPlayerName(entry.playerId)}
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-black text-slate-900">
-                            {getPlayerName(entry.playerId)}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400">
-                            {entry.position || player?.position || 'SUB'} {entry.minuteSubbedIn ? `• Entró: ${entry.minuteSubbedIn}'` : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleMoveToStarter(entry)}
-                          className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-                          title="Pasar al 11 titular en el campo"
-                        >
-                          + Titular
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onOpenEditModal(entry)}
-                          className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 cursor-pointer"
-                          title="Editar detalles"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-sky-200">
+              {starters.length} starters · {substitutes.length} substitutes
+            </p>
           </div>
 
-          {/* Called-up starters summary */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
-                  Called Up
-                </span>
-                <h4 className="text-sm font-black text-[#002142] font-display">
-                  Starting XI ({starters.length})
-                </h4>
-              </div>
-              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800">
-                {lineupEntries.length} Called Up
-              </span>
+          <section className="p-4">
+            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
+              <h5 className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Starting XI</h5>
+              <span className="text-xs font-black tabular-nums text-slate-500">{starters.length}</span>
             </div>
+            <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto pr-1">
+              {starters.length > 0
+                ? starters.map((entry) => renderMatchSquadRow(entry, 'starter'))
+                : <p className="py-5 text-center text-xs text-slate-400">Arrastra suplentes a las posiciones del campo.</p>}
+            </div>
+          </section>
 
-            <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto pr-1">
-              {starters.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  No hay titulares en el campo. Arrastra una suplente al campo o usa un hueco de formación.
-                </div>
-              ) : (
-                starters.map((entry) => {
-                  const player = getPlayer(entry.playerId);
-                  return (
-                    <div key={entry.id} className="flex items-center justify-between py-2.5 group">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <PlayerPitchAvatar
-                          photoUrl={player?.photoUrl}
-                          shirtNumber={entry.shirtNumber ?? player?.number}
-                          fallbackNumber="–"
-                          sizeClassName="h-8 w-8"
-                          className="shrink-0 bg-slate-100 text-xs font-black text-slate-700 border border-slate-200"
-                          alt={getPlayerName(entry.playerId)}
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-bold text-slate-900">
-                            {getPlayerName(entry.playerId)}
-                          </p>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
-                            <span>#{entry.shirtNumber ?? player?.number ?? '–'}</span>
-                            <span>{entry.position || player?.position || 'UTIL'}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button type="button" onClick={() => handleMoveToBench(entry)} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 hover:bg-amber-100">
-                          Al Banquillo
-                        </button>
-                        <button type="button" onClick={() => onOpenEditModal(entry)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Editar detalles">
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+          <section className="border-t border-slate-200 p-4">
+            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
+              <h5 className="text-[10px] font-black uppercase tracking-wider text-amber-700">Substitutes</h5>
+              <span className="text-xs font-black tabular-nums text-slate-500">{substitutes.length}</span>
             </div>
-          </div>
-        </div>
+            <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto pr-1">
+              {substitutes.length > 0
+                ? substitutes.map((entry) => renderMatchSquadRow(entry, 'substitute'))
+                : <p className="py-5 text-center text-xs text-slate-400">No hay suplentes convocadas.</p>}
+            </div>
+          </section>
+        </aside>
       </div>
 
       {/* Modal: Pick Player for Empty Formation Slot */}

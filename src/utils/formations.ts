@@ -152,6 +152,50 @@ export function pitchDistance(x1: number, y1: number, x2: number, y2: number): n
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function stableStringHash(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+export function resolveStablePitchPosition(
+  entry: { playerId: string; position?: string | null; pitchX?: number | null; pitchY?: number | null },
+  slots: FormationSlot[]
+): Pick<FormationSlot, 'x' | 'y' | 'position'> {
+  if (typeof entry.pitchX === 'number' && typeof entry.pitchY === 'number') {
+    return { x: entry.pitchX, y: entry.pitchY, position: entry.position || 'UTIL' };
+  }
+
+  const exactPositionSlots = slots.filter(
+    (slot) => slot.position.toUpperCase() === (entry.position || '').toUpperCase()
+  );
+  const categorySlots = slots.filter(
+    (slot) => getPositionCategory(slot.position) === getPositionCategory(entry.position)
+  );
+  const candidates = exactPositionSlots.length > 0
+    ? exactPositionSlots
+    : categorySlots.length > 0
+      ? categorySlots
+      : slots;
+  const fallback = candidates[stableStringHash(entry.playerId) % candidates.length];
+  return { x: fallback.x, y: fallback.y, position: fallback.position };
+}
+
+export function findSlotOccupant<TEntry extends { id: string; playerId: string; position?: string | null; pitchX?: number | null; pitchY?: number | null }>(
+  slot: FormationSlot,
+  starters: TEntry[],
+  slots: FormationSlot[],
+  excludedEntryId?: string | null
+): TEntry | null {
+  return starters.find((entry) => {
+    if (entry.id === excludedEntryId) return false;
+    const position = resolveStablePitchPosition(entry, slots);
+    return pitchDistance(position.x, position.y, slot.x, slot.y) < 5;
+  }) ?? null;
+}
+
 /**
  * Detect which formation best matches a set of coordinates and positions, or default to 1-4-3-3
  */

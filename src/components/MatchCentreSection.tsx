@@ -26,6 +26,7 @@ import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils
 import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
 import { selectCalledUpPlayers } from '../utils/matchLineup';
+import { countLogicalSubstitutions, findPairedSubstitutionEvent } from '../services/matches/substitutionLogic';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -460,6 +461,12 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
     try {
       setSaveState('events', 'saving');
+      const eventBeingEdited = editingEventId
+        ? events.find((event) => event.id === editingEventId) ?? null
+        : null;
+      const pairedEvent = eventBeingEdited
+        ? findPairedSubstitutionEvent(eventBeingEdited, events)
+        : null;
       const isOpponent = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
       const eventInput = {
         matchId: selectedMatch.id,
@@ -475,8 +482,28 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         ? await updateMatchEvent(editingEventId, eventInput)
         : await createMatchEvent(eventInput);
 
+      let savedPairedEvent: MatchEventModel | null = null;
+      if (
+        pairedEvent &&
+        (saved.eventType === 'substitution_in' || saved.eventType === 'substitution_out') &&
+        saved.playerId &&
+        saved.relatedPlayerId
+      ) {
+        savedPairedEvent = await updateMatchEvent(pairedEvent.id, {
+          teamSide: saved.teamSide,
+          eventType: saved.eventType === 'substitution_out' ? 'substitution_in' : 'substitution_out',
+          playerId: saved.relatedPlayerId,
+          relatedPlayerId: saved.playerId,
+          minute: saved.minute
+        });
+      }
+
       const nextEvents = editingEventId
-        ? events.map((event) => event.id === editingEventId ? saved : event)
+        ? events.map((event) => {
+            if (event.id === editingEventId) return saved;
+            if (savedPairedEvent && event.id === savedPairedEvent.id) return savedPairedEvent;
+            return event;
+          })
         : [...events, saved];
       nextEvents.sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds);
       setEvents(nextEvents);
@@ -565,8 +592,14 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     if (!selectedMatch) return;
     try {
       setSaveState('events', 'saving');
-      await deleteMatchEvent(eventId);
-      setEvents((current) => current.filter((event) => event.id !== eventId));
+      const eventToDelete = events.find((event) => event.id === eventId) ?? null;
+      const pairedEvent = eventToDelete
+        ? findPairedSubstitutionEvent(eventToDelete, events)
+        : null;
+      const eventIdsToDelete = pairedEvent ? [eventId, pairedEvent.id] : [eventId];
+      await Promise.all(eventIdsToDelete.map(deleteMatchEvent));
+      const deletedIds = new Set(eventIdsToDelete);
+      setEvents((current) => current.filter((event) => !deletedIds.has(event.id)));
       setStats(await recalculatePlayerMatchStatistics(selectedMatch.id));
       setSaveState('events', 'saved');
     } catch (error) {
@@ -1503,12 +1536,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       (e) => e.eventType === 'red_card' && e.teamSide === 'opponent'
     ).length;
 
-    const subInEvents = events.filter((e) => e.eventType === 'substitution_in');
-    const subOutEvents = events.filter((e) => e.eventType === 'substitution_out');
-    const unpairedSubOut = subOutEvents.filter(
-      (outEv) => !subInEvents.some((inEv) => inEv.minute === outEv.minute && (inEv.relatedPlayerId === outEv.playerId || inEv.playerId === outEv.relatedPlayerId))
-    );
-    const ourSubstitutions = subInEvents.length + unpairedSubOut.length;
+    const ourSubstitutions = countLogicalSubstitutions(events);
 
     const ourInjuries = events.filter(
       (e) => e.eventType === 'injury' && (e.teamSide === 'our_team' || !e.teamSide)

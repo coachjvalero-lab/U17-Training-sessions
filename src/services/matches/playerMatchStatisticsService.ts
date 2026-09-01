@@ -2,6 +2,7 @@ import { supabase } from '../../supabaseClient';
 import type { MatchEvent, MatchLineupEntry, PlayerMatchStatistics } from '../../types';
 import { getMatchEvents } from './matchEventsService';
 import { getMatchLineup } from './matchLineupService';
+import { calculatePlayerMinutesFromEvents } from './substitutionLogic';
 
 const PLAYER_MATCH_STATISTICS_TABLE = 'player_match_statistics';
 
@@ -109,9 +110,12 @@ export function derivePlayerMatchStatsFromData(
   matchEvents: MatchEvent[],
   matchDurationMinutes = 90
 ): Pick<PlayerMatchStatistics, 'matchId' | 'playerId' | 'minutesPlayed' | 'starts' | 'goals' | 'assists' | 'yellowCards' | 'redCards'> {
-  const minutesPlayed = lineupEntry
-    ? calculateMinutesPlayedFromLineupEntry(lineupEntry, matchDurationMinutes)
-    : 0;
+  const minutesPlayed = calculatePlayerMinutesFromEvents(
+    playerId,
+    Boolean(lineupEntry?.starter),
+    matchEvents,
+    matchDurationMinutes
+  );
 
   const starts = Boolean(lineupEntry?.starter);
 
