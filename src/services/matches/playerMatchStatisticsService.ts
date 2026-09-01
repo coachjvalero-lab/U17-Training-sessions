@@ -115,10 +115,40 @@ export function derivePlayerMatchStatsFromData(
 
   const starts = Boolean(lineupEntry?.starter);
 
-  const goals = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'goal' && event.playerId === playerId).length;
-  const assists = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'assist' && event.playerId === playerId).length;
-  const yellowCards = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'yellow_card' && event.playerId === playerId).length;
-  const redCards = matchEvents.filter((event) => event.teamSide === 'our_team' && event.eventType === 'red_card' && event.playerId === playerId).length;
+  const goals = matchEvents.filter(
+    (event) => event.teamSide === 'our_team' && event.eventType === 'goal' && event.playerId === playerId
+  ).length;
+
+  // Direct assists where the player is explicitly the event subject (eventType === 'assist')
+  const directAssistEvents = matchEvents.filter(
+    (event) => (event.teamSide === 'our_team' || !event.teamSide) && event.eventType === 'assist' && event.playerId === playerId
+  );
+
+  // Goal assists where the player is recorded in relatedPlayerId on a goal event
+  // Exclude goals where a separate direct assist event already exists for this player at the same minute / timestamp window
+  const goalAssistEvents = matchEvents.filter(
+    (event) =>
+      (event.teamSide === 'our_team' || !event.teamSide) &&
+      event.eventType === 'goal' &&
+      event.relatedPlayerId === playerId &&
+      !directAssistEvents.some(
+        (direct) =>
+          direct.minute === event.minute ||
+          (direct.videoTimestampSeconds > 0 &&
+            event.videoTimestampSeconds > 0 &&
+            Math.abs(direct.videoTimestampSeconds - event.videoTimestampSeconds) <= 15)
+      )
+  );
+
+  const assists = directAssistEvents.length + goalAssistEvents.length;
+
+  const yellowCards = matchEvents.filter(
+    (event) => event.teamSide === 'our_team' && event.eventType === 'yellow_card' && event.playerId === playerId
+  ).length;
+
+  const redCards = matchEvents.filter(
+    (event) => event.teamSide === 'our_team' && event.eventType === 'red_card' && event.playerId === playerId
+  ).length;
 
   return {
     matchId: '',
@@ -138,7 +168,11 @@ export async function recalculatePlayerMatchStatistics(matchId: string, matchDur
     getMatchEvents(matchId)
   ]);
 
-  const playerIds = Array.from(new Set(lineupEntries.map((entry) => entry.playerId)));
+  const lineupPlayerIds = lineupEntries.map((entry) => entry.playerId);
+  const eventPlayerIds = matchEvents
+    .flatMap((event) => [event.playerId, event.relatedPlayerId])
+    .filter((id): id is string => Boolean(id));
+  const playerIds = Array.from(new Set([...lineupPlayerIds, ...eventPlayerIds]));
   const results: PlayerMatchStatistics[] = [];
 
   for (const playerId of playerIds) {
@@ -158,5 +192,5 @@ export async function recalculatePlayerMatchStatistics(matchId: string, matchDur
     results.push(saved);
   }
 
-  return results.sort((a, b) => b.minutesPlayed - a.minutesPlayed || a.playerId.localeCompare(b.playerId));
+  return results.sort((a, b) => b.minutesPlayed - a.minutesPlayed || (b.goals + b.assists) - (a.goals + a.assists) || a.playerId.localeCompare(b.playerId));
 }

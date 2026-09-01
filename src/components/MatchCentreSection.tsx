@@ -20,7 +20,7 @@ import { MatchPitchBoard } from './MatchPitchBoard';
 import type { FormationSlot } from '../utils/formations';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
-import { getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
+import { derivePlayerMatchStatsFromData, getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
 import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squad/squadService';
 import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics, TeamSide } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
@@ -1480,9 +1480,115 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     );
   };
 
+  const derivedPlayerStats = useMemo(() => {
+    const lineupPlayerIds = lineupEntries.map((e) => e.playerId);
+    const eventPlayerIds = events
+      .flatMap((e) => [e.playerId, e.relatedPlayerId])
+      .filter((id): id is string => Boolean(id) && squadPlayers.some((p) => p.id === id));
+    const allPlayerIds = Array.from(new Set([...lineupPlayerIds, ...eventPlayerIds]));
+
+    if (allPlayerIds.length === 0 && stats.length > 0) {
+      return stats;
+    }
+
+    return allPlayerIds.map((playerId) => {
+      const lineupEntry = lineupEntries.find((e) => e.playerId === playerId);
+      const derived = derivePlayerMatchStatsFromData(playerId, lineupEntry, events);
+      return {
+        id: playerId,
+        matchId: selectedMatch?.id || '',
+        playerId,
+        minutesPlayed: derived.minutesPlayed,
+        starts: derived.starts,
+        goals: derived.goals,
+        assists: derived.assists,
+        yellowCards: derived.yellowCards,
+        redCards: derived.redCards
+      };
+    }).sort((a, b) => b.minutesPlayed - a.minutesPlayed || (b.goals + b.assists) - (a.goals + a.assists) || a.playerId.localeCompare(b.playerId));
+  }, [lineupEntries, events, squadPlayers, selectedMatch?.id, stats]);
+
+  const matchTeamStats = useMemo(() => {
+    const ourGoals = events.filter(
+      (e) => (e.eventType === 'goal' && (e.teamSide === 'our_team' || !e.teamSide))
+    ).length;
+    const opponentGoals = events.filter(
+      (e) => e.eventType === 'opponent_goal' || (e.eventType === 'goal' && e.teamSide === 'opponent')
+    ).length;
+
+    const directAssistEvents = events.filter(
+      (e) => (e.teamSide === 'our_team' || !e.teamSide) && e.eventType === 'assist'
+    );
+    const goalAssistEvents = events.filter(
+      (e) =>
+        (e.teamSide === 'our_team' || !e.teamSide) &&
+        e.eventType === 'goal' &&
+        Boolean(e.relatedPlayerId) &&
+        !directAssistEvents.some(
+          (direct) =>
+            (direct.playerId === e.relatedPlayerId && direct.minute === e.minute) ||
+            (direct.playerId === e.relatedPlayerId &&
+              direct.videoTimestampSeconds > 0 &&
+              e.videoTimestampSeconds > 0 &&
+              Math.abs(direct.videoTimestampSeconds - e.videoTimestampSeconds) <= 15)
+        )
+    );
+    const ourAssists = directAssistEvents.length + goalAssistEvents.length;
+
+    const ourCorners = events.filter(
+      (e) => (e.eventType === 'corner' && (e.teamSide === 'our_team' || !e.teamSide))
+    ).length;
+    const opponentCorners = events.filter(
+      (e) => e.eventType === 'opponent_corner' || (e.eventType === 'corner' && e.teamSide === 'opponent')
+    ).length;
+
+    const ourYellowCards = events.filter(
+      (e) => e.eventType === 'yellow_card' && (e.teamSide === 'our_team' || !e.teamSide)
+    ).length;
+    const opponentYellowCards = events.filter(
+      (e) => e.eventType === 'yellow_card' && e.teamSide === 'opponent'
+    ).length;
+
+    const ourRedCards = events.filter(
+      (e) => e.eventType === 'red_card' && (e.teamSide === 'our_team' || !e.teamSide)
+    ).length;
+    const opponentRedCards = events.filter(
+      (e) => e.eventType === 'red_card' && e.teamSide === 'opponent'
+    ).length;
+
+    const subInEvents = events.filter((e) => e.eventType === 'substitution_in');
+    const subOutEvents = events.filter((e) => e.eventType === 'substitution_out');
+    const unpairedSubOut = subOutEvents.filter(
+      (outEv) => !subInEvents.some((inEv) => inEv.minute === outEv.minute && (inEv.relatedPlayerId === outEv.playerId || inEv.playerId === outEv.relatedPlayerId))
+    );
+    const ourSubstitutions = subInEvents.length + unpairedSubOut.length;
+
+    const ourInjuries = events.filter(
+      (e) => e.eventType === 'injury' && (e.teamSide === 'our_team' || !e.teamSide)
+    ).length;
+
+    const totalMinutes = derivedPlayerStats.reduce((acc, p) => acc + p.minutesPlayed, 0);
+    const playersUsed = derivedPlayerStats.filter((p) => p.minutesPlayed > 0 || p.starts || p.goals > 0 || p.assists > 0 || p.yellowCards > 0 || p.redCards > 0).length;
+
+    return {
+      ourGoals,
+      opponentGoals,
+      ourAssists,
+      ourCorners,
+      opponentCorners,
+      ourYellowCards,
+      opponentYellowCards,
+      ourRedCards,
+      opponentRedCards,
+      ourSubstitutions,
+      ourInjuries,
+      totalMinutes,
+      playersUsed
+    };
+  }, [events, derivedPlayerStats]);
+
   const renderStatisticsTab = () => {
     if (!selectedMatch) return null;
-    const totals = stats.reduce((total, stat) => ({ minutes: total.minutes + stat.minutesPlayed, goals: total.goals + stat.goals, assists: total.assists + stat.assists }), { minutes: 0, goals: 0, assists: 0 });
     const playerName = (playerId: string) => {
       const player = squadPlayers.find((item) => item.id === playerId);
       return player ? `${player.firstName} ${player.lastName}` : playerId;
@@ -1490,41 +1596,185 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
     return (
       <div className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[{ label: 'Players used', value: stats.length, icon: Users }, { label: 'Team minutes', value: totals.minutes, icon: Activity }, { label: 'Goals', value: totals.goals, icon: Trophy }, { label: 'Assists', value: totals.assists, icon: Swords }].map((metric) => <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4"><metric.icon className="h-4 w-4 text-sky-700" /><div className="mt-3 text-2xl font-black text-slate-950">{metric.value}</div><div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">{metric.label}</div></div>)}</div>
-        <div className="rounded-lg border border-slate-200 bg-white p-5"><div className="mb-4"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Performance output</p><h3 className="text-lg font-black text-slate-950">Player statistics</h3></div><div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-100 text-slate-700">
-              <tr>
-                <th className="px-3 py-2 font-black">Player</th>
-                <th className="px-3 py-2 font-black">Starter</th>
-                <th className="px-3 py-2 font-black">Minutes</th>
-                <th className="px-3 py-2 font-black">Goals</th>
-                <th className="px-3 py-2 font-black">Assists</th>
-                <th className="px-3 py-2 font-black">Yellows</th>
-                <th className="px-3 py-2 font-black">Reds</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.length === 0 ? (
+        {/* Match Summary Metrics */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Resumen del partido</p>
+              <h3 className="text-lg font-black text-slate-950 font-display">Estadísticas del encuentro</h3>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+              Fuente: Cronología oficial ({events.length} eventos)
+            </span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Goals */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Goles (Favor / Rival)</span>
+                <Trophy className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-black text-emerald-700">{matchTeamStats.ourGoals}</span>
+                <span className="text-xl font-bold text-slate-400">-</span>
+                <span className="text-2xl font-bold text-rose-600">{matchTeamStats.opponentGoals}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {matchTeamStats.ourGoals} a favor · {matchTeamStats.opponentGoals} rival
+              </div>
+            </div>
+
+            {/* Corners */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Córners (Favor / Rival)</span>
+                <Flag className="h-4 w-4 text-sky-600" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-black text-sky-800">{matchTeamStats.ourCorners}</span>
+                <span className="text-xl font-bold text-slate-400">-</span>
+                <span className="text-2xl font-bold text-slate-500">{matchTeamStats.opponentCorners}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {matchTeamStats.ourCorners} a favor · {matchTeamStats.opponentCorners} en contra
+              </div>
+            </div>
+
+            {/* Assists & Substitutions */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Asistencias y Cambios</span>
+                <Swords className="h-4 w-4 text-indigo-600" />
+              </div>
+              <div className="mt-2 flex items-baseline gap-3">
+                <div>
+                  <span className="text-3xl font-black text-slate-900">{matchTeamStats.ourAssists}</span>
+                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">asist.</span>
+                </div>
+                <div className="text-slate-300">|</div>
+                <div>
+                  <span className="text-2xl font-black text-slate-700">{matchTeamStats.ourSubstitutions}</span>
+                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">cambios</span>
+                </div>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {matchTeamStats.ourInjuries > 0 ? `${matchTeamStats.ourInjuries} lesión(es) registradas` : 'Sin incidencias físicas'}
+              </div>
+            </div>
+
+            {/* Cards & Discipline */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Disciplina / Tarjetas</span>
+                <Shield className="h-4 w-4 text-amber-600" />
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3.5 w-2.5 rounded-xs bg-amber-400 shadow-xs"></span>
+                  <span className="text-2xl font-black text-slate-900">{matchTeamStats.ourYellowCards}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3.5 w-2.5 rounded-xs bg-rose-600 shadow-xs"></span>
+                  <span className="text-2xl font-black text-slate-900">{matchTeamStats.ourRedCards}</span>
+                </div>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                Amarillas: {matchTeamStats.ourYellowCards} · Rojas: {matchTeamStats.ourRedCards}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Player Statistics Table */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Rendimiento individual</p>
+              <h3 className="text-lg font-black text-slate-950 font-display">Estadísticas por jugadora</h3>
+            </div>
+            <div className="text-xs font-bold text-slate-500">
+              {derivedPlayerStats.length} jugadoras con actividad
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-700">
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">No statistics recorded yet.</td>
+                  <th className="px-3 py-2.5 font-black">Jugadora</th>
+                  <th className="px-3 py-2.5 font-black text-center">Titular</th>
+                  <th className="px-3 py-2.5 font-black text-center">Minutos</th>
+                  <th className="px-3 py-2.5 font-black text-center">Goles</th>
+                  <th className="px-3 py-2.5 font-black text-center">Asistencias</th>
+                  <th className="px-3 py-2.5 font-black text-center">T. Amarillas</th>
+                  <th className="px-3 py-2.5 font-black text-center">T. Rojas</th>
                 </tr>
-              ) : (
-                stats.map((stat) => (
-                  <tr key={stat.id} className="border-t border-slate-200">
-                    <td className="px-3 py-3 font-bold text-slate-900">{playerName(stat.playerId)}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.starts ? 'Yes' : 'No'}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.minutesPlayed}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.goals}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.assists}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.yellowCards}</td>
-                    <td className="px-3 py-2 text-slate-700">{stat.redCards}</td>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {derivedPlayerStats.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                      No hay estadísticas registradas todavía para este partido.
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div></div>
+                ) : (
+                  derivedPlayerStats.map((stat) => (
+                    <tr key={stat.id || stat.playerId} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-3 py-3 font-bold text-slate-900">{playerName(stat.playerId)}</td>
+                      <td className="px-3 py-2 text-center text-slate-700">
+                        {stat.starts ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">
+                            Sí
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">No</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center font-mono font-bold text-slate-800">{stat.minutesPlayed}'</td>
+                      <td className="px-3 py-2 text-center">
+                        {stat.goals > 0 ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+                            {stat.goals}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {stat.assists > 0 ? (
+                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 font-bold text-indigo-800">
+                            {stat.assists}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {stat.yellowCards > 0 ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800">
+                            {stat.yellowCards}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {stat.redCards > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 font-bold text-rose-800">
+                            {stat.redCards}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   };
