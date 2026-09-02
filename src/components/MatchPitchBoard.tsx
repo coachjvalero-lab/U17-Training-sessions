@@ -5,6 +5,7 @@ import {
   Edit3, 
   ArrowRightLeft, 
   RotateCcw, 
+  RefreshCw,
   Move,
   ChevronDown,
   Sparkles,
@@ -69,8 +70,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
   const isDraggingRef = useRef(false);
   const activeDragIdRef = useRef<string | null>(null);
 
-    // Drag coordinates stored in ref to avoid re-renders during pointer movement
-    const dragCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  // Drag coordinates must be state (not a ref) so the dragged token's position re-renders
+  // and visually follows the pointer/touch on every move.
+  const [dragCoords, setDragCoords] = useState<{ x: number; y: number } | null>(null);
 
   const starters = useMemo(() => lineupEntries.filter((e) => e.starter), [lineupEntries]);
   const substitutes = useMemo(() => lineupEntries.filter((e) => !e.starter), [lineupEntries]);
@@ -298,6 +300,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     await onBatchUpdateLineupEntries(updates);
   };
 
+  // Reset: re-detect the best-fit formation from the current starters and re-apply clean
+  // slot positions, clearing any manual drag adjustments (does not change who is a starter).
+  const handleResetBoard = async () => {
+    if (starters.length === 0) return;
+    const detected = detectFormation(starters);
+    await handleSelectFormation(detected);
+  };
+
   // Quick fill remaining formation slots with called-up substitutes only
   const handleAutoFillFormation = async () => {
     if (unassignedSlots.length === 0) return;
@@ -420,7 +430,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       const rect = pitchEl.getBoundingClientRect();
       const x = Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100));
       const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
-      dragCoordsRef.current = { x, y };
+      setDragCoords({ x, y });
     }
 
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -434,7 +444,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     const rect = pitchEl.getBoundingClientRect();
     const x = Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100));
     const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
-      dragCoordsRef.current = { x, y };
+    setDragCoords({ x, y });
 
     const currentId = activeDragIdRef.current;
     const nearestSlot = formationSlots.reduce((nearest, slot) => (
@@ -454,7 +464,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     setDraggingId(null);
     setHoverTargetId(null);
     setHighlightedSlotId(null);
-      dragCoordsRef.current = null;
+    setDragCoords(null);
 
     const pitchEl = pitchRef.current;
     if (pitchEl) {
@@ -561,9 +571,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               disabled={unassignedSlots.length === 0}
               className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label={`Make ${getPlayerName(entry.playerId)} a starter`}
-              title={unassignedSlots.length === 0 ? 'XI completo: arrastra sobre una titular para sustituirla' : 'Colocar en la primera posición disponible'}
+              title={unassignedSlots.length === 0 ? 'XI complete: drag onto a starter to substitute them' : 'Place in the first available slot'}
             >
-              Al campo
+              To pitch
             </button>
           ) : (
             <button
@@ -572,14 +582,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-800 hover:bg-amber-100"
               aria-label={`Move ${getPlayerName(entry.playerId)} to substitutes`}
             >
-              Al banquillo
+              To bench
             </button>
           )}
           <button
             type="button"
             onClick={() => onOpenEditModal(entry)}
             className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            title="Editar detalles"
+            title="Edit details"
             aria-label={`Edit ${getPlayerName(entry.playerId)}`}
           >
             <Edit3 className="h-3.5 w-3.5" />
@@ -591,31 +601,31 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header & Predefined Formations Bar */}
+      {/* Header & Toolbar */}
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                Pizarra Táctica
+                Tactical Pitch Board
               </span>
               <span className="text-xs font-bold text-slate-500">
-                Titulares: <strong className="text-slate-900">{starters.length}/11</strong> • Suplentes: <strong className="text-slate-900">{substitutes.length}</strong>
+                Starters: <strong className="text-slate-900">{starters.length}/11</strong> • Substitutes: <strong className="text-slate-900">{substitutes.length}</strong>
               </span>
             </div>
             <h3 className="mt-1 text-lg font-black text-[#002142] font-display">
-              Alineación y Esquema Táctico
+              Lineup &amp; Formation
             </h3>
             <p className="text-xs text-slate-500 font-medium">
-              Arrastra las jugadoras para ajustar posiciones tácticas o haz clic en los huecos vacíos para colocar titulares.
+              Drag players to fine-tune tactical positions, or click an empty slot to place a starter.
             </p>
           </div>
 
-          {/* Formations Quick Switcher & Tools */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-100 p-1.5 border border-slate-200">
-              <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Formación:
+          {/* Toolbar */}
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="px-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Formation
               </span>
               {FORMATION_KEYS.map((key) => {
                 const isSelected = selectedFormation === key;
@@ -637,40 +647,49 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             </div>
 
             {/* Tactical Actions */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
               <button
                 type="button"
                 onClick={() => handleSelectFormation(selectedFormation)}
-                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-                title="Alinear automáticamente los titulares a la formación activa"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                title="Snap the current starters onto the active formation"
               >
                 <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
-                <span>Auto-alinear</span>
+                <span>Auto Align</span>
               </button>
 
-              {unassignedSlots.length > 0 && substitutes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleAutoFillFormation}
-                  className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-black text-white shadow-xs transition-colors"
-                  title="Completar el 11 titular automáticamente con las jugadoras disponibles"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Completar 11</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleAutoFillFormation}
+                disabled={unassignedSlots.length === 0 || substitutes.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-black text-white shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
+                title="Fill every empty formation slot with available substitutes"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Complete XI</span>
+              </button>
 
-              {starters.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleMoveAllToBench}
-                  className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 transition-colors"
-                  title="Mover todos los titulares al banquillo"
-                >
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
-                  <span>Al banquillo</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleMoveAllToBench}
+                disabled={starters.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                title="Move every starter to the bench"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                <span>Bench</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetBoard}
+                disabled={starters.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                title="Reset the board to a clean auto-detected formation"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Reset</span>
+              </button>
             </div>
           </div>
         </div>
@@ -682,9 +701,9 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               saveStatus.state === 'saving' ? 'text-sky-600' :
               saveStatus.state === 'saved' ? 'text-emerald-600' : 'text-rose-600'
             }`}>
-              {saveStatus.state === 'saving' && 'Guardando cambios en la alineación...'}
-              {saveStatus.state === 'saved' && '✓ Esquema táctico y posiciones guardadas correctamente'}
-              {saveStatus.state === 'error' && (saveStatus.message || 'Error al guardar la alineación')}
+              {saveStatus.state === 'saving' && 'Saving lineup changes...'}
+              {saveStatus.state === 'saved' && '✓ Formation and positions saved successfully'}
+              {saveStatus.state === 'error' && (saveStatus.message || 'Failed to save the lineup')}
             </span>
           </div>
         )}
@@ -758,10 +777,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
             {/* Goal Posts labels */}
             <div className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
-              Campo Rival
+              Opponent's Goal
             </div>
             <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
-              Nuestra Portería
+              Our Goal
             </div>
 
             {/* Stable formation map: all 11 slots remain mounted at fixed coordinates. */}
@@ -813,8 +832,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               const isBeingDragged = draggingId === entry.id;
               const isHoveredTarget = hoverTargetId === entry.id;
               const stablePosition = resolveStablePitchPosition(entry, formationSlots);
-                const posX = isBeingDragged && dragCoordsRef.current ? dragCoordsRef.current.x : stablePosition.x;
-                const posY = isBeingDragged && dragCoordsRef.current ? dragCoordsRef.current.y : stablePosition.y;
+                const posX = isBeingDragged && dragCoords ? dragCoords.x : stablePosition.x;
+                const posY = isBeingDragged && dragCoords ? dragCoords.y : stablePosition.y;
               const isMenuOpen = activeTokenMenuId === entry.id;
 
               return (
@@ -871,7 +890,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         setActiveTokenMenuId(isMenuOpen ? null : entry.id);
                       }}
                       className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-700 shadow-md hover:bg-slate-100 hover:text-slate-900 border border-slate-200 cursor-pointer"
-                      title="Opciones de jugadora"
+                      title="Player options"
                     >
                       <ChevronDown className="h-3 w-3" />
                     </button>
@@ -893,7 +912,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                           className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-900 text-left transition-colors cursor-pointer"
                         >
                           <ArrowRightLeft className="h-3.5 w-3.5 text-amber-600" />
-                          <span>Mover al Banquillo</span>
+                          <span>Move to Bench</span>
                         </button>
                         <button
                           type="button"
@@ -918,14 +937,14 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 px-4 py-2.5 border border-slate-200 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <Move className="h-4 w-4 text-emerald-600" />
-              <span>Arrastra para mover o suelta encima de otra jugadora para intercambiar posiciones.</span>
+              <span>Drag to move, or drop onto another player to swap positions.</span>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-bold">
               <span className="flex items-center gap-1 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Titulares ({starters.length}/11)
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> Starters ({starters.length}/11)
               </span>
               <span className="flex items-center gap-1 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-amber-500" /> Suplentes ({substitutes.length})
+                <span className="h-2 w-2 rounded-full bg-amber-500" /> Substitutes ({substitutes.length})
               </span>
             </div>
           </div>
@@ -954,7 +973,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto pr-1">
               {starters.length > 0
                 ? starters.map((entry) => renderMatchSquadRow(entry, 'starter'))
-                : <p className="py-5 text-center text-xs text-slate-400">Arrastra suplentes a las posiciones del campo.</p>}
+                : <p className="py-5 text-center text-xs text-slate-400">Drag substitutes onto the pitch positions.</p>}
             </div>
           </section>
 
@@ -966,7 +985,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto pr-1">
               {substitutes.length > 0
                 ? substitutes.map((entry) => renderMatchSquadRow(entry, 'substitute'))
-                : <p className="py-5 text-center text-xs text-slate-400">No hay suplentes convocadas.</p>}
+                : <p className="py-5 text-center text-xs text-slate-400">No substitutes called up.</p>}
             </div>
           </section>
         </aside>
@@ -979,10 +998,10 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                  Asignar Posición Titular
+                  Assign Starting Position
                 </span>
                 <h3 className="text-base font-black text-[#002142] font-display">
-                  Elegir jugadora para {activeSlotModal.position}
+                  Choose a player for {activeSlotModal.position}
                 </h3>
               </div>
               <button
@@ -995,7 +1014,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             </div>
 
             <p className="text-xs text-slate-500 font-medium">
-              Selecciona una jugadora convocada del banquillo para colocarla en {activeSlotModal.position}.
+              Choose a called-up player from the bench to place at {activeSlotModal.position}.
             </p>
 
             {/* List of candidates */}
@@ -1003,7 +1022,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               {/* First list bench substitutes */}
               {substitutes.length > 0 && (
                 <div className="pb-2">
-                  <span className="text-[10px] font-black uppercase text-amber-700">Desde el Banquillo</span>
+                  <span className="text-[10px] font-black uppercase text-amber-700">From the Bench</span>
                   {substitutes.map((entry) => {
                     const player = getPlayer(entry.playerId);
                     const isCompat = isPositionCompatible(activeSlotModal.position, entry.position || player?.position);
@@ -1031,7 +1050,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
                           isCompat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
                         }`}>
-                          Poner como {activeSlotModal.position}
+                          Set as {activeSlotModal.position}
                         </span>
                       </button>
                     );
@@ -1041,7 +1060,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
               {substitutes.length === 0 && (
                 <p className="py-6 text-center text-xs text-slate-400">
-                  No hay suplentes convocadas disponibles.
+                  No substitutes available.
                 </p>
               )}
             </div>
