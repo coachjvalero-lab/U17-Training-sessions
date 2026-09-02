@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import dotenv from 'dotenv';
 import { defineConfig, Plugin } from 'vite';
-import { generateMatchEvents } from './api/_lib/matchEventsAi';
+import { generateMatchEvents, isGenerateMatchEventsFailure } from './api/_lib/matchEventsAi';
+import { requireSupabaseUser } from './api/_lib/supabaseAuth';
 
 // Server-only secrets (GEMINI_API_KEY) are not exposed by Vite's env handling,
 // so load them into process.env for the dev API middleware.
@@ -32,6 +33,14 @@ function apiEndpointsPlugin(): Plugin {
         }
 
         if (url === '/api/match/generate-events' && req.method === 'POST') {
+          const isAuthenticated = await requireSupabaseUser(req.headers?.authorization);
+          if (!isAuthenticated) {
+            res.statusCode = 401;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'No autenticado. Inicia sesión para generar eventos con IA.' }));
+            return;
+          }
+
           let bodyStr = '';
           req.on('data', (chunk) => {
             bodyStr += chunk;
@@ -40,6 +49,9 @@ function apiEndpointsPlugin(): Plugin {
             try {
               const body = bodyStr ? JSON.parse(bodyStr) : {};
               const result = await generateMatchEvents(body || {}, process.env.GEMINI_API_KEY);
+              res.statusCode = !isGenerateMatchEventsFailure(result)
+                ? 200
+                : result.errorCode === 'not_configured' ? 500 : result.errorCode === 'analysis_failed' ? 502 : 400;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify(result));
             } catch (err: any) {

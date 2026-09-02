@@ -16,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import type { Match, MatchEvent, MatchEventType, SquadPlayer, TeamSide } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface AiGeneratedEvent {
   minute: number;
@@ -109,7 +110,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiWarning, setAiWarning] = useState<string | null>(null);
+  const [videoAnalyzed, setVideoAnalyzed] = useState<boolean | null>(null);
   const [generatedEvents, setGeneratedEvents] = useState<AiGeneratedEvent[]>([]);
   const [replaceExisting, setReplaceExisting] = useState(false);
 
@@ -122,12 +123,21 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     setError(null);
-    setAiWarning(null);
+    setVideoAnalyzed(null);
 
     try {
+      const { data: sessionData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        throw new Error('Debes iniciar sesión para generar eventos con IA.');
+      }
+
       const response = await fetch('/api/match/generate-events', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
         body: JSON.stringify({
           matchId: match.id,
           videoUrl: videoUrl.trim(),
@@ -160,8 +170,13 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         throw new Error(data.error || `Error del servidor al generar eventos (HTTP ${response.status}).`);
       }
 
+      // Defense in depth: only a videoAnalyzed:true success may populate applicable events.
+      if (data.videoAnalyzed !== true) {
+        throw new Error('La IA no confirmó haber analizado el vídeo. No se muestran eventos.');
+      }
+
       setAiSummary(data.summary || '');
-      setAiWarning(data.isFallback ? (data.fallbackReason || 'La IA no está disponible: se muestra una plantilla táctica base editable.') : null);
+      setVideoAnalyzed(true);
 
       const knownPlayerIds = new Set(squadPlayers.map((p) => p.id));
       const playerIdByName = new Map(
@@ -202,8 +217,8 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
 
   const handleGenerateFallbackTemplate = () => {
     setError(null);
-    setAiWarning(null);
-    setAiSummary('Plantilla base sugerida con distribución táctica de eventos estándar (Goles, Córners y Sustituciones).');
+    setVideoAnalyzed(false);
+    setAiSummary('Plantilla base sugerida con distribución táctica de eventos estándar (Goles, Córners y Sustituciones). Estos eventos NO proceden de un análisis de vídeo: revísalos y edítalos antes de aplicarlos.');
     
     const p1 = squadPlayers[0];
     const p2 = squadPlayers[1] || squadPlayers[0];
@@ -390,7 +405,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                   IA Video Analytics
                 </span>
                 <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-bold text-cyan-200">
-                  Gemini 3.7
+                  Gemini 2.5
                 </span>
               </div>
               <h2 className="text-lg font-black text-white">
@@ -513,9 +528,14 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
           {/* Generated Events Section */}
           {generatedEvents.length > 0 && (
             <div className="space-y-4">
-              {aiWarning && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] font-semibold text-amber-900">
-                  ⚠️ Eventos de plantilla base (no analizados por IA): {aiWarning}
+              {videoAnalyzed === true && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] font-black uppercase tracking-wide text-emerald-900">
+                  ✅ Análisis real de vídeo
+                </div>
+              )}
+              {videoAnalyzed === false && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] font-black uppercase tracking-wide text-amber-900">
+                  ⚠️ No se ha podido analizar el vídeo: plantilla base manual, no es un análisis real
                 </div>
               )}
               {aiSummary && (

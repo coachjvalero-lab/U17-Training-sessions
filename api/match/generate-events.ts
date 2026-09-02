@@ -1,4 +1,5 @@
-import { generateMatchEvents, type GenerateMatchEventsRequestBody } from '../_lib/matchEventsAi';
+import { generateMatchEvents, isGenerateMatchEventsFailure, type GenerateMatchEventsRequestBody } from '../_lib/matchEventsAi';
+import { requireSupabaseUser } from '../_lib/supabaseAuth';
 
 function readJsonBody(req: any): Promise<GenerateMatchEventsRequestBody> {
   if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);
@@ -39,10 +40,21 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  const isAuthenticated = await requireSupabaseUser(req.headers?.authorization);
+  if (!isAuthenticated) {
+    res.status(401).json({ success: false, error: 'No autenticado. Inicia sesión para generar eventos con IA.' });
+    return;
+  }
+
   try {
     const body = await readJsonBody(req);
     const result = await generateMatchEvents(body, process.env.GEMINI_API_KEY);
-    res.status(200).json(result);
+    if (!isGenerateMatchEventsFailure(result)) {
+      res.status(200).json(result);
+      return;
+    }
+    const status = result.errorCode === 'not_configured' ? 500 : result.errorCode === 'analysis_failed' ? 502 : 400;
+    res.status(status).json(result);
   } catch (error: any) {
     console.error('[api/match/generate-events] Unexpected failure:', error);
     res.status(500).json({ success: false, error: error?.message || 'Error processing request' });
