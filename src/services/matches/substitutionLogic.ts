@@ -52,19 +52,62 @@ export function countLogicalSubstitutions(events: MatchEvent[]): number {
   return reconstructLogicalSubstitutions(events).substitutions.length;
 }
 
+/**
+ * True when match_events proves this player left the pitch (their own substitution_out,
+ * or another player's substitution_in that explicitly names them via relatedPlayerId) with
+ * no own substitution_in recorded beforehand — i.e. they must have started the match.
+ */
+export function hasImplicitStarterEvidence(playerId: string, events: MatchEvent[]): boolean {
+  const ownEvents = events.filter((event) => isOurSubstitutionEvent(event) && event.playerId === playerId);
+  if (ownEvents.some((event) => event.eventType === 'substitution_in')) return false;
+
+  const hasOwnOut = ownEvents.some((event) => event.eventType === 'substitution_out');
+  if (hasOwnOut) return true;
+
+  return events.some((event) =>
+    isOurSubstitutionEvent(event) && event.eventType === 'substitution_in' && event.relatedPlayerId === playerId
+  );
+}
+
 export function calculatePlayerMinutesFromEvents(
   playerId: string,
-  isStarter: boolean,
+  /** Explicit starter flag from match_lineup_entries; undefined when no lineup entry exists. */
+  explicitStarter: boolean | undefined,
   events: MatchEvent[],
   matchDurationMinutes = 90
 ): number {
   const duration = Math.max(0, matchDurationMinutes);
-  const playerEvents = events
-    .filter((event) => isOurSubstitutionEvent(event) && event.playerId === playerId)
+  const ownEvents = events.filter((event) => isOurSubstitutionEvent(event) && event.playerId === playerId);
+  const hasOwnSubstitutionOut = ownEvents.some((event) => event.eventType === 'substitution_out');
+  const hasOwnSubstitutionIn = ownEvents.some((event) => event.eventType === 'substitution_in');
+
+  // Only look for an implied OUT (another player's IN explicitly naming this player as who they
+  // replaced) when this player has no own substitution_out recorded, to avoid double-counting.
+  const impliedOutEvent = !hasOwnSubstitutionOut
+    ? events
+        .filter((event) =>
+          isOurSubstitutionEvent(event) && event.eventType === 'substitution_in' && event.relatedPlayerId === playerId
+        )
+        .sort((left, right) => left.minute - right.minute)[0] ?? null
+    : null;
+
+  const playerEvents = [
+    ...ownEvents,
+    ...(impliedOutEvent
+      ? [{ ...impliedOutEvent, eventType: 'substitution_out' as const, playerId, relatedPlayerId: impliedOutEvent.playerId }]
+      : [])
+  ]
     .map((event) => ({ ...event, minute: Math.min(duration, Math.max(0, event.minute)) }))
     .sort((left, right) => left.minute - right.minute || (
       left.eventType === right.eventType ? 0 : left.eventType === 'substitution_out' ? -1 : 1
     ));
+
+  // Lineup entry (when present) is the explicit source of truth; only fall back to inferring
+  // starter status from match_events when there is no lineup entry at all for this player.
+  const hasLeftPitchEvidence = hasOwnSubstitutionOut || Boolean(impliedOutEvent);
+  const isStarter = explicitStarter !== undefined
+    ? explicitStarter
+    : hasLeftPitchEvidence && !hasOwnSubstitutionIn;
 
   let active = isStarter;
   let intervalStart = isStarter ? 0 : null;

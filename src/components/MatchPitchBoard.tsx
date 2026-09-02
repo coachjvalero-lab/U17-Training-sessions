@@ -65,10 +65,12 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
   // Dragging state for pointer drag
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragCoords, setDragCoords] = useState<{ x: number; y: number } | null>(null);
   const [hoverTargetId, setHoverTargetId] = useState<string | null>(null);
   const isDraggingRef = useRef(false);
   const activeDragIdRef = useRef<string | null>(null);
+
+    // Drag coordinates stored in ref to avoid re-renders during pointer movement
+    const dragCoordsRef = useRef<{ x: number; y: number } | null>(null);
 
   const starters = useMemo(() => lineupEntries.filter((e) => e.starter), [lineupEntries]);
   const substitutes = useMemo(() => lineupEntries.filter((e) => !e.starter), [lineupEntries]);
@@ -418,7 +420,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
       const rect = pitchEl.getBoundingClientRect();
       const x = Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100));
       const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
-      setDragCoords({ x, y });
+      dragCoordsRef.current = { x, y };
     }
 
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -432,7 +434,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     const rect = pitchEl.getBoundingClientRect();
     const x = Math.min(94, Math.max(6, ((e.clientX - rect.left) / rect.width) * 100));
     const y = Math.min(94, Math.max(6, ((e.clientY - rect.top) / rect.height) * 100));
-    setDragCoords({ x, y });
+      dragCoordsRef.current = { x, y };
 
     const currentId = activeDragIdRef.current;
     const nearestSlot = formationSlots.reduce((nearest, slot) => (
@@ -452,6 +454,7 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
     setDraggingId(null);
     setHoverTargetId(null);
     setHighlightedSlotId(null);
+      dragCoordsRef.current = null;
 
     const pitchEl = pitchRef.current;
     if (pitchEl) {
@@ -509,7 +512,6 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
         }
       }
     }
-    setDragCoords(null);
   };
 
   // Close menus on outside click
@@ -696,54 +698,63 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             ref={pitchRef}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            className="relative mx-auto aspect-[3/4] w-full max-w-[680px] select-none overflow-hidden rounded-3xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 p-4 shadow-2xl touch-none sm:aspect-[4/5]"
-            style={{
-              backgroundImage: `
-                linear-gradient(to bottom, rgba(16, 185, 129, 0.08) 50%, transparent 50%),
-                radial-gradient(ellipse at center, rgba(6, 95, 70, 0.3) 0%, rgba(6, 78, 59, 0.8) 100%)
-              `,
-              backgroundSize: '100% 80px, 100% 100%'
-            }}
+            className="relative mx-auto aspect-[100/130] w-full max-w-[680px] select-none rounded-3xl border-4 border-slate-800/20 shadow-2xl touch-none"
           >
-            {/* Field Turf Striping Effect */}
-            <div className="pointer-events-none absolute inset-0 opacity-15">
-              <div className="h-full w-full bg-[repeating-linear-gradient(0deg,#000_0px,#000_40px,#fff_40px,#fff_80px)] mix-blend-overlay" />
-            </div>
-
-            {/* Pitch Markings SVG Canvas */}
-            <svg
-              className="pointer-events-none absolute inset-4 h-[calc(100%-32px)] w-[calc(100%-32px)] text-white/70"
-              viewBox="0 0 100 130"
-              preserveAspectRatio="none"
+            {/*
+              Background/markings are clipped in their own layer so the rounded corners stay
+              clean, WITHOUT clipping player tokens below: fixed-size avatars/name labels near
+              the edges (e.g. the GK slot at y:90) must stay fully visible on small viewports.
+            */}
+            <div
+              className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl bg-gradient-to-b from-emerald-800 via-emerald-700 to-emerald-800 p-4"
+              style={{
+                backgroundImage: `
+                  linear-gradient(to bottom, rgba(16, 185, 129, 0.08) 50%, transparent 50%),
+                  radial-gradient(ellipse at center, rgba(6, 95, 70, 0.3) 0%, rgba(6, 78, 59, 0.8) 100%)
+                `,
+                backgroundSize: '100% 80px, 100% 100%'
+              }}
             >
-              {/* Outer Boundary */}
-              <rect x="0" y="0" width="100" height="130" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              
-              {/* Halfway Line */}
-              <line x1="0" y1="65" x2="100" y2="65" stroke="currentColor" strokeWidth="0.8" />
-              
-              {/* Center Circle & Spot */}
-              <circle cx="50" cy="65" r="14" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <circle cx="50" cy="65" r="1" fill="currentColor" />
+              {/* Field Turf Striping Effect */}
+              <div className="absolute inset-0 opacity-15">
+                <div className="h-full w-full bg-[repeating-linear-gradient(0deg,#000_0px,#000_40px,#fff_40px,#fff_80px)] mix-blend-overlay" />
+              </div>
 
-              {/* Top Penalty Box (Opponent) */}
-              <rect x="22" y="0" width="56" height="22" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <rect x="34" y="0" width="32" height="8" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <circle cx="50" cy="14" r="0.9" fill="currentColor" />
-              <path d="M 38 22 A 12 12 0 0 0 62 22" fill="none" stroke="currentColor" strokeWidth="0.8" />
+              {/* Pitch Markings SVG Canvas */}
+              <svg
+                className="absolute inset-4 h-[calc(100%-32px)] w-[calc(100%-32px)] text-white/70"
+                viewBox="0 0 100 130"
+                preserveAspectRatio="none"
+              >
+                {/* Outer Boundary */}
+                <rect x="0" y="0" width="100" height="130" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                
+                {/* Halfway Line */}
+                <line x1="0" y1="65" x2="100" y2="65" stroke="currentColor" strokeWidth="0.8" />
+                
+                {/* Center Circle & Spot */}
+                <circle cx="50" cy="65" r="14" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <circle cx="50" cy="65" r="1" fill="currentColor" />
 
-              {/* Bottom Penalty Box (Our Goal) */}
-              <rect x="22" y="108" width="56" height="22" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <rect x="34" y="122" width="32" height="8" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <circle cx="50" cy="116" r="0.9" fill="currentColor" />
-              <path d="M 38 108 A 12 12 0 0 1 62 108" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                {/* Top Penalty Box (Opponent) */}
+                <rect x="22" y="0" width="56" height="22" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <rect x="34" y="0" width="32" height="8" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <circle cx="50" cy="14" r="0.9" fill="currentColor" />
+                <path d="M 38 22 A 12 12 0 0 0 62 22" fill="none" stroke="currentColor" strokeWidth="0.8" />
 
-              {/* Corner Arcs */}
-              <path d="M 0 4 A 4 4 0 0 0 4 0" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <path d="M 96 0 A 4 4 0 0 0 100 4" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <path d="M 0 126 A 4 4 0 0 1 4 130" fill="none" stroke="currentColor" strokeWidth="0.8" />
-              <path d="M 96 130 A 4 4 0 0 1 100 126" fill="none" stroke="currentColor" strokeWidth="0.8" />
-            </svg>
+                {/* Bottom Penalty Box (Our Goal) */}
+                <rect x="22" y="108" width="56" height="22" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <rect x="34" y="122" width="32" height="8" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <circle cx="50" cy="116" r="0.9" fill="currentColor" />
+                <path d="M 38 108 A 12 12 0 0 1 62 108" fill="none" stroke="currentColor" strokeWidth="0.8" />
+
+                {/* Corner Arcs */}
+                <path d="M 0 4 A 4 4 0 0 0 4 0" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <path d="M 96 0 A 4 4 0 0 0 100 4" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <path d="M 0 126 A 4 4 0 0 1 4 130" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                <path d="M 96 130 A 4 4 0 0 1 100 126" fill="none" stroke="currentColor" strokeWidth="0.8" />
+              </svg>
+            </div>
 
             {/* Goal Posts labels */}
             <div className="pointer-events-none absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/40 px-2.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-200/80">
@@ -802,8 +813,8 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
               const isBeingDragged = draggingId === entry.id;
               const isHoveredTarget = hoverTargetId === entry.id;
               const stablePosition = resolveStablePitchPosition(entry, formationSlots);
-              const posX = isBeingDragged && dragCoords ? dragCoords.x : stablePosition.x;
-              const posY = isBeingDragged && dragCoords ? dragCoords.y : stablePosition.y;
+                const posX = isBeingDragged && dragCoordsRef.current ? dragCoordsRef.current.x : stablePosition.x;
+                const posY = isBeingDragged && dragCoordsRef.current ? dragCoordsRef.current.y : stablePosition.y;
               const isMenuOpen = activeTokenMenuId === entry.id;
 
               return (

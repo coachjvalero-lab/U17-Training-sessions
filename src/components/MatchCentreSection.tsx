@@ -483,19 +483,25 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         : await createMatchEvent(eventInput);
 
       let savedPairedEvent: MatchEventModel | null = null;
-      if (
-        pairedEvent &&
-        (saved.eventType === 'substitution_in' || saved.eventType === 'substitution_out') &&
-        saved.playerId &&
-        saved.relatedPlayerId
-      ) {
-        savedPairedEvent = await updateMatchEvent(pairedEvent.id, {
-          teamSide: saved.teamSide,
-          eventType: saved.eventType === 'substitution_out' ? 'substitution_in' : 'substitution_out',
-          playerId: saved.relatedPlayerId,
-          relatedPlayerId: saved.playerId,
-          minute: saved.minute
-        });
+      if (pairedEvent) {
+        const stillPaired =
+          (saved.eventType === 'substitution_in' || saved.eventType === 'substitution_out') &&
+          Boolean(saved.playerId) &&
+          Boolean(saved.relatedPlayerId);
+
+        if (stillPaired) {
+          savedPairedEvent = await updateMatchEvent(pairedEvent.id, {
+            teamSide: saved.teamSide,
+            eventType: saved.eventType === 'substitution_out' ? 'substitution_in' : 'substitution_out',
+            playerId: saved.relatedPlayerId,
+            relatedPlayerId: saved.playerId,
+            minute: saved.minute
+          });
+        } else {
+          // The edited event no longer represents its half of the substitution pair;
+          // unlink the other half instead of leaving it pointing at a stale relationship.
+          savedPairedEvent = await updateMatchEvent(pairedEvent.id, { relatedPlayerId: null });
+        }
       }
 
       const nextEvents = editingEventId
