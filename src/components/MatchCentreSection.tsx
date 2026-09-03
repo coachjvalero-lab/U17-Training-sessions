@@ -10,7 +10,7 @@ import {
   getMatchEvents,
   updateMatchEvent
 } from '../services/matches/matchEventsService';
-import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
+import { createMatch, deleteMatch, getMatchById, listMatches, listMatchOperationalSummaries, updateMatch, type MatchOperationalSummary } from '../services/matches/matchService';
 import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
 import { MatchPitchBoard } from './MatchPitchBoard';
 import { SetPiecesSection } from './SetPiecesSection';
@@ -158,6 +158,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [editingLineupEntry, setEditingLineupEntry] = useState<MatchLineupEntry | null>(null);
   const [isLineupFormOpen, setIsLineupFormOpen] = useState(false);
   const [squadPlayers, setSquadPlayers] = useState<CloudSquadPlayer[]>([]);
+  const [matchOperationalSummaries, setMatchOperationalSummaries] = useState<Record<string, MatchOperationalSummary>>({});
 
   const calledUpPlayers = useMemo(
     () => selectCalledUpPlayers(squadPlayers, lineupEntries),
@@ -211,6 +212,32 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const visibleMatches = providedMatches ?? matches;
   const visibleLoading = providedMatches ? Boolean(isLoadingMatches) : isLoading;
   const visibleError = providedMatches ? matchLoadError : matchesError;
+
+  useEffect(() => {
+    const matchIds = Array.from(new Set([
+      ...visibleMatches.map((match) => match.id),
+      selectedMatch?.id
+    ].filter((id): id is string => Boolean(id))));
+
+    if (matchIds.length === 0) {
+      setMatchOperationalSummaries({});
+      return;
+    }
+
+    let active = true;
+    void listMatchOperationalSummaries(matchIds)
+      .then((summaries) => {
+        if (active) setMatchOperationalSummaries(summaries);
+      })
+      .catch((error) => {
+        console.error('[MatchCentreSection] Failed loading match summaries', error);
+        if (active) setMatchOperationalSummaries({});
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedMatch?.id, visibleMatches]);
 
   useEffect(() => {
     if (!selectedMatchId) {
@@ -761,18 +788,8 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
   const renderOverviewTab = () => {
     const startersCount = lineupEntries.filter((entry) => entry.starter).length;
-    const setPiecesConfigured = Boolean(
-      matchSetPieces && [
-        matchSetPieces.attackingNotes,
-        matchSetPieces.attackingVideoUrl,
-        matchSetPieces.attackingImage1Url,
-        matchSetPieces.attackingImage2Url,
-        matchSetPieces.defensiveNotes,
-        matchSetPieces.defensiveVideoUrl,
-        matchSetPieces.defensiveImage1Url,
-        matchSetPieces.defensiveImage2Url
-      ].some(Boolean)
-    );
+    const selectedSummary = selectedMatch ? matchOperationalSummaries[selectedMatch.id] : undefined;
+    const setPiecePlayCount = selectedSummary?.setPiecePlayCount ?? 0;
     const matchPlanCount = Object.values(matchPlan).filter(Boolean).length;
     const squadStatus = hasSquadCallPendingChanges
       ? 'Changes pending'
@@ -784,7 +801,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       { label: 'Squad Call', detail: `${lineupEntries.length} players · ${squadStatus}` },
       { label: 'Line-up', detail: `${startersCount} starters${startersCount === 11 ? ' · Ready' : ''}`, action: 'line-up' },
       { label: 'Match Plan', detail: matchPlanCount > 0 ? `${matchPlanCount} phase${matchPlanCount === 1 ? '' : 's'} saved` : 'Not set', action: 'match-plan' },
-      { label: 'Set Pieces', detail: setPiecesConfigured ? 'Configured' : 'Not set', action: 'set-pieces' },
+      { label: 'Set Pieces', detail: setPiecePlayCount > 0 ? `${setPiecePlayCount} play${setPiecePlayCount === 1 ? '' : 's'}` : 'Not set', action: 'set-pieces' },
       { label: 'Video', detail: selectedMatch?.videoUrl ? 'Available' : 'Not linked', action: onNavigateToVideoAnalysis ? 'video-analysis' : undefined },
       { label: 'Events', detail: `${events.length} event${events.length === 1 ? '' : 's'}`, action: 'events' }
     ];
@@ -2213,6 +2230,13 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredMatches.map((match) => {
+            const summary = matchOperationalSummaries[match.id];
+            const calledUpIds = summary?.calledUpPlayerIds ?? [];
+            const squadPending = Boolean(match.squadCallConfirmedAt) && hasSquadCallChangedSinceConfirmation(match.squadCallConfirmedPlayerIds, calledUpIds);
+            const squadStatus = squadPending ? 'Changes Pending' : match.squadCallConfirmedAt ? 'Confirmed' : 'Pending';
+            const startersCount = summary?.startersCount ?? 0;
+            const setPiecePlayCount = summary?.setPiecePlayCount ?? 0;
+            const matchPlanPhaseCount = summary?.matchPlanPhaseCount ?? 0;
             const opponentName = match.opponentName || 'Opponent';
             const homeTeam = match.isHome
               ? { name: teamName, isAlula: true, logoUrl: currentLogo ?? null }
@@ -2287,6 +2311,33 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                   <div className="mt-4 flex items-start gap-2 text-xs font-semibold leading-5 text-slate-600">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                     <span>{match.venue || match.location || 'Venue TBD'}</span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] font-bold">
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Squad</span>
+                      <span>{summary?.calledUpCount ?? 0} · {squadStatus}</span>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Line-up</span>
+                      <span>{startersCount}/11{startersCount === 11 ? ' · Ready' : ''}</span>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Set Pieces</span>
+                      <span>{setPiecePlayCount} {setPiecePlayCount === 1 ? 'Play' : 'Plays'}</span>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Video</span>
+                      <span>{match.videoUrl ? 'Available' : 'Not linked'}</span>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Match Plan</span>
+                      <span>{matchPlanPhaseCount}/3 phases</span>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+                      <span className="block uppercase text-slate-400">Result</span>
+                      <span>{hasScore ? `${homeScore} - ${awayScore}` : formatMatchStatusLabel(match.status)}</span>
+                    </div>
                   </div>
 
                   {/* Card Footer with Edit & Details */}

@@ -20,6 +20,7 @@ import {
 import { Match, MatchLineupEntry, Injury } from '../types';
 import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squad/squadService';
 import { subscribeToInjuries } from '../services/physio/injuriesService';
+import { confirmSquadCall } from '../services/matches/matchService';
 import { 
   getMatchLineup, 
   upsertMatchLineupEntry, 
@@ -29,6 +30,7 @@ import {
 import { PlayerPitchAvatar } from './PlayerPitchAvatar';
 import { TeamCrest } from './TeamCrest';
 import { getPositionCategory } from '../utils/formations';
+import { hasSquadCallChangedSinceConfirmation } from '../utils/matchLineup';
 
 interface MatchCallUpSectionProps {
   matches: Match[];
@@ -36,6 +38,7 @@ interface MatchCallUpSectionProps {
   currentLogo?: string | null;
   onNavigateToTactics?: (matchId: string) => void;
   onCallupSummaryChange?: (summary: { matchId: string; count: number }) => void;
+  onMatchUpdated?: (match: Match) => void;
 }
 
 export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
@@ -43,7 +46,8 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   selectedTeamId,
   currentLogo,
   onNavigateToTactics,
-  onCallupSummaryChange
+  onCallupSummaryChange,
+  onMatchUpdated
 }) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
   const [squadPlayers, setSquadPlayers] = useState<CloudSquadPlayer[]>([]);
@@ -144,6 +148,18 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
   }, [injuries]);
 
   const calledPlayerIds = useMemo(() => new Set(lineupEntries.map((e) => e.playerId)), [lineupEntries]);
+  const calledPlayerIdList = useMemo(() => lineupEntries.map((entry) => entry.playerId).sort(), [lineupEntries]);
+
+  const isSquadCallConfirmed = Boolean(currentMatch?.squadCallConfirmedAt);
+  const hasPendingConfirmationChanges = isSquadCallConfirmed && hasSquadCallChangedSinceConfirmation(
+    currentMatch?.squadCallConfirmedPlayerIds,
+    calledPlayerIdList
+  );
+  const squadCallStatusLabel = hasPendingConfirmationChanges
+    ? 'Changes Pending'
+    : isSquadCallConfirmed
+      ? 'Squad Confirmed'
+      : 'Pending confirmation';
 
   // Positional breakdown of called-up squad
   const positionalCounts = useMemo(() => {
@@ -284,6 +300,17 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
       setLineupEntries([]);
     } catch (e) {
       console.error('[MatchCallUpSection] Error clearing callup:', e);
+    }
+  };
+
+  const handleConfirmSquad = async () => {
+    if (!selectedMatchId || lineupEntries.length === 0) return;
+    try {
+      const updatedMatch = await confirmSquadCall(selectedMatchId, calledPlayerIdList);
+      onMatchUpdated?.(updatedMatch);
+    } catch (error) {
+      console.error('[MatchCallUpSection] Error confirming squad call:', error);
+      alert(error instanceof Error ? error.message : 'Unable to confirm squad call.');
     }
   };
 
@@ -535,6 +562,26 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                   </div>
                 </div>
               </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-sky-200">Squad Call</p>
+                  <p className="mt-1 text-sm font-black text-white">{lineupEntries.length} Players</p>
+                  <p className={`mt-0.5 text-xs font-bold ${hasPendingConfirmationChanges ? 'text-amber-200' : isSquadCallConfirmed ? 'text-emerald-200' : 'text-slate-300'}`}>
+                    {hasPendingConfirmationChanges ? '⚠ Changes Pending' : isSquadCallConfirmed ? '✓ Squad Confirmed' : 'Pending confirmation'}
+                  </p>
+                </div>
+                {(!isSquadCallConfirmed || hasPendingConfirmationChanges) && (
+                  <button
+                    type="button"
+                    onClick={() => void handleConfirmSquad()}
+                    disabled={lineupEntries.length === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Check className="h-4 w-4" />
+                    Confirm Squad
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -575,6 +622,9 @@ export const MatchCallUpSection: React.FC<MatchCallUpSectionProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">
                     {lineupEntries.length} Called Up
+                  </span>
+                  <span className={`rounded-lg px-2 py-0.5 text-xs font-black ${hasPendingConfirmationChanges ? 'bg-amber-100 text-amber-800' : isSquadCallConfirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                    {squadCallStatusLabel}
                   </span>
                   <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
                     {Math.max(0, squadPlayers.length - lineupEntries.length)} Not Called

@@ -147,8 +147,8 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   const handleDeleteMatch = async (matchId: string) => {
     const matchToDelete = matches.find((m) => m.id === matchId);
-    const opp = matchToDelete?.opponentName || 'este partido';
-    if (!confirm(`¿Estás seguro de que deseas eliminar el partido contra "${opp}"?`)) return;
+    const opp = matchToDelete?.opponentName || 'this match';
+    if (!confirm(`Are you sure you want to delete the match against "${opp}"?`)) return;
 
     try {
       await deleteMatch(matchId);
@@ -156,7 +156,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
       setIsAddModalOpen(false);
     } catch (error) {
       console.error('[CompetitionSection] Failed deleting match', error);
-      alert('No se pudo eliminar el partido. Por favor, inténtalo de nuevo.');
+      alert('The match could not be deleted. Please try again.');
     }
   };
 
@@ -212,9 +212,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
-      
-      {/* Competition Banner Header */}
-      <div className="bg-gradient-to-r from-[#002142] via-[#09355e] to-[#002142] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-700/50">
+
+      {/* Competition Banner Header (screen-only, hidden from print) */}
+      <div className="print:hidden bg-gradient-to-r from-[#002142] via-[#09355e] to-[#002142] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-700/50">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-amber-500/10 to-transparent pointer-events-none" />
         
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
@@ -304,9 +304,9 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
         </div>
       </div>
 
-      {/* Spotlight: Next Upcoming Fixture Banner */}
+      {/* Spotlight: Next Upcoming Fixture Banner (screen-only, hidden from print) */}
       {nextUpcomingMatch && (
-        <div className="bg-white border-2 border-amber-400/60 rounded-3xl p-5 sm:p-6 shadow-md space-y-4">
+        <div className="print:hidden bg-white border-2 border-amber-400/60 rounded-3xl p-5 sm:p-6 shadow-md space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center space-x-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -619,6 +619,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
           currentLogo={currentLogo}
           onNavigateToTactics={() => setActiveTab('matches')}
           onCallupSummaryChange={setPersistedCallupSummary}
+          onMatchUpdated={handleMatchSaved}
         />
       )}
 

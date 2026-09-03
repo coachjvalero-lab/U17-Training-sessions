@@ -72,6 +72,40 @@ export async function createVideoClipForMatchAnalysis(
   return fromRow(data as VideoClipRow);
 }
 
+export async function listVideoClipsByTrainingAnalysisId(trainingAnalysisId: string): Promise<VideoClip[]> {
+  const { data, error } = await getClient()
+    .from(VIDEO_CLIPS_TABLE)
+    .select('*')
+    .eq('training_analysis_id', trainingAnalysisId)
+    .order('start_time', { ascending: true });
+
+  if (error) throw error;
+  return ((data || []) as VideoClipRow[]).map(fromRow);
+}
+
+export async function createVideoClipForTrainingAnalysis(
+  trainingAnalysisId: string,
+  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes'>
+): Promise<VideoClip> {
+  const payload = {
+    video_url: input.videoUrl,
+    start_time: input.startTime,
+    end_time: input.endTime ?? null,
+    title: input.title,
+    notes: input.notes ?? null,
+    training_analysis_id: trainingAnalysisId
+  };
+
+  const { data, error } = await getClient()
+    .from(VIDEO_CLIPS_TABLE)
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return fromRow(data as VideoClipRow);
+}
+
 export async function deleteVideoClip(clipId: string): Promise<void> {
   const { error } = await getClient()
     .from(VIDEO_CLIPS_TABLE)

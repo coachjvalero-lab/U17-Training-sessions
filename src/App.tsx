@@ -1588,6 +1588,20 @@ export default function App() {
   };
 
   const sharedHeader = getSharedSessionHeader(session, lastLoadedSessionTimeRef.current.global);
+  // Only the plain default session editor (fallback branch below) should print the generic training-session footer;
+  // other sections (squad, football/competition/callup, fitness, gk, etc.) render their own print-only content.
+  const isDefaultTrainingSessionView = !(
+    activeSection === 'squad' ||
+    activeSection === 'attendance' ||
+    activeSection === 'physio' ||
+    activeSection === 'video' ||
+    activeSection === 'planning' ||
+    activeSection === 'meetings' ||
+    activeSection === 'exercises' ||
+    activeSection === 'football' ||
+    activeSection === 'fitness' ||
+    activeSection === 'gk'
+  );
   const fullSquadRoster = session.squadRoster || squadPlayersWithStats.map(p => `${p.firstName} ${p.lastName}`);
   const goalkeeperSquadPlayers = useMemo(() => {
     return squadPlayersWithStats.filter((player) => player.position === 'GK');
@@ -1996,20 +2010,22 @@ export default function App() {
           </main>
         )}
 
-        {/* Print-Only Professional Document Footer */}
-        <footer className="hidden print:grid grid-cols-2 gap-8 mt-6 pt-4 border-t-2 border-[#002142]">
-          <div>
-            <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
-            <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Head Coach Signature</p>
-          </div>
-          <div>
-            <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
-            <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Technical Staff Signature</p>
-          </div>
-          <div className="col-span-2 text-center text-[8px] text-slate-500 mt-2 font-medium tracking-wide">
-            AL ULA SC • Official Microcycle Training Session Plan • Authorized Coaching Document
-          </div>
-        </footer>
+        {/* Print-Only Professional Document Footer (default training-session view only) */}
+        {isDefaultTrainingSessionView && (
+          <footer className="hidden print:grid grid-cols-2 gap-8 mt-6 pt-4 border-t-2 border-[#002142]">
+            <div>
+              <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
+              <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Head Coach Signature</p>
+            </div>
+            <div>
+              <div className="border-b border-slate-300 h-8 w-full mb-1"></div>
+              <p className="text-[9px] uppercase font-extrabold text-[#002142] text-center tracking-wider">Technical Staff Signature</p>
+            </div>
+            <div className="col-span-2 text-center text-[8px] text-slate-500 mt-2 font-medium tracking-wide">
+              AL ULA SC • Official Microcycle Training Session Plan • Authorized Coaching Document
+            </div>
+          </footer>
+        )}
 
           </div>
         )}

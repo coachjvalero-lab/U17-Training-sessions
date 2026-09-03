@@ -46,7 +46,7 @@ function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
     opponentLogoUrl: withOpponent.opponent_logo_url ?? null,
     fixtureId: row.fixture_id ?? null,
     competitionName: row.competition_name ?? '',
-    matchCategory: row.match_category ?? 'official',
+    matchCategory: row.match_category ?? 'other',
     date: row.date,
     time: row.time ?? '18:30',
     venue: row.venue ?? null,
@@ -341,12 +341,69 @@ export async function calculateStandings(teamId: string): Promise<StandingsEntry
   const { data, error } = await getClient()
     .from(MATCHES_TABLE)
     .select('*')
-    .eq('status', 'played');
+    .eq('status', 'played')
+    .eq('match_category', 'official');
 
   if (error) throw error;
 
   const matches = ((data || []) as MatchRow[]).map(fromRow);
   return calculateStandingsFromMatches(matches, teamId);
+}
+
+export interface MatchOperationalSummary {
+  matchId: string;
+  calledUpCount: number;
+  calledUpPlayerIds: string[];
+  startersCount: number;
+  matchPlanPhaseCount: number;
+  setPiecePlayCount: number;
+}
+
+export async function listMatchOperationalSummaries(matchIds: string[]): Promise<Record<string, MatchOperationalSummary>> {
+  const ids = Array.from(new Set(matchIds.filter(Boolean)));
+  const summaries: Record<string, MatchOperationalSummary> = Object.fromEntries(
+    ids.map((matchId) => [matchId, { matchId, calledUpCount: 0, calledUpPlayerIds: [], startersCount: 0, matchPlanPhaseCount: 0, setPiecePlayCount: 0 }])
+  );
+  if (ids.length === 0) return summaries;
+
+  const [lineupResult, planResult, setPiecesResult] = await Promise.all([
+    getClient().from('match_lineup_entries').select('match_id, player_id, starter').in('match_id', ids),
+    getClient().from('match_plan').select('match_id, phase').in('match_id', ids),
+    getClient().from('set_piece_plays').select('match_id').in('match_id', ids)
+  ]);
+
+  if (lineupResult.error) throw lineupResult.error;
+  if (planResult.error) throw planResult.error;
+  if (setPiecesResult.error) throw setPiecesResult.error;
+
+  for (const row of lineupResult.data || []) {
+    const summary = summaries[String(row.match_id)];
+    if (!summary) continue;
+    summary.calledUpCount++;
+    if (row.player_id) summary.calledUpPlayerIds.push(String(row.player_id));
+    if (row.starter) summary.startersCount++;
+  }
+
+  for (const summary of Object.values(summaries)) {
+    summary.calledUpPlayerIds.sort();
+  }
+
+  const planPhasesByMatch = new Map<string, Set<string>>();
+  for (const row of planResult.data || []) {
+    const matchId = String(row.match_id);
+    if (!planPhasesByMatch.has(matchId)) planPhasesByMatch.set(matchId, new Set());
+    if (row.phase) planPhasesByMatch.get(matchId)!.add(String(row.phase));
+  }
+  for (const [matchId, phases] of planPhasesByMatch) {
+    if (summaries[matchId]) summaries[matchId].matchPlanPhaseCount = phases.size;
+  }
+
+  for (const row of setPiecesResult.data || []) {
+    const summary = summaries[String(row.match_id)];
+    if (summary) summary.setPiecePlayCount++;
+  }
+
+  return summaries;
 }
 
 export interface MatchWithScore {

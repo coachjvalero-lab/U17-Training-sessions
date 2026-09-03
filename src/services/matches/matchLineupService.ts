@@ -97,8 +97,7 @@ export async function getMatchLineup(matchId: string): Promise<MatchLineupEntry[
 
 export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>): Promise<MatchLineupEntry> {
   const serializedNotes = serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes);
-  const payload = {
-    id: entry.id,
+  const payload: Record<string, unknown> = {
     match_id: entry.matchId,
     player_id: entry.playerId,
     position: entry.position ?? '',
@@ -110,6 +109,7 @@ export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & 
     notes: serializedNotes,
     updated_at: new Date().toISOString()
   };
+  if (entry.id) payload.id = entry.id;
 
   const { data, error } = await getClient()
     .from(MATCH_LINEUP_TABLE)
@@ -123,19 +123,22 @@ export async function upsertMatchLineupEntry(entry: Partial<MatchLineupEntry> & 
 
 export async function batchUpsertMatchLineupEntries(entries: Array<Partial<MatchLineupEntry> & Pick<MatchLineupEntry, 'matchId' | 'playerId'>>): Promise<MatchLineupEntry[]> {
   if (entries.length === 0) return [];
-  const payloads = entries.map((entry) => ({
-    id: entry.id,
-    match_id: entry.matchId,
-    player_id: entry.playerId,
-    position: entry.position ?? '',
-    starter: Boolean(entry.starter),
-    shirt_number: entry.shirtNumber ?? null,
-    captain: Boolean(entry.captain),
-    minute_subbed_in: entry.minuteSubbedIn ?? null,
-    minute_subbed_out: entry.minuteSubbedOut ?? null,
-    notes: serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes),
-    updated_at: new Date().toISOString()
-  }));
+  const payloads = entries.map((entry) => {
+    const payload: Record<string, unknown> = {
+      match_id: entry.matchId,
+      player_id: entry.playerId,
+      position: entry.position ?? '',
+      starter: Boolean(entry.starter),
+      shirt_number: entry.shirtNumber ?? null,
+      captain: Boolean(entry.captain),
+      minute_subbed_in: entry.minuteSubbedIn ?? null,
+      minute_subbed_out: entry.minuteSubbedOut ?? null,
+      notes: serializeLineupNotes(entry.pitchX, entry.pitchY, entry.notes),
+      updated_at: new Date().toISOString()
+    };
+    if (entry.id) payload.id = entry.id;
+    return payload;
+  });
 
   const { data, error } = await getClient()
     .from(MATCH_LINEUP_TABLE)

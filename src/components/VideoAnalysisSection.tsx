@@ -13,6 +13,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { useTeamContext } from '../contexts/TeamContext';
+import { ScoutingSection } from './ScoutingSection';
 import { getMatchById, listMatches } from '../services/matches/matchService';
 import {
   createOrUpdateOpponentAnalysis,
@@ -21,14 +22,29 @@ import {
   updateOpponentAnalysisVideoUrl
 } from '../services/matches/opponentAnalysisService';
 import { createOrUpdateMatchAnalysis, getMatchAnalysisByMatchId } from '../services/matches/matchAnalysisService';
-import { createVideoClipForMatchAnalysis, deleteVideoClip, listVideoClipsByMatchAnalysisId } from '../services/video/videoClipsService';
-import { Match, MatchAnalysis, OpponentAnalysis, OpponentAnalysisTag, VideoClip } from '../types';
+import {
+  createOrUpdateTrainingAnalysis,
+  getTrainingAnalysisBySessionUid,
+  listRecentFootballSessions,
+  type FootballSessionSummary
+} from '../services/training/trainingAnalysisService';
+import {
+  createVideoClipForMatchAnalysis,
+  createVideoClipForTrainingAnalysis,
+  deleteVideoClip,
+  listVideoClipsByMatchAnalysisId,
+  listVideoClipsByTrainingAnalysisId
+} from '../services/video/videoClipsService';
+import { Match, MatchAnalysis, OpponentAnalysis, OpponentAnalysisTag, TrainingAnalysis, VideoClip } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 type VideoAnalysisArea = 'matches' | 'opponent-analysis' | 'training-sessions' | 'scouting';
 
 const PENDING_OPPONENT_TEAM_ID_KEY = 'video_analysis_pending_opponent_team_id';
+
+type ClipFormState = { videoUrl: string; startTime: string; endTime: string; title: string; notes: string };
+const EMPTY_CLIP_FORM: ClipFormState = { videoUrl: '', startTime: '0', endTime: '', title: '', notes: '' };
 
 const AREA_TABS: Array<{ key: VideoAnalysisArea; label: string; icon: LucideIcon }> = [
   { key: 'matches', label: 'Matches', icon: Swords },
@@ -70,7 +86,17 @@ export const VideoAnalysisSection: React.FC = () => {
   const [videoClips, setVideoClips] = useState<VideoClip[]>([]);
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [isSavingClip, setIsSavingClip] = useState(false);
-  const [clipForm, setClipForm] = useState({ videoUrl: '', startTime: '0', endTime: '', title: '', notes: '' });
+  const [clipForm, setClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
+  const [trainingSessions, setTrainingSessions] = useState<FootballSessionSummary[]>([]);
+  const [selectedTrainingSessionUid, setSelectedTrainingSessionUid] = useState<string>('');
+  const [trainingAnalysis, setTrainingAnalysis] = useState<TrainingAnalysis | null>(null);
+  const [trainingAnalysisSummaryDraft, setTrainingAnalysisSummaryDraft] = useState('');
+  const [isLoadingTrainingAnalysis, setIsLoadingTrainingAnalysis] = useState(false);
+  const [isSavingTrainingAnalysis, setIsSavingTrainingAnalysis] = useState(false);
+  const [trainingVideoClips, setTrainingVideoClips] = useState<VideoClip[]>([]);
+  const [isLoadingTrainingClips, setIsLoadingTrainingClips] = useState(false);
+  const [isSavingTrainingClip, setIsSavingTrainingClip] = useState(false);
+  const [trainingClipForm, setTrainingClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
   const opponentOptions = useMemo(() => {
     const byOpponent = new Map<string, Match>();
     for (const match of matchOptions) {
@@ -222,7 +248,7 @@ export const VideoAnalysisSection: React.FC = () => {
         notes: clipForm.notes.trim() || null
       });
       setVideoClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
-      setClipForm({ videoUrl: '', startTime: '0', endTime: '', title: '', notes: '' });
+      setClipForm(EMPTY_CLIP_FORM);
     } catch (error) {
       console.error('[VideoAnalysisSection] Failed creating video clip', error);
     } finally {
@@ -236,6 +262,111 @@ export const VideoAnalysisSection: React.FC = () => {
       setVideoClips((prev) => prev.filter((clip) => clip.id !== clipId));
     } catch (error) {
       console.error('[VideoAnalysisSection] Failed deleting video clip', error);
+    }
+  };
+
+  useEffect(() => {
+    void listRecentFootballSessions()
+      .then((sessions) => {
+        setTrainingSessions(sessions);
+        setSelectedTrainingSessionUid((current) => (current ? current : sessions[0]?.id ?? current));
+      })
+      .catch((error) => {
+        console.error('[VideoAnalysisSection] Failed loading football sessions', error);
+        setTrainingSessions([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTrainingSessionUid || activeTab !== 'training-sessions') {
+      setTrainingAnalysis(null);
+      setTrainingAnalysisSummaryDraft('');
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingTrainingAnalysis(true);
+        const analysis = await getTrainingAnalysisBySessionUid(selectedTrainingSessionUid);
+        setTrainingAnalysis(analysis);
+        setTrainingAnalysisSummaryDraft(analysis?.summary ?? '');
+      } catch (error) {
+        console.error('[VideoAnalysisSection] Failed loading training analysis', error);
+        setTrainingAnalysis(null);
+        setTrainingAnalysisSummaryDraft('');
+      } finally {
+        setIsLoadingTrainingAnalysis(false);
+      }
+    })();
+  }, [selectedTrainingSessionUid, activeTab]);
+
+  useEffect(() => {
+    if (!trainingAnalysis) {
+      setTrainingVideoClips([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingTrainingClips(true);
+        const clips = await listVideoClipsByTrainingAnalysisId(trainingAnalysis.id);
+        setTrainingVideoClips(clips);
+      } catch (error) {
+        console.error('[VideoAnalysisSection] Failed loading training video clips', error);
+        setTrainingVideoClips([]);
+      } finally {
+        setIsLoadingTrainingClips(false);
+      }
+    })();
+  }, [trainingAnalysis]);
+
+  const handleSaveTrainingAnalysis = async () => {
+    if (!selectedTrainingSessionUid) return;
+
+    try {
+      setIsSavingTrainingAnalysis(true);
+      const updated = await createOrUpdateTrainingAnalysis({
+        id: trainingAnalysis?.id,
+        sessionUid: selectedTrainingSessionUid,
+        summary: trainingAnalysisSummaryDraft
+      });
+      setTrainingAnalysis(updated);
+      setTrainingAnalysisSummaryDraft(updated.summary);
+    } catch (error) {
+      console.error('[VideoAnalysisSection] Failed saving training analysis', error);
+    } finally {
+      setIsSavingTrainingAnalysis(false);
+    }
+  };
+
+  const handleAddTrainingClip = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!trainingAnalysis || !trainingClipForm.videoUrl.trim() || !trainingClipForm.title.trim()) return;
+
+    try {
+      setIsSavingTrainingClip(true);
+      const created = await createVideoClipForTrainingAnalysis(trainingAnalysis.id, {
+        videoUrl: trainingClipForm.videoUrl.trim(),
+        startTime: Number(trainingClipForm.startTime) || 0,
+        endTime: trainingClipForm.endTime.trim() ? Number(trainingClipForm.endTime) : null,
+        title: trainingClipForm.title.trim(),
+        notes: trainingClipForm.notes.trim() || null
+      });
+      setTrainingVideoClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
+      setTrainingClipForm(EMPTY_CLIP_FORM);
+    } catch (error) {
+      console.error('[VideoAnalysisSection] Failed creating training video clip', error);
+    } finally {
+      setIsSavingTrainingClip(false);
+    }
+  };
+
+  const handleDeleteTrainingClip = async (clipId: string) => {
+    try {
+      await deleteVideoClip(clipId);
+      setTrainingVideoClips((prev) => prev.filter((clip) => clip.id !== clipId));
+    } catch (error) {
+      console.error('[VideoAnalysisSection] Failed deleting training video clip', error);
     }
   };
 
@@ -311,19 +442,120 @@ export const VideoAnalysisSection: React.FC = () => {
     }
   };
 
-  function renderComingSoon(label: string, description: string) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Coming soon</p>
-        <h3 className="text-lg font-black text-slate-700">{label}</h3>
-        <p className="max-w-md text-xs font-medium text-slate-400">{description}</p>
-      </div>
-    );
-  }
-
   function formatMatchOptionLabel(match: Match): string {
     const score = match.ourScore != null && match.opponentScore != null ? ` (${match.ourScore}-${match.opponentScore})` : '';
     return `${match.date} · vs ${match.opponentName || match.opponentTeamId}${score}`;
+  }
+
+  function formatSessionOptionLabel(session: FootballSessionSummary): string {
+    const label = session.mainObjective.trim() || (session.sessionNumber ? `Session #${session.sessionNumber}` : 'Training session');
+    return `${session.date} · ${label}`;
+  }
+
+  function renderClipsSection(params: {
+    analysisId: string | null;
+    emptyAnalysisMessage: string;
+    clips: VideoClip[];
+    isLoadingClips: boolean;
+    isSavingClip: boolean;
+    form: ClipFormState;
+    onFormChange: (form: ClipFormState) => void;
+    onSubmit: (event: React.FormEvent) => void;
+    onDelete: (clipId: string) => void;
+  }) {
+    const { analysisId, emptyAnalysisMessage, clips, isLoadingClips: loadingClips, isSavingClip: savingClip, form, onFormChange, onSubmit, onDelete } = params;
+
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+        <h3 className="text-base font-black text-slate-900">Clips</h3>
+
+        {!analysisId ? (
+          <p className="text-xs text-slate-400">{emptyAnalysisMessage}</p>
+        ) : (
+          <>
+            <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
+              <input
+                required
+                value={form.videoUrl}
+                onChange={(event) => onFormChange({ ...form, videoUrl: event.target.value })}
+                placeholder="Video URL"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              />
+              <input
+                required
+                value={form.title}
+                onChange={(event) => onFormChange({ ...form, title: event.target.value })}
+                placeholder="Clip title"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              />
+              <input
+                type="number"
+                min={0}
+                value={form.startTime}
+                onChange={(event) => onFormChange({ ...form, startTime: event.target.value })}
+                placeholder="Start (seconds)"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              />
+              <input
+                type="number"
+                min={0}
+                value={form.endTime}
+                onChange={(event) => onFormChange({ ...form, endTime: event.target.value })}
+                placeholder="End (seconds, optional)"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              />
+              <textarea
+                value={form.notes}
+                onChange={(event) => onFormChange({ ...form, notes: event.target.value })}
+                placeholder="Notes (optional)"
+                className="sm:col-span-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              />
+              <button
+                type="submit"
+                disabled={savingClip}
+                className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-60"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Clip
+              </button>
+            </form>
+
+            {loadingClips ? (
+              <p className="text-xs text-slate-400">Loading clips...</p>
+            ) : clips.length === 0 ? (
+              <p className="text-xs text-slate-400">No clips added yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {clips.map((clip) => (
+                  <div key={clip.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-slate-800">{clip.title}</p>
+                      <p className="font-mono text-[11px] text-slate-500">
+                        {formatVideoTimestamp(clip.startTime)}
+                        {clip.endTime != null ? ` – ${formatVideoTimestamp(clip.endTime)}` : ''}
+                      </p>
+                      {clip.notes && <p className="mt-0.5 text-xs text-slate-500">{clip.notes}</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <a href={clip.videoUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-sky-600 hover:text-sky-700">
+                        Watch
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => void onDelete(clip.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
   }
 
   function renderMatchesTab() {
@@ -387,95 +619,95 @@ export const VideoAnalysisSection: React.FC = () => {
               />
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-              <h3 className="text-base font-black text-slate-900">Clips</h3>
+            {renderClipsSection({
+              analysisId: matchAnalysis?.id ?? null,
+              emptyAnalysisMessage: 'Create the match analysis above before adding clips.',
+              clips: videoClips,
+              isLoadingClips,
+              isSavingClip,
+              form: clipForm,
+              onFormChange: setClipForm,
+              onSubmit: (event) => void handleAddClip(event),
+              onDelete: (clipId) => void handleDeleteClip(clipId)
+            })}
+          </>
+        )}
+      </div>
+    );
+  }
 
-              {!matchAnalysis ? (
-                <p className="text-xs text-slate-400">Create the match analysis above before adding clips.</p>
-              ) : (
-                <>
-                  <form onSubmit={(event) => void handleAddClip(event)} className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      required
-                      value={clipForm.videoUrl}
-                      onChange={(event) => setClipForm({ ...clipForm, videoUrl: event.target.value })}
-                      placeholder="Video URL"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
-                    />
-                    <input
-                      required
-                      value={clipForm.title}
-                      onChange={(event) => setClipForm({ ...clipForm, title: event.target.value })}
-                      placeholder="Clip title"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      value={clipForm.startTime}
-                      onChange={(event) => setClipForm({ ...clipForm, startTime: event.target.value })}
-                      placeholder="Start (seconds)"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      value={clipForm.endTime}
-                      onChange={(event) => setClipForm({ ...clipForm, endTime: event.target.value })}
-                      placeholder="End (seconds, optional)"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
-                    />
-                    <textarea
-                      value={clipForm.notes}
-                      onChange={(event) => setClipForm({ ...clipForm, notes: event.target.value })}
-                      placeholder="Notes (optional)"
-                      className="sm:col-span-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSavingClip}
-                      className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-60"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Clip
-                    </button>
-                  </form>
+  function renderTrainingSessionsTab() {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-black text-slate-900">Select Training Session</h3>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {trainingSessions.length} Sessions
+            </span>
+          </div>
 
-                  {isLoadingClips ? (
-                    <p className="text-xs text-slate-400">Loading clips...</p>
-                  ) : videoClips.length === 0 ? (
-                    <p className="text-xs text-slate-400">No clips added yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {videoClips.map((clip) => (
-                        <div key={clip.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-slate-800">{clip.title}</p>
-                            <p className="font-mono text-[11px] text-slate-500">
-                              {formatVideoTimestamp(clip.startTime)}
-                              {clip.endTime != null ? ` – ${formatVideoTimestamp(clip.endTime)}` : ''}
-                            </p>
-                            {clip.notes && <p className="mt-0.5 text-xs text-slate-500">{clip.notes}</p>}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <a href={clip.videoUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-sky-600 hover:text-sky-700">
-                              Watch
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteClip(clip.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+          {trainingSessions.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-sm">
+              No training sessions available yet.
             </div>
+          ) : (
+            <select
+              value={selectedTrainingSessionUid}
+              onChange={(event) => setSelectedTrainingSessionUid(event.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-sky-500"
+            >
+              {trainingSessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {formatSessionOptionLabel(session)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {isLoadingTrainingAnalysis ? (
+          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+            <p className="text-sm text-slate-400">Loading training session analysis...</p>
+          </div>
+        ) : !selectedTrainingSessionUid ? (
+          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+            <p className="text-sm text-slate-400">Select a training session to view or create its analysis.</p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-base font-black text-slate-900">Session Summary</h3>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveTrainingAnalysis()}
+                  disabled={isSavingTrainingAnalysis}
+                  className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-60"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {trainingAnalysis ? 'Save' : 'Create Analysis'}
+                </button>
+              </div>
+              <textarea
+                value={trainingAnalysisSummaryDraft}
+                onChange={(event) => setTrainingAnalysisSummaryDraft(event.target.value)}
+                placeholder="Key drills, individual notes and coaching takeaways for this session..."
+                className="min-h-32 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-800 outline-none focus:border-sky-500"
+              />
+            </div>
+
+            {renderClipsSection({
+              analysisId: trainingAnalysis?.id ?? null,
+              emptyAnalysisMessage: 'Create the session analysis above before adding clips.',
+              clips: trainingVideoClips,
+              isLoadingClips: isLoadingTrainingClips,
+              isSavingClip: isSavingTrainingClip,
+              form: trainingClipForm,
+              onFormChange: setTrainingClipForm,
+              onSubmit: (event) => void handleAddTrainingClip(event),
+              onDelete: (clipId) => void handleDeleteTrainingClip(clipId)
+            })}
           </>
         )}
       </div>
@@ -528,9 +760,9 @@ export const VideoAnalysisSection: React.FC = () => {
       {activeTab === 'matches' ? (
         renderMatchesTab()
       ) : activeTab === 'training-sessions' ? (
-        renderComingSoon('Training Sessions', 'Training session video review is coming in a future phase.')
+        renderTrainingSessionsTab()
       ) : activeTab === 'scouting' ? (
-        renderComingSoon('Scouting', 'Scouting reports and prospect video are coming in a future phase.')
+        <ScoutingSection />
       ) : (
         <div className="space-y-6">
           {/* Opponent Selector */}

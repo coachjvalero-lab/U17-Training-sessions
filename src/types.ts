@@ -359,6 +359,14 @@ export interface MatchAnalysis {
   updatedAt?: string;
 }
 
+export interface TrainingAnalysis {
+  id: string;
+  sessionUid: string;
+  summary: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface VideoClip {
   id: string;
   videoUrl: string;
@@ -371,6 +379,58 @@ export interface VideoClip {
   opponentMatchNotesId?: string | null;
   trainingAnalysisId?: string | null;
   scoutingReportId?: string | null;
+}
+
+export type ScoutingPlayerStatus = 'shortlist' | 'watching' | 'discarded' | 'signed';
+
+export interface ScoutingPlayer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  clubTeamId?: string | null;
+  clubName?: string | null;
+  position?: string | null;
+  birthDate?: string | null;
+  nationality?: string | null;
+  status: ScoutingPlayerStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type ScoutingTripStatus = 'planned' | 'done' | 'cancelled';
+
+export interface ScoutingTrip {
+  id: string;
+  matchDate: string;
+  homeTeamId?: string | null;
+  homeTeamName?: string | null;
+  awayTeamId?: string | null;
+  awayTeamName?: string | null;
+  competition: string;
+  assignedTo?: string | null;
+  assignedToEmail?: string | null;
+  status: ScoutingTripStatus;
+  notes: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScoutingTripTarget {
+  id: string;
+  tripId: string;
+  playerId: string;
+  createdAt?: string;
+}
+
+export interface ClubTeamOption {
+  id: string;
+  name: string;
+}
+
+export interface AssignableUser {
+  userId: string;
+  email: string;
+  displayName?: string | null;
 }
 
 export interface MatchLineupEntry {

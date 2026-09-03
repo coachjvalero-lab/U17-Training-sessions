@@ -41,6 +41,12 @@ test('Preseason matches are ignored entirely', () => {
   assert.equal(standings.length, 0);
 });
 
+test('Ambiguous competition names without structural official category are ignored', () => {
+  const matches = [baseMatch({ id: 'legacy-null', matchCategory: null as any, competitionName: 'Saudi U17 Premier League', ourScore: 9, opponentScore: 0 })];
+  const standings = calculateStandingsFromMatches(matches, 'us');
+  assert.equal(standings.length, 0);
+});
+
 test('Mixed official + friendly matches only count the official ones', () => {
   const matches = [
     baseMatch({ id: 'official-1', matchCategory: 'official', ourScore: 2, opponentScore: 0 }),
