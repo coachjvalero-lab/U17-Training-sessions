@@ -4,6 +4,7 @@ import type {
   AssignableUser,
   ClubTeamOption,
   ScoutingPlayer,
+  ScoutingPlayerReport,
   ScoutingPlayerStatus,
   ScoutingTrip,
   ScoutingTripTarget
@@ -12,6 +13,7 @@ import type {
 const SCOUTING_PLAYERS_TABLE = 'scouting_players';
 const SCOUTING_TRIPS_TABLE = 'scouting_trips';
 const SCOUTING_TRIP_TARGETS_TABLE = 'scouting_trip_targets';
+const SCOUTING_PLAYER_REPORTS_TABLE = 'scouting_player_reports';
 
 type ScoutingPlayerRow = {
   id: string;
@@ -48,6 +50,19 @@ type ScoutingTripTargetRow = {
   trip_id: string;
   player_id: string;
   created_at: string | null;
+};
+
+type ScoutingPlayerReportRow = {
+  id: string;
+  player_id: string;
+  trip_id: string | null;
+  technical_rating: number | null;
+  tactical_rating: number | null;
+  physical_rating: number | null;
+  mental_rating: number | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 function getClient() {
@@ -95,6 +110,21 @@ function tripTargetFromRow(row: ScoutingTripTargetRow): ScoutingTripTarget {
     tripId: row.trip_id,
     playerId: row.player_id,
     createdAt: row.created_at ?? undefined
+  };
+}
+
+function reportFromRow(row: ScoutingPlayerReportRow): ScoutingPlayerReport {
+  return {
+    id: row.id,
+    playerId: row.player_id,
+    tripId: row.trip_id,
+    technicalRating: row.technical_rating,
+    tacticalRating: row.tactical_rating,
+    physicalRating: row.physical_rating,
+    mentalRating: row.mental_rating,
+    notes: row.notes ?? '',
+    createdAt: row.created_at ?? undefined,
+    updatedAt: row.updated_at ?? undefined
   };
 }
 
@@ -237,6 +267,16 @@ export async function listTripTargets(tripId: string): Promise<ScoutingTripTarge
   return ((data || []) as ScoutingTripTargetRow[]).map(tripTargetFromRow);
 }
 
+export async function listTripTargetsForPlayer(playerId: string): Promise<ScoutingTripTarget[]> {
+  const { data, error } = await getClient()
+    .from(SCOUTING_TRIP_TARGETS_TABLE)
+    .select('*')
+    .eq('player_id', playerId);
+
+  if (error) throw error;
+  return ((data || []) as ScoutingTripTargetRow[]).map(tripTargetFromRow);
+}
+
 export async function addTripTarget(tripId: string, playerId: string): Promise<ScoutingTripTarget> {
   const { data, error } = await getClient()
     .from(SCOUTING_TRIP_TARGETS_TABLE)
@@ -253,6 +293,51 @@ export async function removeTripTarget(targetId: string): Promise<void> {
     .from(SCOUTING_TRIP_TARGETS_TABLE)
     .delete()
     .eq('id', targetId);
+
+  if (error) throw error;
+}
+
+export async function listPlayerReports(playerId: string): Promise<ScoutingPlayerReport[]> {
+  const { data, error } = await getClient()
+    .from(SCOUTING_PLAYER_REPORTS_TABLE)
+    .select('*')
+    .eq('player_id', playerId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return ((data || []) as ScoutingPlayerReportRow[]).map(reportFromRow);
+}
+
+export async function createOrUpdatePlayerReport(
+  input: Partial<ScoutingPlayerReport> & Pick<ScoutingPlayerReport, 'playerId' | 'notes'>
+): Promise<ScoutingPlayerReport> {
+  const payload = {
+    id: input.id,
+    player_id: input.playerId,
+    trip_id: input.tripId ?? null,
+    technical_rating: input.technicalRating ?? null,
+    tactical_rating: input.tacticalRating ?? null,
+    physical_rating: input.physicalRating ?? null,
+    mental_rating: input.mentalRating ?? null,
+    notes: input.notes,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await getClient()
+    .from(SCOUTING_PLAYER_REPORTS_TABLE)
+    .upsert(payload, { onConflict: 'id' })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return reportFromRow(data as ScoutingPlayerReportRow);
+}
+
+export async function deletePlayerReport(reportId: string): Promise<void> {
+  const { error } = await getClient()
+    .from(SCOUTING_PLAYER_REPORTS_TABLE)
+    .delete()
+    .eq('id', reportId);
 
   if (error) throw error;
 }

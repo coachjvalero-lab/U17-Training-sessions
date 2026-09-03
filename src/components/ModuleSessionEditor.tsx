@@ -6,6 +6,7 @@ import { PlayerGroupsSection } from './PlayerGroupsSection';
 import { ExerciseBlock } from './ExerciseBlock';
 import { Exercise, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { getModuleGameMoments, getModuleSessionView, TrainingModuleId } from '../modules/trainingModules';
+import { calculateSessionTotalDurationMinutes } from '../utils/duration';
 
 interface ModuleSessionEditorProps {
   moduleId: TrainingModuleId;
@@ -58,6 +59,11 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   onApplyMalikaPoints
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
+  const totalDurationMinutes = calculateSessionTotalDurationMinutes([
+    moduleView.warmUp,
+    moduleView.mainPart,
+    moduleView.coolDown
+  ]);
   const isGk = moduleId === 'gk';
   const isHeaderReadOnly = false;
   const isSharedDataReadOnly = moduleId !== 'football' && !isGk;
@@ -110,6 +116,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         onSave={onSave}
         isSaving={isSaving}
         readOnly={isHeaderReadOnly}
+        totalDurationMinutes={totalDurationMinutes}
       />
 
       <div className="print:hidden">

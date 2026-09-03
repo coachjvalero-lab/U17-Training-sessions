@@ -114,3 +114,37 @@ export async function deleteVideoClip(clipId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+export async function listVideoClipsByScoutingReportId(scoutingReportId: string): Promise<VideoClip[]> {
+  const { data, error } = await getClient()
+    .from(VIDEO_CLIPS_TABLE)
+    .select('*')
+    .eq('scouting_report_id', scoutingReportId)
+    .order('start_time', { ascending: true });
+
+  if (error) throw error;
+  return ((data || []) as VideoClipRow[]).map(fromRow);
+}
+
+export async function createVideoClipForScoutingReport(
+  scoutingReportId: string,
+  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes'>
+): Promise<VideoClip> {
+  const payload = {
+    video_url: input.videoUrl,
+    start_time: input.startTime,
+    end_time: input.endTime ?? null,
+    title: input.title,
+    notes: input.notes ?? null,
+    scouting_report_id: scoutingReportId
+  };
+
+  const { data, error } = await getClient()
+    .from(VIDEO_CLIPS_TABLE)
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return fromRow(data as VideoClipRow);
+}

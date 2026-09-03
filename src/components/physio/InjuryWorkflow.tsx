@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, LoaderCircle } from 'lucide-react';
 import type { Injury, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
+import { formatPhysioMatchLabel } from '../../services/physio/physioMatchScope';
 import { BodyMap } from './BodyMap';
 import {
   BODY_REGION_LABELS,
@@ -120,6 +121,9 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
     if (step === 0 && (!draft.playerId || !draft.injuryDate)) return 'Select a player and injury date.';
     if (step === 0 && draft.context === 'training' && !draft.trainingSessionId) return 'Select the related training session.';
     if (step === 0 && draft.context === 'match' && !draft.matchId) return 'Select the related match.';
+    if (step === 0 && draft.context === 'match' && draft.matchId && !matches.some((match) => match.matchId === draft.matchId)) {
+      return 'Select a match played by this team (home or away).';
+    }
     if (step === 1 && !region) return 'Select the affected body area.';
     if (step === 2 && draft.diagnosisStatus !== 'not_established' && !draft.clinicalDiagnosis && !draft.medicalDiagnosis && !draft.imagingDiagnosis && !draft.finalDiagnosis) return 'Enter the available diagnosis.';
     if (step === 5 && draft.previousSimilarInjury && !draft.previousInjuryId && !draft.previousInjuryDate) return 'Link a previous injury or enter its date.';
@@ -288,7 +292,7 @@ export function InjuryWorkflow({ teamId, players, sessions, matches, previousInj
                         <option value="">Select match</option>
                         {matches.map((match) => (
                           <option key={match.matchId} value={match.matchId}>
-                            {match.matchDate} · {match.opponentName || 'Match'}
+                            {formatPhysioMatchLabel(match)}
                           </option>
                         ))}
                       </select>

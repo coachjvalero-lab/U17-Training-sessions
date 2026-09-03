@@ -3,7 +3,7 @@ import { supabase } from '../../supabaseClient';
 import type { Injury, InjuryFollowUp, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { determineSquadStatusFromPlayerInjuries } from './squadInjurySync';
 import { listSquadPlayers } from '../squad/squadService';
-import { listMatches } from '../matches/matchService';
+import { listPhysioTeamMatches } from './physioMatchScope';
 import { ensurePhysioTeamPrerequisites } from './physioComplaintsService';
 
 const INJURIES_TABLE = 'injuries';
@@ -379,47 +379,8 @@ export async function getPhysioContext(teamId: string): Promise<{ players: Physi
     } catch {}
   }
 
-  // 3. Fetch Matches
-  let matchRows: PhysioMatchContext[] = [];
-  try {
-    const rpcMatches = await client().rpc('physio_match_context', { target_team_id: normalizedTeamId });
-    if (!rpcMatches.error && rpcMatches.data && rpcMatches.data.length > 0) {
-      matchRows = rpcMatches.data.map((row: any) => ({
-        matchId: row.match_id || row.id,
-        matchDate: row.match_date || row.date,
-        opponentName: row.opponent_name || 'Match',
-        matchStatus: row.match_status || row.status
-      }));
-    }
-  } catch {}
-
-  if (!matchRows.length) {
-    try {
-      const matchesList = await listMatches(normalizedTeamId || undefined);
-      if (matchesList && matchesList.length > 0) {
-        matchRows = matchesList.map((m) => ({
-          matchId: m.id,
-          matchDate: m.date,
-          opponentName: m.opponentName || m.opponentTeamId || m.competitionName || 'Match',
-          matchStatus: m.status
-        }));
-      }
-    } catch {}
-  }
-
-  if (!matchRows.length) {
-    try {
-      const { data: rawMatches } = await client().from('matches').select('*').order('date', { ascending: false });
-      if (rawMatches && rawMatches.length > 0) {
-        matchRows = rawMatches.map((m: any) => ({
-          matchId: m.id,
-          matchDate: m.date,
-          opponentName: m.opponent_team_id || m.competition_name || 'Match',
-          matchStatus: m.status
-        }));
-      }
-    } catch {}
-  }
+  // 3. Fetch Matches involving this team as home or away side.
+  const matchRows: PhysioMatchContext[] = await listPhysioTeamMatches(normalizedTeamId);
 
   return {
     players,

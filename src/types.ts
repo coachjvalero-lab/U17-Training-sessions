@@ -167,6 +167,9 @@ export interface PhysioMatchContext {
   matchDate: string;
   opponentName: string;
   matchStatus: MatchStatus;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  isHome: boolean;
 }
 
 export interface VideoAnalysis {
@@ -420,6 +423,19 @@ export interface ScoutingTripTarget {
   tripId: string;
   playerId: string;
   createdAt?: string;
+}
+
+export interface ScoutingPlayerReport {
+  id: string;
+  playerId: string;
+  tripId?: string | null;
+  technicalRating?: number | null;
+  tacticalRating?: number | null;
+  physicalRating?: number | null;
+  mentalRating?: number | null;
+  notes: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ClubTeamOption {

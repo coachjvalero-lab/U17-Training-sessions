@@ -1,3 +1,5 @@
+import type { Exercise, TrainingBlock } from '../types';
+
 export function parseDurationValue(input?: number | string): number {
   if (input === undefined || input === null || input === '') {
     return 0;
@@ -28,4 +30,17 @@ export function parseDurationValue(input?: number | string): number {
 export function formatDurationLabel(totalMinutes: number): string {
   const rounded = Math.round(totalMinutes * 10) / 10;
   return `${rounded} min`;
+}
+
+// Exercises without a parseable duration contribute 0 (never an invented default).
+export function sumExercisesDurationMinutes(exercises?: Exercise[]): number {
+  if (!Array.isArray(exercises)) {
+    return 0;
+  }
+  return exercises.reduce((total, exercise) => total + parseDurationValue(exercise?.duration), 0);
+}
+
+export function calculateSessionTotalDurationMinutes(blocks: Array<TrainingBlock | undefined>): number {
+  const total = blocks.reduce((sum, block) => sum + sumExercisesDurationMinutes(block?.exercises), 0);
+  return Math.round(total * 10) / 10;
 }

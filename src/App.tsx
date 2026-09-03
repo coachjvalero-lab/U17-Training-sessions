@@ -78,6 +78,7 @@ import {
   updateSessionExercisesByModule,
   updateSessionGroupsByModule
 } from './modules/trainingModules';
+import { calculateSessionTotalDurationMinutes } from './utils/duration';
 import { readCachedFitnessSessions, subscribeToFitnessSessions } from './services/fitness/fitnessSessionsService';
 import { calculateSquadStatistics } from './modules/squadStatisticsService';
 import {
@@ -1853,6 +1854,7 @@ export default function App() {
               onExcludePlayer={handleExcludePlayer}
               onIncludePlayer={handleIncludePlayer}
               onUpdateLogo={handleUpdateTeamLogo}
+              trainingSessions={cloudSessions}
             />
           ) : (
             <FootballHubSection
@@ -1913,6 +1915,7 @@ export default function App() {
               onUpdateLogo={handleUpdateTeamLogo}
               onSave={handleSaveActiveToCloud}
               isSaving={isCloudSaving}
+              totalDurationMinutes={calculateSessionTotalDurationMinutes([session.warmUp, session.mainPart, session.coolDown])}
             />
 
             {/* Section: Session Attendance Quick Tracker */}

@@ -1,30 +1,42 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit3, Save, X, Users } from 'lucide-react';
+import { Plus, Trash2, Edit3, Save, X, Users, ClipboardList } from 'lucide-react';
 import {
   addTripTarget,
+  createOrUpdatePlayerReport,
   createOrUpdateScoutingPlayer,
   createOrUpdateScoutingTrip,
+  deletePlayerReport,
   deleteScoutingPlayer,
   deleteScoutingTrip,
   ensureClubTeam,
   listAssignableUsers,
   listClubTeams,
+  listPlayerReports,
   listScoutingPlayers,
   listScoutingTrips,
   listTripTargets,
+  listTripTargetsForPlayer,
   removeTripTarget
 } from '../services/scouting/scoutingService';
+import {
+  createVideoClipForScoutingReport,
+  deleteVideoClip,
+  listVideoClipsByScoutingReportId
+} from '../services/video/videoClipsService';
+import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState } from './VideoClipsSection';
 import type {
   AssignableUser,
   ClubTeamOption,
   ScoutingPlayer,
+  ScoutingPlayerReport,
   ScoutingPlayerStatus,
   ScoutingTrip,
   ScoutingTripStatus,
-  ScoutingTripTarget
+  ScoutingTripTarget,
+  VideoClip
 } from '../types';
 
-type ScoutingSubTab = 'planning' | 'players';
+type ScoutingSubTab = 'planning' | 'players' | 'reports';
 
 const NEW_CLUB_OPTION_VALUE = '__new__';
 
@@ -89,6 +101,26 @@ function emptyTripForm(): TripFormState {
   };
 }
 
+const RATING_OPTIONS = [1, 2, 3, 4, 5];
+
+type ReportFormState = {
+  tripId: string;
+  technicalRating: string;
+  tacticalRating: string;
+  physicalRating: string;
+  mentalRating: string;
+  notes: string;
+};
+
+const EMPTY_REPORT_FORM: ReportFormState = {
+  tripId: '',
+  technicalRating: '',
+  tacticalRating: '',
+  physicalRating: '',
+  mentalRating: '',
+  notes: ''
+};
+
 export const ScoutingSection: React.FC = () => {
   const [subTab, setSubTab] = useState<ScoutingSubTab>('planning');
   const [clubOptions, setClubOptions] = useState<ClubTeamOption[]>([]);
@@ -112,6 +144,18 @@ export const ScoutingSection: React.FC = () => {
   const [tripTargets, setTripTargets] = useState<ScoutingTripTarget[]>([]);
   const [isLoadingTripTargets, setIsLoadingTripTargets] = useState(false);
   const [newTargetPlayerId, setNewTargetPlayerId] = useState('');
+
+  const [selectedReportPlayerId, setSelectedReportPlayerId] = useState('');
+  const [playerReports, setPlayerReports] = useState<ScoutingPlayerReport[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [playerTripOptions, setPlayerTripOptions] = useState<ScoutingTrip[]>([]);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [reportClips, setReportClips] = useState<VideoClip[]>([]);
+  const [isLoadingReportClips, setIsLoadingReportClips] = useState(false);
+  const [isSavingReportClip, setIsSavingReportClip] = useState(false);
+  const [reportClipForm, setReportClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
 
   const loadPlayers = async () => {
     try {
@@ -172,6 +216,52 @@ export const ScoutingSection: React.FC = () => {
       }
     })();
   }, [expandedTripId]);
+
+  useEffect(() => {
+    if (!selectedReportPlayerId) {
+      setPlayerReports([]);
+      setPlayerTripOptions([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingReports(true);
+        const [reports, targets] = await Promise.all([
+          listPlayerReports(selectedReportPlayerId),
+          listTripTargetsForPlayer(selectedReportPlayerId)
+        ]);
+        setPlayerReports(reports);
+        const tripIds = new Set(targets.map((target) => target.tripId));
+        setPlayerTripOptions(trips.filter((trip) => tripIds.has(trip.id)));
+      } catch (error) {
+        console.error('[ScoutingSection] Failed loading player reports', error);
+        setPlayerReports([]);
+        setPlayerTripOptions([]);
+      } finally {
+        setIsLoadingReports(false);
+      }
+    })();
+  }, [selectedReportPlayerId, trips]);
+
+  useEffect(() => {
+    if (!editingReportId) {
+      setReportClips([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingReportClips(true);
+        setReportClips(await listVideoClipsByScoutingReportId(editingReportId));
+      } catch (error) {
+        console.error('[ScoutingSection] Failed loading report clips', error);
+        setReportClips([]);
+      } finally {
+        setIsLoadingReportClips(false);
+      }
+    })();
+  }, [editingReportId]);
 
   const filteredPlayers = playerStatusFilter === 'all'
     ? players
@@ -332,6 +422,97 @@ export const ScoutingSection: React.FC = () => {
     }
   };
 
+  const handleOpenPlayerReports = (playerId: string) => {
+    setSelectedReportPlayerId(playerId);
+    setEditingReportId(null);
+    setReportForm(EMPTY_REPORT_FORM);
+    setSubTab('reports');
+  };
+
+  const handleNewReport = () => {
+    setEditingReportId(null);
+    setReportForm(EMPTY_REPORT_FORM);
+  };
+
+  const handleEditReport = (report: ScoutingPlayerReport) => {
+    setEditingReportId(report.id);
+    setReportForm({
+      tripId: report.tripId ?? '',
+      technicalRating: report.technicalRating != null ? String(report.technicalRating) : '',
+      tacticalRating: report.tacticalRating != null ? String(report.tacticalRating) : '',
+      physicalRating: report.physicalRating != null ? String(report.physicalRating) : '',
+      mentalRating: report.mentalRating != null ? String(report.mentalRating) : '',
+      notes: report.notes
+    });
+  };
+
+  const handleSaveReport = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedReportPlayerId) return;
+
+    try {
+      setIsSavingReport(true);
+      const saved = await createOrUpdatePlayerReport({
+        id: editingReportId ?? undefined,
+        playerId: selectedReportPlayerId,
+        tripId: reportForm.tripId || null,
+        technicalRating: reportForm.technicalRating ? Number(reportForm.technicalRating) : null,
+        tacticalRating: reportForm.tacticalRating ? Number(reportForm.tacticalRating) : null,
+        physicalRating: reportForm.physicalRating ? Number(reportForm.physicalRating) : null,
+        mentalRating: reportForm.mentalRating ? Number(reportForm.mentalRating) : null,
+        notes: reportForm.notes.trim()
+      });
+      setEditingReportId(saved.id);
+      setPlayerReports(await listPlayerReports(selectedReportPlayerId));
+    } catch (error) {
+      console.error('[ScoutingSection] Failed saving player report', error);
+    } finally {
+      setIsSavingReport(false);
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm('Delete this report?')) return;
+    try {
+      await deletePlayerReport(reportId);
+      if (editingReportId === reportId) handleNewReport();
+      setPlayerReports((prev) => prev.filter((report) => report.id !== reportId));
+    } catch (error) {
+      console.error('[ScoutingSection] Failed deleting player report', error);
+    }
+  };
+
+  const handleAddReportClip = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingReportId || !reportClipForm.videoUrl.trim() || !reportClipForm.title.trim()) return;
+
+    try {
+      setIsSavingReportClip(true);
+      const created = await createVideoClipForScoutingReport(editingReportId, {
+        videoUrl: reportClipForm.videoUrl.trim(),
+        startTime: Number(reportClipForm.startTime) || 0,
+        endTime: reportClipForm.endTime.trim() ? Number(reportClipForm.endTime) : null,
+        title: reportClipForm.title.trim(),
+        notes: reportClipForm.notes.trim() || null
+      });
+      setReportClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
+      setReportClipForm(EMPTY_CLIP_FORM);
+    } catch (error) {
+      console.error('[ScoutingSection] Failed creating report clip', error);
+    } finally {
+      setIsSavingReportClip(false);
+    }
+  };
+
+  const handleDeleteReportClip = async (clipId: string) => {
+    try {
+      await deleteVideoClip(clipId);
+      setReportClips((prev) => prev.filter((clip) => clip.id !== clipId));
+    } catch (error) {
+      console.error('[ScoutingSection] Failed deleting report clip', error);
+    }
+  };
+
   function renderClubSelect(
     value: string,
     newValue: string,
@@ -414,6 +595,10 @@ export const ScoutingSection: React.FC = () => {
                     <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">
                       {PLAYER_STATUS_OPTIONS.find((option) => option.value === player.status)?.label}
                     </span>
+                    <button type="button" onClick={() => handleOpenPlayerReports(player.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300">
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      Reports
+                    </button>
                     <button type="button" onClick={() => handleOpenEditPlayer(player)} className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-lg">
                       <Edit3 className="w-4 h-4" />
                     </button>
@@ -652,6 +837,162 @@ export const ScoutingSection: React.FC = () => {
     );
   }
 
+  function renderReportsTab() {
+    const selectedPlayer = players.find((player) => player.id === selectedReportPlayerId) ?? null;
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-black text-slate-900">Select Player</h3>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              {players.length} Scouted Players
+            </span>
+          </div>
+
+          {players.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-sm">
+              No scouted players yet. Add one in the Players tab first.
+            </div>
+          ) : (
+            <select
+              value={selectedReportPlayerId}
+              onChange={(event) => {
+                setSelectedReportPlayerId(event.target.value);
+                setEditingReportId(null);
+                setReportForm(EMPTY_REPORT_FORM);
+              }}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-sky-500"
+            >
+              <option value="">Select a scouted player...</option>
+              {players.map((player) => (
+                <option key={player.id} value={player.id}>{player.firstName} {player.lastName}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {!selectedReportPlayerId ? (
+          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+            <p className="text-sm text-slate-400">Select a player to view or create an observation report.</p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-base font-black text-slate-900">
+                  {editingReportId ? 'Edit Report' : 'New Report'}{selectedPlayer ? ` \u2013 ${selectedPlayer.firstName} ${selectedPlayer.lastName}` : ''}
+                </h3>
+                {editingReportId && (
+                  <button type="button" onClick={handleNewReport} className="text-xs font-bold text-sky-600 hover:text-sky-700">
+                    + New report instead
+                  </button>
+                )}
+              </div>
+
+              <form onSubmit={(event) => void handleSaveReport(event)} className="space-y-4">
+                {playerTripOptions.length > 0 && (
+                  <select
+                    value={reportForm.tripId}
+                    onChange={(event) => setReportForm({ ...reportForm, tripId: event.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+                  >
+                    <option value="">Not linked to a scouting trip</option>
+                    {playerTripOptions.map((trip) => (
+                      <option key={trip.id} value={trip.id}>
+                        {trip.matchDate} · {trip.homeTeamName || 'TBD'} vs {trip.awayTeamName || 'TBD'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {([
+                    ['technicalRating', 'Technical'],
+                    ['tacticalRating', 'Tactical'],
+                    ['physicalRating', 'Physical'],
+                    ['mentalRating', 'Mental']
+                  ] as const).map(([field, label]) => (
+                    <label key={field} className="space-y-1">
+                      <span className="block text-[10px] font-black uppercase text-slate-500">{label}</span>
+                      <select
+                        value={reportForm[field]}
+                        onChange={(event) => setReportForm({ ...reportForm, [field]: event.target.value })}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+                      >
+                        <option value="">-</option>
+                        {RATING_OPTIONS.map((value) => (
+                          <option key={value} value={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+
+                <textarea
+                  value={reportForm.notes}
+                  onChange={(event) => setReportForm({ ...reportForm, notes: event.target.value })}
+                  placeholder="Observation notes..."
+                  className="min-h-28 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-800 outline-none focus:border-sky-500"
+                />
+
+                <button type="submit" disabled={isSavingReport} className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white hover:bg-cyan-500 disabled:opacity-60">
+                  <Save className="w-3.5 h-3.5" />
+                  {editingReportId ? 'Save Report' : 'Create Report'}
+                </button>
+              </form>
+            </div>
+
+            {editingReportId && (
+              <VideoClipsSection
+                analysisId={editingReportId}
+                emptyAnalysisMessage="Save the report above before adding clips."
+                clips={reportClips}
+                isLoadingClips={isLoadingReportClips}
+                isSavingClip={isSavingReportClip}
+                form={reportClipForm}
+                onFormChange={setReportClipForm}
+                onSubmit={(event) => void handleAddReportClip(event)}
+                onDelete={(clipId) => void handleDeleteReportClip(clipId)}
+              />
+            )}
+
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="mb-4 text-base font-black text-slate-900">Report History</h3>
+              {isLoadingReports ? (
+                <p className="text-xs text-slate-400">Loading reports...</p>
+              ) : playerReports.length === 0 ? (
+                <p className="text-xs text-slate-400">No reports yet for this player.</p>
+              ) : (
+                <div className="space-y-2">
+                  {playerReports.map((report) => (
+                    <div key={report.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800">
+                          T:{report.technicalRating ?? '-'} · Ta:{report.tacticalRating ?? '-'} · P:{report.physicalRating ?? '-'} · M:{report.mentalRating ?? '-'}
+                        </p>
+                        {report.notes && <p className="mt-0.5 truncate text-xs text-slate-500">{report.notes}</p>}
+                        <p className="mt-0.5 text-[11px] text-slate-400">{report.createdAt ? new Date(report.createdAt).toLocaleDateString() : ''}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button type="button" onClick={() => handleEditReport(report)} className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-lg">
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button type="button" onClick={() => void handleDeleteReport(report.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -673,9 +1014,18 @@ export const ScoutingSection: React.FC = () => {
         >
           Players
         </button>
+        <button
+          type="button"
+          onClick={() => setSubTab('reports')}
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            subTab === 'reports' ? 'bg-[#002142] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          Reports
+        </button>
       </div>
 
-      {subTab === 'planning' ? renderPlanningTab() : renderPlayersTab()}
+      {subTab === 'planning' ? renderPlanningTab() : subTab === 'players' ? renderPlayersTab() : renderReportsTab()}
     </div>
   );
 };

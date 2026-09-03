@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity, Loader2, Save } from 'lucide-react';
+import { Calendar, Clock, Trophy, Target, Shield, Upload, X, Activity, Loader2, Save, Timer } from 'lucide-react';
 import { TrainingSession } from '../types';
 import { OFFICIAL_ALULA_LOGO_DATA_URL } from '../constants/logo';
 import { processUploadedImageFile } from '../utils/heic';
+import { formatDurationLabel } from '../utils/duration';
 import { SmartImage } from './SmartImage';
 
 interface HeaderSectionProps {
@@ -13,10 +14,12 @@ interface HeaderSectionProps {
   currentLogo?: string;
   onUpdateLogo?: (newLogo: string) => void;
   readOnly?: boolean;
+  /** Auto-calculated from the session exercises by the parent; never entered manually. */
+  totalDurationMinutes?: number;
 }
 
 
-export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving, currentLogo, onUpdateLogo, readOnly = false }) => {
+export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange, onSave, isSaving, currentLogo, onUpdateLogo, readOnly = false, totalDurationMinutes = 0 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
@@ -158,7 +161,7 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
           </div>
 
           {/* Date, Time, Session Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 print:grid-cols-4 print:gap-1 print:bg-white print:p-0 print:rounded-none print:border-0">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3.5 print:grid-cols-5 print:gap-1 print:bg-white print:p-0 print:rounded-none print:border-0">
             {/* Fecha */}
             <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl hover:border-slate-300 transition-colors print:bg-transparent print:border-none print:p-0 print:space-x-1">
               <Calendar className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3 print:h-3 shrink-0" />
@@ -230,6 +233,21 @@ export const HeaderSection: React.FC<HeaderSectionProps> = ({ session, onChange,
                   <option value="+2">+2</option>
                   <option value="Non competitive">Non competitive</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Total Duration (auto-calculated from exercises, read-only) */}
+            <div className="flex items-center space-x-3 bg-slate-50/80 border border-slate-200/80 px-4 py-3 rounded-2xl print:bg-transparent print:border-none print:p-0 print:space-x-1">
+              <Timer className="w-4 h-4 text-emerald-600 print:text-[#0f5981] print:w-3 print:h-3 shrink-0" />
+              <div className="w-full">
+                <label className="text-[10px] uppercase font-black text-slate-400 block tracking-wider print:text-[7px] print:text-slate-500">Duration</label>
+                <div
+                  id="header-total-duration"
+                  title="Total duration calculated from the session exercises"
+                  className="w-full text-xs sm:text-sm font-black text-slate-800 print:text-slate-900 print:text-[9px] print:font-bold"
+                >
+                  {totalDurationMinutes > 0 ? formatDurationLabel(totalDurationMinutes) : '—'}
+                </div>
               </div>
             </div>
           </div>

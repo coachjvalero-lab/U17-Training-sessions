@@ -4,14 +4,22 @@ import { getEmptySession } from '../defaultSession';
 import type { CloudTrainingSession, FitnessSession, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
+import { RpeSection } from './RpeSection';
 import { deleteFitnessSession, readCachedFitnessSessions, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
 import { selectWellnessRowsForDate } from '../utils/wellnessVisibility';
+import {
+  buildGvizSheetUrl,
+  formatSheetValue,
+  parseGoogleDateValue,
+  parseGvizSheetTable,
+  resolveHeaderIndex
+} from '../utils/googleSheet';
 
 const WELLNESS_SHEET_ID = import.meta.env.VITE_WELLNESS_SHEET_ID || '178oyGRKhSNlsdl2zV5oIu_uXE9Qdtq1xUkFpUXbSQDw';
 const WELLNESS_SHEET_NAME = 'Wellness';
-const WELLNESS_SHEET_JSON_URL = `https://docs.google.com/spreadsheets/d/${WELLNESS_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(WELLNESS_SHEET_NAME)}`;
+const WELLNESS_SHEET_JSON_URL = buildGvizSheetUrl(WELLNESS_SHEET_ID, WELLNESS_SHEET_NAME);
 const WELLNESS_VISIT_TOKEN_KEY = 'u17_fitness_wellness_visit_token';
 
 type WellnessRow = {
@@ -52,15 +60,6 @@ type WellnessLoadState = {
 
 const wellnessRequestCache = new Map<number, Promise<WellnessSnapshot>>();
 const wellnessResultCache = new Map<number, WellnessSnapshot>();
-
-function normalizeWellnessText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
 
 function parseWellnessCsvLine(line: string): string[] {
   const cells: string[] = [];
@@ -115,73 +114,8 @@ function writeWellnessVisitToken(value: number): void {
   } catch (error) {}
 }
 
-function formatSheetValue(value: string | undefined): string {
-  const trimmed = (value || '').trim();
-  return trimmed ? trimmed : '—';
-}
-
-function parseGoogleDateValue(value: string | null | undefined): string {
-  const raw = (value || '').trim();
-  if (!raw) return 'Unknown Date';
-
-  const googleDateMatch = raw.match(/^Date\((\d{4}),(\d+),(\d+)(?:,\d+,\d+,\d+)?\)$/);
-  if (googleDateMatch) {
-    const year = Number(googleDateMatch[1]);
-    const monthZeroBased = Number(googleDateMatch[2]);
-    const day = Number(googleDateMatch[3]);
-    const localDate = new Date(year, monthZeroBased, day);
-    return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
-  }
-
-  const slashDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}:\d{2})?$/);
-  if (slashDateMatch) {
-    const month = Number(slashDateMatch[1]);
-    const day = Number(slashDateMatch[2]);
-    const year = Number(slashDateMatch[3]);
-    const localDate = new Date(year, month - 1, day);
-    return `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw || 'Unknown Date';
-
-  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-}
-
 function parseTimestampDateKey(value: string): string {
   return parseGoogleDateValue(value);
-}
-
-function resolveHeaderIndex(headers: string[], candidates: string[]): number {
-  const normalizedHeaders = headers.map((header) => normalizeWellnessText(header));
-  const normalizedCandidates = candidates.map((candidate) => normalizeWellnessText(candidate));
-  return normalizedHeaders.findIndex((header) => normalizedCandidates.some((candidate) => header.includes(candidate)));
-}
-
-function parseGoogleSheetCell(cell: unknown): string {
-  if (!cell || typeof cell !== 'object') return '';
-
-  const record = cell as Record<string, unknown>;
-  const value = record.f ?? record.v;
-
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return '';
-}
-
-export function parseWellnessSheetData(jsonText: string): string[][] {
-  const wrapperStart = jsonText.indexOf('google.visualization.Query.setResponse(');
-  const payload = wrapperStart >= 0
-    ? jsonText.slice(wrapperStart + 'google.visualization.Query.setResponse('.length).trim()
-    : jsonText;
-
-  const wrapperEnd = payload.lastIndexOf(');');
-  const normalizedPayload = wrapperEnd >= 0 ? payload.slice(0, wrapperEnd).trim() : payload.trim();
-  const data = JSON.parse(normalizedPayload);
-  const columns = Array.isArray(data?.table?.cols) ? data.table.cols.map((column: Record<string, unknown>) => String(column.label ?? '')) : [];
-  const rows = Array.isArray(data?.table?.rows) ? data.table.rows.map((row: Record<string, unknown>) => (Array.isArray(row.c) ? row.c.map(parseGoogleSheetCell) : [])) : [];
-  return [columns, ...rows];
 }
 
 async function loadWellnessSnapshot(
@@ -202,7 +136,7 @@ async function loadWellnessSnapshot(
     }
 
     const jsonText = await response.text();
-    const rows = parseWellnessSheetData(jsonText);
+    const rows = parseGvizSheetTable(jsonText);
     if (rows.length < 2) {
       return { rows: [], availableDates: [], resolutions: [] } satisfies WellnessSnapshot;
     }
@@ -288,6 +222,7 @@ interface FitnessHubSectionProps {
   onExcludePlayer: (name: string) => void;
   onIncludePlayer: (name: string) => void;
   onUpdateLogo: (newLogo: string) => void;
+  trainingSessions?: TrainingSession[];
 }
 
 function defaultFitnessBlock(id: string, title: string) {
@@ -390,7 +325,8 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   excludedPlayers,
   onExcludePlayer,
   onIncludePlayer,
-  onUpdateLogo
+  onUpdateLogo,
+  trainingSessions = []
 }) => {
   const contextStorageKey = 'u17_fitness_hub_context';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -1018,10 +954,10 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               <div>
                 <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">Player Monitoring</h2>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Visual-only navigation shell. Wellness is the only active subsection for now.
+                  Wellness and Training Load (RPE) are active. Testing is not implemented yet.
                 </p>
               </div>
-              <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">Structure Only</span>
+              <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">Read Only</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -1396,9 +1332,11 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                   </div>
                 </div>
               </div>
+            ) : monitoringTab === 'trainingLoad' ? (
+              <RpeSection squadPlayers={squadPlayers} trainingSessions={trainingSessions} />
             ) : (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{monitoringTab === 'trainingLoad' ? 'Training Load' : 'Testing'}</div>
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Testing</div>
                 <p className="mt-2 text-xs font-semibold text-slate-700 leading-relaxed">
                   Navigation placeholder only. Functional screens for this area will be added later.
                 </p>

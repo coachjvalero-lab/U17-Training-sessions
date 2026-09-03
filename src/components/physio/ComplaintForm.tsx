@@ -2,6 +2,7 @@ import { ArrowLeft, LoaderCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Injury, PhysioComplaint, PhysioMatchContext, PhysioPlayerContext, PhysioTrainingContext } from '../../types';
 import { classifySupabaseError } from '../../services/supabaseError';
+import { formatPhysioMatchLabel } from '../../services/physio/physioMatchScope';
 import { BodyMap } from './BodyMap';
 import { BODY_REGION_SUBLOCATIONS, buildBodyLocation, parseBodyLocation, type BodyRegionKey } from './bodyMapModel';
 
@@ -97,6 +98,10 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, co
     }
     if (draft.context === 'match' && !draft.matchId) {
       setError('Select the related match.');
+      return;
+    }
+    if (draft.context === 'match' && draft.matchId && !matches.some((match) => match.matchId === draft.matchId)) {
+      setError('Select a match played by this team (home or away).');
       return;
     }
     if (draft.outcome === 'became_injury' && !draft.resultingInjuryId) {
@@ -255,7 +260,7 @@ export function ComplaintForm({ teamId, players, sessions, matches, injuries, co
                     <option value="">Select match</option>
                     {matches.map((match) => (
                       <option key={match.matchId} value={match.matchId}>
-                        {match.matchDate} · {match.opponentName || 'Opponent'}
+                        {formatPhysioMatchLabel(match)}
                       </option>
                     ))}
                   </select>

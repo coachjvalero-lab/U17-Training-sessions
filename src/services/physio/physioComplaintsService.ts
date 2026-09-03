@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../supabaseClient';
 import type { PhysioComplaint } from '../../types';
+import { assertMatchInPhysioTeamScope } from './physioMatchScope';
 
 function client() { if (!supabase) throw new Error('Supabase client is not configured'); return supabase; }
 const fromRow = (row: any): PhysioComplaint => ({ id: row.id, teamId: row.team_id, playerId: row.player_id, occurrenceDate: row.occurrence_date, context: row.context, trainingSessionId: row.training_session_id, matchId: row.match_id, complaintType: row.complaint_type, location: row.location || '', affectedSide: row.affected_side, leftActivity: Boolean(row.left_activity), durationBand: row.duration_band, outcome: row.outcome, resultingInjuryId: row.resulting_injury_id, notes: row.notes || '', createdAt: row.created_at, updatedAt: row.updated_at });
@@ -60,24 +61,10 @@ export async function ensurePhysioTeamPrerequisites(
     }
   }
 
-  // 2. If match context, ensure the match row's team_id aligns with this teamId
+  // 2. If match context, validate the match involves this team as home or away side.
+  //    The global matches model is never rewritten from the Physio module.
   if (context === 'match' && matchId) {
-    try {
-      const { data: matchRow } = await client()
-        .from('matches')
-        .select('id, team_id')
-        .eq('id', matchId)
-        .maybeSingle();
-
-      if (matchRow && matchRow.team_id !== teamId) {
-        await client()
-          .from('matches')
-          .update({ team_id: teamId })
-          .eq('id', matchId);
-      }
-    } catch (e) {
-      console.warn('[physioComplaintsService] align match team_id notice:', e);
-    }
+    await assertMatchInPhysioTeamScope(teamId, matchId);
   }
 
   // 3. If training context, ensure sessions row team_name matches team id or name
