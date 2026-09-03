@@ -91,6 +91,7 @@ interface FootballHubSectionProps {
   role?: 'football' | 'fitness' | 'gk';
   moduleDataWarning?: string | null;
   currentLogo?: string | null;
+  onNavigateToVideoAnalysis?: (opponentTeamId: string) => void;
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -105,7 +106,8 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onNewSession,
   role = 'football',
   moduleDataWarning = null,
-  currentLogo
+  currentLogo,
+  onNavigateToVideoAnalysis
 }) => {
   const modulePresentation = MODULE_PRESENTATION[role];
   const contextStorageKey = `u17_football_hub_context_${role}`;
@@ -458,6 +460,7 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
         <CompetitionSection
           session={session}
           currentLogo={currentLogo}
+          onNavigateToVideoAnalysis={onNavigateToVideoAnalysis}
         />
       ) : footballSubTab === 'library' ? (
         <ExercisesLibrary

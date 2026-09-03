@@ -351,6 +351,28 @@ export interface OpponentAnalysis {
   updatedAt?: string;
 }
 
+export interface MatchAnalysis {
+  id: string;
+  matchId: string;
+  summary: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideoClip {
+  id: string;
+  videoUrl: string;
+  startTime: number;
+  endTime?: number | null;
+  title: string;
+  notes?: string | null;
+  createdAt?: string;
+  matchAnalysisId?: string | null;
+  opponentMatchNotesId?: string | null;
+  trainingAnalysisId?: string | null;
+  scoutingReportId?: string | null;
+}
+
 export interface MatchLineupEntry {
   id: string;
   matchId: string;

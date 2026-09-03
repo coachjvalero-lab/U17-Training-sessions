@@ -35,6 +35,7 @@ interface CompetitionSectionProps {
   fixtures?: Match[];
   onUpdateFixtures?: (fixtures: Match[]) => void;
   currentLogo?: string | null;
+  onNavigateToVideoAnalysis?: (opponentTeamId: string) => void;
 }
 
 function formatMatchDate(date: string): string {
@@ -48,7 +49,8 @@ function formatMatchDate(date: string): string {
 export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   fixtures: fixturesProp,
   onUpdateFixtures,
-  currentLogo
+  currentLogo,
+  onNavigateToVideoAnalysis
 }) => {
   const { selectedTeamId } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
@@ -373,6 +375,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             isLoadingMatches={isLoadingMatches}
             matchLoadError={matchLoadError}
             currentLogo={currentLogo}
+            onNavigateToVideoAnalysis={onNavigateToVideoAnalysis}
             onMatchUpdated={(updated) => {
               setMatches((prev) => {
                 const exists = prev.some((m) => m.id === updated.id);

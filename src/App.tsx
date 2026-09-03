@@ -59,8 +59,6 @@ import {
 } from './services/team/teamLogoService';
 import { getSupabaseAuthDiagnostics } from './services/auth/authDiagnosticsService';
 import {
-  deleteVideoAnalysisFromCloud,
-  saveVideoAnalysisToCloud,
   subscribeToVideoAnalysis
 } from './services/video/videoAnalysisService';
 import { setAuthorizationUserEmail } from './services/permissions/authorization';
@@ -1213,33 +1211,6 @@ export default function App() {
     }
   };
 
-  const handleUpdateVideoSessions = (sessionsList: VideoAnalysis[]) => {
-    setVideoSessions(prev => {
-      const previous = prev;
-      try {
-        localStorage.setItem('u17_video_sessions', JSON.stringify(sessionsList));
-      } catch (e) {}
-
-      const previousById = new Map(previous.map(session => [session.id, session]));
-      const updatedIds = new Set(sessionsList.map(session => session.id));
-
-      sessionsList.forEach(session => {
-        const previousSession = previousById.get(session.id);
-        if (!previousSession || JSON.stringify(previousSession) !== JSON.stringify(session)) {
-          saveVideoAnalysisToCloud(session).catch(err => console.warn('Cloud save failed for video analysis:', err));
-        }
-      });
-
-      previous.forEach(session => {
-        if (!updatedIds.has(session.id)) {
-          deleteVideoAnalysisFromCloud(session.id).catch(err => console.warn('Cloud delete failed for video analysis:', err));
-        }
-      });
-
-      return sessionsList;
-    });
-  };
-
   const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
     setSession(prev => ({
       ...prev,
@@ -1249,6 +1220,17 @@ export default function App() {
 
   const getActiveLogo = () => {
     return teamLogo || OFFICIAL_ALULA_LOGO_DATA_URL;
+  };
+
+  // Video Analysis reads/links to matches; it never edits opponent_analysis directly, so the
+  // "Opponent Analysis" tab in Match Centre only shortcuts here instead of duplicating the form.
+  const handleNavigateToVideoAnalysis = (opponentTeamId: string) => {
+    writeWorkspaceRestoreState('video_analysis_pending_opponent_team_id', opponentTeamId);
+    if (matchDetailRoute && window.history.pushState) {
+      window.history.pushState({}, '', '/');
+      setCurrentPathname('/');
+    }
+    setActiveSection('video');
   };
 
   const handleClearSession = () => {
@@ -1753,7 +1735,7 @@ export default function App() {
         {/* Main Content Workspace Area */}
         {matchDetailRoute ? (
           <div className="flex-1 min-w-0 p-3 sm:p-6 md:p-8 print:p-0 max-w-6xl mx-auto w-full">
-            <MatchCentreSection currentLogo={teamLogo} />
+            <MatchCentreSection currentLogo={teamLogo} onNavigateToVideoAnalysis={handleNavigateToVideoAnalysis} />
           </div>
         ) : activeSection === 'hub' ? (
           <div className="flex-1 min-w-0">
@@ -1788,10 +1770,7 @@ export default function App() {
         ) : activeSection === 'physio' ? (
           <PhysiotherapySection userEmail={currentUser?.email} />
         ) : activeSection === 'video' ? (
-          <VideoAnalysisSection
-            sessions={videoSessions}
-            onUpdateSessions={handleUpdateVideoSessions}
-          />
+          <VideoAnalysisSection />
         ) : activeSection === 'planning' ? (
           <PlanificationSection
             session={session}
@@ -1825,6 +1804,7 @@ export default function App() {
             role="football"
             moduleDataWarning={footballFitnessLoadError}
             currentLogo={teamLogo}
+            onNavigateToVideoAnalysis={handleNavigateToVideoAnalysis}
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="football"

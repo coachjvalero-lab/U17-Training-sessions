@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
-import { Activity, CalendarDays, Check, ChevronLeft, Edit3, Eye, Flag, MapPin, PlayCircle, Plus, Save, Shield, Sparkles, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Edit3, Eye, Flag, MapPin, Plus, Save, Shield, Sparkles, Swords, Trash2, Trophy, Users, Video, X } from 'lucide-react';
 import { TeamCrest } from './TeamCrest';
 import { useTeamContext } from '../contexts/TeamContext';
 import {
@@ -10,28 +10,23 @@ import {
   getMatchEvents,
   updateMatchEvent
 } from '../services/matches/matchEventsService';
-import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch, confirmSquadCall } from '../services/matches/matchService';
-import {
-  createOrUpdateOpponentAnalysis,
-  getOpponentAnalysisByOpponentTeamId
-} from '../services/matches/opponentAnalysisService';
-import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, upsertMatchLineupEntry, removeMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
+import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
+import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
 import { MatchPitchBoard } from './MatchPitchBoard';
 import { SetPiecesSection } from './SetPiecesSection';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
 import { derivePlayerMatchStatsFromData, getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
 import { subscribeToSquadPlayers, type CloudSquadPlayer } from '../services/squad/squadService';
-import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, OpponentAnalysis, OpponentAnalysisTag, PlayerMatchStatistics, TeamSide } from '../types';
-import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
+import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupEntry, MatchPlanEntry, MatchPlanPhase, MatchSetPieces, PlayerMatchStatistics, TeamSide } from '../types';
+import { formatVideoTimestamp, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
 import { selectCalledUpPlayers, hasSquadCallChangedSinceConfirmation } from '../utils/matchLineup';
 import { countLogicalSubstitutions, findPairedSubstitutionEvent, reconstructLogicalSubstitutions } from '../services/matches/substitutionLogic';
 
 const TAB_OPTIONS = [
-  'opponent-analysis',
-  'squad-call',
+  'overview',
   'line-up',
   'match-plan',
   'set-pieces',
@@ -41,15 +36,6 @@ const TAB_OPTIONS = [
 
 type MatchTab = (typeof TAB_OPTIONS)[number];
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-const opponentTagGroups: Array<{ key: 'build-up' | 'pressing' | 'block' | 'defensive-line' | 'offensive-transition' | 'defensive-transition'; title: string; values: Array<{ value: OpponentAnalysisTag; label: string }> }> = [
-  { key: 'build-up', title: 'Build-up', values: [{ value: 'short', label: 'Short' }, { value: 'long', label: 'Long' }, { value: 'mixed', label: 'Mixed' }] },
-  { key: 'pressing', title: 'Pressing', values: [{ value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }] },
-  { key: 'block', title: 'Block', values: [{ value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }] },
-  { key: 'defensive-line', title: 'Defensive Line', values: [{ value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }] },
-  { key: 'offensive-transition', title: 'Offensive Transition', values: [{ value: 'direct', label: 'Direct' }, { value: 'possession', label: 'Possession' }] },
-  { key: 'defensive-transition', title: 'Defensive Transition', values: [{ value: 'immediate_pressure', label: 'Immediate Pressure' }, { value: 'retreat', label: 'Retreat' }] }
-];
 
 // The Quick Actions UI presents a substitution as ONE action; it still creates/edits the
 // existing paired substitution_out + substitution_in match_events under the hood.
@@ -96,6 +82,7 @@ interface MatchCentreSectionProps {
   currentLogo?: string | null;
   onMatchUpdated?: (updatedMatch: Match) => void;
   onMatchDeleted?: (deletedMatchId: string) => void;
+  onNavigateToVideoAnalysis?: (opponentTeamId: string) => void;
 }
 
 export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
@@ -104,19 +91,19 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   matchLoadError,
   currentLogo,
   onMatchUpdated,
-  onMatchDeleted
+  onMatchDeleted,
+  onNavigateToVideoAnalysis
 }) => {
   const { selectedTeamId, availableTeams } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(() => getPathMatchId());
-  const [activeTab, setActiveTab] = useState<MatchTab>('opponent-analysis');
+  const [activeTab, setActiveTab] = useState<MatchTab>('overview');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [isMatchEditModalOpen, setIsMatchEditModalOpen] = useState(false);
   const [matchToEdit, setMatchToEdit] = useState<Match | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'planned' | 'played'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
   const [lineupEntries, setLineupEntries] = useState<MatchLineupEntry[]>([]);
   const [events, setEvents] = useState<MatchEventModel[]>([]);
   const [stats, setStats] = useState<PlayerMatchStatistics[]>([]);
@@ -142,10 +129,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     defensiveImage2Url: ''
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [newSlidesUrl, setNewSlidesUrl] = useState('');
-  const [newVideoUrl, setNewVideoUrl] = useState('');
-  const [analysisSummary, setAnalysisSummary] = useState('');
-  const [analysisTags, setAnalysisTags] = useState<OpponentAnalysisTag[]>([]);
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [saveStates, setSaveStates] = useState<Record<string, { state: SaveState; message?: string }>>({});
@@ -181,10 +164,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     [lineupEntries, squadPlayers]
   );
 
-  const calledUpPlayerIds = useMemo(
-    () => calledUpPlayers.map((player) => player.id).sort(),
-    [calledUpPlayers]
-  );
+  const calledUpPlayerIds = useMemo(() => lineupEntries.map((entry) => entry.playerId).sort(), [lineupEntries]);
 
   const isSquadCallConfirmed = Boolean(selectedMatch?.squadCallConfirmedAt);
   const hasSquadCallPendingChanges = useMemo(
@@ -192,47 +172,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     [isSquadCallConfirmed, selectedMatch?.squadCallConfirmedPlayerIds, calledUpPlayerIds]
   );
 
-  const handleConfirmSquadCall = async () => {
-    if (!selectedMatch) return;
-    try {
-      setSaveState('squad-call', 'saving');
-      const updated = await confirmSquadCall(selectedMatch.id, calledUpPlayerIds);
-      setSelectedMatch(updated);
-      setSaveState('squad-call', 'saved');
-    } catch (error) {
-      console.error('[MatchCentreSection] Failed confirming squad call', error);
-      setSaveState('squad-call', 'error', error instanceof Error ? error.message : 'Unable to confirm the squad call.');
-    }
-  };
-
-  const handleToggleSquadCall = async (playerId: string, isCalled: boolean) => {
-    if (!selectedMatch) return;
-    try {
-      setSaveState('squad-call', 'saving');
-      if (!isCalled) {
-        const existing = lineupEntries.find((entry) => entry.playerId === playerId);
-        if (existing) {
-          setLineupEntries((current) => current.filter((entry) => entry.id !== existing.id));
-          await removeMatchLineupEntry(existing.id);
-        }
-      } else {
-        const player = squadPlayers.find((item) => item.id === playerId);
-        const saved = await upsertMatchLineupEntry({
-          matchId: selectedMatch.id,
-          playerId,
-          starter: false,
-          position: player?.position || 'UTIL',
-          shirtNumber: player?.number ? Number(player.number) : null,
-          captain: false
-        });
-        setLineupEntries((current) => [...current.filter((entry) => entry.playerId !== playerId), saved]);
-      }
-      setSaveState('squad-call', 'saved');
-    } catch (error) {
-      console.error('[MatchCentreSection] Failed updating squad call', error);
-      setSaveState('squad-call', 'error', error instanceof Error ? error.message : 'Unable to update the squad call.');
-    }
-  };
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -284,7 +223,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         const nextMatch = await getMatchById(selectedMatchId);
         if (nextMatch) {
           setSelectedMatch(nextMatch);
-          setActiveTab('opponent-analysis');
+          setActiveTab('overview');
         } else {
           setSelectedMatch(null);
         }
@@ -297,7 +236,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
   useEffect(() => {
     if (!selectedMatch) {
-      setOpponentAnalysis(null);
       setLineupEntries([]);
       setEvents([]);
       setStats([]);
@@ -308,8 +246,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       try {
         setIsLoadingWorkspace(true);
         setWorkspaceLoadError(null);
-        const [analysis, lineup, eventList, statsList, planList, setPieces] = await Promise.all([
-          getOpponentAnalysisByOpponentTeamId(selectedMatch.opponentTeamId),
+        const [lineup, eventList, statsList, planList, setPieces] = await Promise.all([
           getMatchLineup(selectedMatch.id),
           getMatchEvents(selectedMatch.id),
           getPlayerMatchStatistics(selectedMatch.id),
@@ -331,7 +268,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           nextStats = await recalculatePlayerMatchStatistics(selectedMatch.id);
         }
 
-        setOpponentAnalysis(analysis);
         setLineupEntries(lineup);
         setEvents(eventList);
         setStats(nextStats);
@@ -352,15 +288,10 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           defensiveImage1Url: setPieces?.defensiveImage1Url ?? '',
           defensiveImage2Url: setPieces?.defensiveImage2Url ?? ''
         });
-        setNewSlidesUrl(analysis?.slidesUrl ?? '');
-        setNewVideoUrl(analysis?.videoUrl ?? '');
-        setAnalysisSummary(analysis?.summary ?? '');
-        setAnalysisTags(analysis?.tags ?? []);
         setMatchVideoUrl(selectedMatch.videoUrl ?? '');
       } catch (error) {
         console.error('[MatchCentreSection] Failed loading match details', error);
         setWorkspaceLoadError(error instanceof Error ? error.message : 'Unable to load match workspace.');
-        setOpponentAnalysis(null);
         setLineupEntries([]);
         setEvents([]);
         setStats([]);
@@ -469,34 +400,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     if (!status || status.state === 'idle') return null;
     const className = status.state === 'error' ? 'text-rose-600' : status.state === 'saved' ? 'text-emerald-700' : 'text-sky-700';
     return <span role={status.state === 'error' ? 'alert' : 'status'} className={`text-[11px] font-bold ${className}`}>{status.state === 'saving' ? 'Saving...' : status.state === 'saved' ? 'Saved' : status.message || 'Save failed'}</span>;
-  };
-
-  const handleToggleTag = (tag: OpponentAnalysisTag) => {
-    setAnalysisTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
-    setSaveState('analysis', 'idle');
-  };
-
-  const handleSaveAnalysis = async () => {
-    if (!selectedMatch) return;
-
-    try {
-      setSaveState('analysis', 'saving');
-      const updated = await createOrUpdateOpponentAnalysis({
-        id: opponentAnalysis?.id,
-        opponentTeamId: selectedMatch.opponentTeamId,
-        summary: analysisSummary,
-        tags: analysisTags,
-        slidesUrl: newSlidesUrl || null,
-        videoUrl: newVideoUrl || null
-      });
-      setOpponentAnalysis(updated);
-      setAnalysisTags(updated.tags);
-      setAnalysisSummary(updated.summary);
-      setSaveState('analysis', 'saved');
-    } catch (error) {
-      console.error('[MatchCentreSection] Failed saving opponent analysis', error);
-      setSaveState('analysis', 'error', error instanceof Error ? error.message : 'Unable to save analysis.');
-    }
   };
 
   const resetEventForm = () => {
@@ -832,130 +735,98 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     if (!selectedMatch) return null;
 
     return (
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
-        <section className="rounded-lg border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-700">Scouting report</p>
-              <h3 className="mt-1 text-lg font-black text-slate-950">Opponent game model</h3>
-            </div>
-            <div className="flex items-center gap-3">
-              {renderSaveStatus('analysis')}
-              <button type="button" onClick={() => void handleSaveAnalysis()} disabled={saveStates.analysis?.state === 'saving'} className="inline-flex items-center gap-2 rounded-md bg-[#002142] px-4 py-2 text-xs font-black text-white disabled:opacity-60">
-                {saveStates.analysis?.state === 'saved' ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                Save analysis
-              </button>
-            </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-700">Scouting report</p>
+            <h3 className="mt-1 text-lg font-black text-slate-950">Opponent game model</h3>
+            <p className="mt-2 max-w-xl text-sm text-slate-500">
+              Opponent game model, tendencies and pre-match notes for this fixture now live in Video Analysis,
+              so they stay in one place instead of being edited from two screens.
+            </p>
           </div>
-
-          <div className="space-y-6 p-5">
-            <label className="block">
-              <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Executive summary</span>
-              <textarea value={analysisSummary} onChange={(event) => { setAnalysisSummary(event.target.value); setSaveState('analysis', 'idle'); }} placeholder="Key strengths, vulnerabilities and the coaching message for this fixture..." className="min-h-[150px] w-full rounded-md border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-sky-600 focus:bg-white" />
-            </label>
-
-            <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
-              {opponentTagGroups.map((group) => (
-                <fieldset key={group.key}>
-                  <legend className="mb-2 text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">{group.title}</legend>
-                  <div className="inline-flex max-w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100">
-                    {group.values.map((option) => {
-                      const selected = analysisTags.includes(option.value);
-                      return <button key={option.value} type="button" aria-pressed={selected} onClick={() => handleToggleTag(option.value)} className={`border-r border-slate-300 px-3 py-2 text-xs font-bold last:border-r-0 ${selected ? 'bg-[#002142] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{option.label}</button>;
-                    })}
-                  </div>
-                </fieldset>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <aside className="space-y-5">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center gap-2"><PlayCircle className="h-4 w-4 text-sky-700" /><h3 className="text-sm font-black text-slate-900">Opponent Analysis Video</h3></div>
-            <input value={newVideoUrl} onChange={(event) => { setNewVideoUrl(event.target.value); setSaveState('analysis', 'idle'); }} placeholder="YouTube or Vimeo URL" className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-sky-600" />
-            {toVideoEmbedUrl(newVideoUrl) ? <iframe title="Opponent Analysis Video" src={toVideoEmbedUrl(newVideoUrl) ?? ''} className="mt-3 aspect-video w-full rounded-md border border-slate-200 bg-slate-950" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="mt-3 flex aspect-video items-center justify-center rounded-md bg-slate-950 text-xs font-bold text-slate-400">No video linked</div>}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center gap-2"><Video className="h-4 w-4 text-sky-700" /><h3 className="text-sm font-black text-slate-900">Presentation</h3></div>
-            <input value={newSlidesUrl} onChange={(event) => { setNewSlidesUrl(event.target.value); setSaveState('analysis', 'idle'); }} placeholder="Google Slides URL" className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-sky-600" />
-            {toSlideEmbedUrl(newSlidesUrl) ? <iframe title="Google Slides preview" src={newSlidesUrl} className="mt-3 aspect-video w-full rounded-md border border-slate-200 bg-slate-100" /> : <div className="mt-3 flex aspect-video items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-xs font-bold text-slate-400">No presentation linked</div>}
-          </div>
-        </aside>
+          <button
+            type="button"
+            onClick={() => onNavigateToVideoAnalysis?.(selectedMatch.opponentTeamId)}
+            disabled={!onNavigateToVideoAnalysis}
+            className="inline-flex shrink-0 items-center gap-2 rounded-md bg-[#002142] px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Video className="h-4 w-4" />
+            Open in Video Analysis
+          </button>
+        </div>
       </div>
     );
   };
 
-  const renderSquadCallTab = () => {
-    if (!selectedMatch) return null;
+  const renderOverviewTab = () => {
+    const startersCount = lineupEntries.filter((entry) => entry.starter).length;
+    const setPiecesConfigured = Boolean(
+      matchSetPieces && [
+        matchSetPieces.attackingNotes,
+        matchSetPieces.attackingVideoUrl,
+        matchSetPieces.attackingImage1Url,
+        matchSetPieces.attackingImage2Url,
+        matchSetPieces.defensiveNotes,
+        matchSetPieces.defensiveVideoUrl,
+        matchSetPieces.defensiveImage1Url,
+        matchSetPieces.defensiveImage2Url
+      ].some(Boolean)
+    );
+    const matchPlanCount = Object.values(matchPlan).filter(Boolean).length;
+    const squadStatus = hasSquadCallPendingChanges
+      ? 'Changes pending'
+      : isSquadCallConfirmed
+        ? 'Confirmed'
+        : 'Not confirmed';
 
-    const filteredSquad = [...squadPlayers].sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-    const calledUpIdSet = new Set(calledUpPlayerIds);
+    const cards: Array<{ label: string; detail: string; action?: MatchTab | 'video-analysis' }> = [
+      { label: 'Squad Call', detail: `${lineupEntries.length} players · ${squadStatus}` },
+      { label: 'Line-up', detail: `${startersCount} starters${startersCount === 11 ? ' · Ready' : ''}`, action: 'line-up' },
+      { label: 'Match Plan', detail: matchPlanCount > 0 ? `${matchPlanCount} phase${matchPlanCount === 1 ? '' : 's'} saved` : 'Not set', action: 'match-plan' },
+      { label: 'Set Pieces', detail: setPiecesConfigured ? 'Configured' : 'Not set', action: 'set-pieces' },
+      { label: 'Video', detail: selectedMatch?.videoUrl ? 'Available' : 'Not linked', action: onNavigateToVideoAnalysis ? 'video-analysis' : undefined },
+      { label: 'Events', detail: `${events.length} event${events.length === 1 ? '' : 's'}`, action: 'events' }
+    ];
 
     return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Matchday roster</p>
-            <h2 className="text-lg font-black text-slate-950">
-              Squad Call <span className="text-slate-400">({calledUpPlayers.length})</span>
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            {renderSaveStatus('squad-call')}
-            {isSquadCallConfirmed && !hasSquadCallPendingChanges ? (
-              <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">
-                <Check className="h-4 w-4" />
-                Squad Confirmed
-              </span>
-            ) : (
+      <div className="space-y-5">
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Match overview</p>
+          <h2 className="mt-1 text-lg font-black text-slate-950">Matchday status</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {cards.map((card) => (
               <button
+                key={card.label}
                 type="button"
-                onClick={() => void handleConfirmSquadCall()}
-                disabled={calledUpPlayers.length === 0 || saveStates['squad-call']?.state === 'saving'}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white hover:bg-[#09355e] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!card.action}
+                onClick={() => {
+                  if (card.action === 'video-analysis') onNavigateToVideoAnalysis?.(selectedMatch?.opponentTeamId || '');
+                  else if (card.action) setActiveTab(card.action);
+                }}
+                className={`rounded-lg border border-slate-200 bg-slate-50 p-3 text-left ${card.action ? 'transition hover:border-sky-300 hover:bg-white' : 'cursor-default'}`}
               >
-                <Check className="h-4 w-4" />
-                Confirm Squad
+                <p className="text-xs font-black text-slate-900">{card.label}</p>
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">{card.detail}</p>
               </button>
-            )}
+            ))}
           </div>
-        </div>
-
-        {isSquadCallConfirmed && hasSquadCallPendingChanges && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
-            The squad call was confirmed but has changed since then. Confirm again to lock in the current roster.
-          </div>
-        )}
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredSquad.map((player) => {
-              const isCalled = calledUpIdSet.has(player.id);
-              return (
-                <button
-                  key={player.id}
-                  type="button"
-                  onClick={() => void handleToggleSquadCall(player.id, !isCalled)}
-                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${
-                    isCalled ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
-                  }`}
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-900">
-                    #{player.number ?? '-'} {player.firstName} {player.lastName}
-                  </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isCalled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                    {isCalled ? 'Called' : 'Add'}
-                  </span>
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Quick access</p>
+              <h2 className="mt-1 text-lg font-black text-slate-950">Match workspace</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['line-up', 'match-plan', 'set-pieces', 'events', 'statistics'] as const).map((tab) => (
+                <button key={tab} type="button" onClick={() => setActiveTab(tab)} className="rounded-md bg-[#002142] px-3 py-2 text-xs font-black text-white hover:bg-[#083561]">
+                  {tab === 'line-up' ? 'Line-up' : tab === 'match-plan' ? 'Match Plan' : tab === 'set-pieces' ? 'Set Pieces' : tab === 'events' ? 'Timeline' : 'Statistics'}
                 </button>
-              );
-            })}
-            {filteredSquad.length === 0 && (
-              <p className="col-span-full py-6 text-center text-xs font-bold text-slate-400">No squad players found.</p>
-            )}
+              ))}
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     );
   };
@@ -2077,8 +1948,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     const homeScore = selectedMatch.isHome ? selectedMatch.ourScore : selectedMatch.opponentScore;
     const awayScore = selectedMatch.isHome ? selectedMatch.opponentScore : selectedMatch.ourScore;
     const tabLabels: Record<MatchTab, string> = {
-      'opponent-analysis': 'Opposition',
-      'squad-call': 'Squad Call',
+      overview: 'Overview',
       'line-up': 'Line-up',
       'match-plan': 'Match Plan',
       'set-pieces': 'Set Pieces',
@@ -2086,7 +1956,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       statistics: 'Statistics'
     };
     const tabBadgeCount: Partial<Record<MatchTab, number>> = {
-      'squad-call': calledUpPlayers.length,
       events: events.length
     };
 
@@ -2157,6 +2026,10 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 px-4 py-3 text-[11px] font-semibold text-slate-300">
             <span className="inline-flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-sky-300" />{formatDate(selectedMatch.date)}</span>
             <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-sky-300" />{selectedMatch.venue || selectedMatch.location || 'Venue TBD'}</span>
+            <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${hasSquadCallPendingChanges ? 'border-amber-300/40 bg-amber-300/10 text-amber-100' : isSquadCallConfirmed ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-100' : 'border-white/15 bg-white/5 text-slate-200'}`}>
+              <Users className="h-3.5 w-3.5" />
+              Squad Call: {lineupEntries.length} Players · {hasSquadCallPendingChanges ? 'Changes pending' : isSquadCallConfirmed ? 'Confirmed' : 'Not confirmed'}
+            </span>
           </div>
         </header>
 
@@ -2182,9 +2055,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                         {badgeCount}
                       </span>
                     )}
-                    {tab === 'squad-call' && isSquadCallConfirmed && !hasSquadCallPendingChanges && (
-                      <Check className={`h-3 w-3 ${isActive ? 'text-emerald-300' : 'text-emerald-600'}`} />
-                    )}
                   </button>
                 );
               })}
@@ -2193,8 +2063,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
         <main className="p-3 sm:p-5">
           {isLoadingWorkspace ? <div role="status" className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-500">Loading match workspace...</div> : workspaceLoadError ? <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"><p className="font-black">Match workspace could not be loaded.</p><p className="mt-1 text-xs">{workspaceLoadError}</p></div> : <>
-            {activeTab === 'opponent-analysis' && renderOpponentAnalysisTab()}
-            {activeTab === 'squad-call' && renderSquadCallTab()}
+            {activeTab === 'overview' && renderOverviewTab()}
             {activeTab === 'line-up' && renderLineupTab()}
             {activeTab === 'match-plan' && renderPlanTab()}
             {activeTab === 'set-pieces' && renderSetPiecesTab()}

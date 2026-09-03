@@ -474,21 +474,27 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
 
       const draggedEntry = starters.find((s) => s.id === draggedEntryId);
       if (draggedEntry) {
-        const targetSlot = formationSlots.reduce((nearest, slot) => (
+        const targetStarter = starters.find((entry) => {
+          if (entry.id === draggedEntry.id) return false;
+          const position = resolveStablePitchPosition(entry, formationSlots);
+          return pitchDistance(finalX, finalY, position.x, position.y) < 7;
+        });
+        const nearestSlot = formationSlots.reduce((nearest, slot) => (
           pitchDistance(finalX, finalY, slot.x, slot.y) < pitchDistance(finalX, finalY, nearest.x, nearest.y) ? slot : nearest
         ));
-        const targetStarter = findSlotOccupant(targetSlot, starters, formationSlots, draggedEntry.id);
+        const isNearEmptySlot = !targetStarter && !findSlotOccupant(nearestSlot, starters, formationSlots, draggedEntry.id) && pitchDistance(finalX, finalY, nearestSlot.x, nearestSlot.y) < 5;
 
         if (targetStarter) {
+          const targetPosition = resolveStablePitchPosition(targetStarter, formationSlots);
           await onBatchUpdateLineupEntries([
             {
               id: draggedEntry.id,
               matchId,
               playerId: draggedEntry.playerId,
               starter: true,
-              position: targetSlot.position,
-              pitchX: targetSlot.x,
-              pitchY: targetSlot.y,
+              position: targetStarter.position,
+              pitchX: targetPosition.x,
+              pitchY: targetPosition.y,
               shirtNumber: draggedEntry.shirtNumber,
               captain: draggedEntry.captain,
               notes: draggedEntry.notes
@@ -511,12 +517,12 @@ export const MatchPitchBoard: React.FC<MatchPitchBoardProps> = ({
             id: draggedEntry.id,
             matchId,
             playerId: draggedEntry.playerId,
-            position: targetSlot.position,
+            position: isNearEmptySlot ? nearestSlot.position : draggedEntry.position,
             starter: true,
             shirtNumber: draggedEntry.shirtNumber,
             captain: draggedEntry.captain,
-            pitchX: targetSlot.x,
-            pitchY: targetSlot.y,
+            pitchX: finalX,
+            pitchY: finalY,
             notes: draggedEntry.notes
           });
         }

@@ -33,6 +33,19 @@ test('persisted coordinates never depend on lineup array order', () => {
   assert.deepEqual(positionAfter, positionBefore);
 });
 
+test('manual pitch coordinates remain unchanged when other starters occupy formation slots', () => {
+  const manuallyMovedStarter = { id: 'entry-a', playerId: 'player-a', position: 'LB', pitchX: 47.5, pitchY: 51.2 };
+  const initialPosition = resolveStablePitchPosition(manuallyMovedStarter, slots);
+  const otherStarters = [
+    { id: 'entry-b', playerId: 'player-b', position: 'ST', pitchX: 50, pitchY: 18 },
+    { id: 'entry-c', playerId: 'player-c', position: 'CAM', pitchX: 50, pitchY: 36 },
+    manuallyMovedStarter
+  ];
+
+  assert.deepEqual(resolveStablePitchPosition(otherStarters[2], slots), initialPosition);
+  assert.deepEqual(initialPosition, { x: 47.5, y: 51.2, position: 'LB' });
+});
+
 test('legacy entries without coordinates receive a deterministic player-based fallback', () => {
   const entry = { id: 'entry-a', playerId: 'stable-player-id', position: 'CB' };
   const first = resolveStablePitchPosition(entry, slots);
