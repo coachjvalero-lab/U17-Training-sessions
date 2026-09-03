@@ -27,7 +27,7 @@ import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils
 import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
 import { selectCalledUpPlayers, hasSquadCallChangedSinceConfirmation } from '../utils/matchLineup';
-import { countLogicalSubstitutions, findPairedSubstitutionEvent } from '../services/matches/substitutionLogic';
+import { countLogicalSubstitutions, findPairedSubstitutionEvent, reconstructLogicalSubstitutions } from '../services/matches/substitutionLogic';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
@@ -51,7 +51,11 @@ const opponentTagGroups: Array<{ key: 'build-up' | 'pressing' | 'block' | 'defen
   { key: 'defensive-transition', title: 'Defensive Transition', values: [{ value: 'immediate_pressure', label: 'Immediate Pressure' }, { value: 'retreat', label: 'Retreat' }] }
 ];
 
-const EVENT_TYPE_OPTIONS: Array<{ value: MatchEventType; label: string }> = [
+// The Quick Actions UI presents a substitution as ONE action; it still creates/edits the
+// existing paired substitution_out + substitution_in match_events under the hood.
+type FormEventChoice = Exclude<MatchEventType, 'substitution_in' | 'substitution_out'> | 'substitution';
+
+const EVENT_TYPE_OPTIONS: Array<{ value: FormEventChoice; label: string }> = [
   { value: 'goal', label: 'Goal' },
   { value: 'opponent_goal', label: 'Opponent Goal' },
   { value: 'corner', label: 'Corner' },
@@ -59,8 +63,7 @@ const EVENT_TYPE_OPTIONS: Array<{ value: MatchEventType; label: string }> = [
   { value: 'assist', label: 'Assist' },
   { value: 'yellow_card', label: 'Yellow Card' },
   { value: 'red_card', label: 'Red Card' },
-  { value: 'substitution_in', label: 'Substitution In' },
-  { value: 'substitution_out', label: 'Substitution Out' },
+  { value: 'substitution', label: 'Substitution' },
   { value: 'own_goal', label: 'Own Goal' },
   { value: 'injury', label: 'Injury' },
   { value: 'other', label: 'Other' }
@@ -84,24 +87,6 @@ function formatDate(date: string): string {
 function formatMatchStatusLabel(status: Match['status']): string {
   if (status === 'played') return 'Played';
   return 'Planned';
-}
-
-function getEventLabel(eventType: MatchEventType): string {
-  const map: Record<MatchEventType, string> = {
-    goal: 'Goal',
-    opponent_goal: 'Opponent Goal',
-    corner: 'Corner',
-    opponent_corner: 'Opponent Corner',
-    assist: 'Assist',
-    yellow_card: 'Yellow Card',
-    red_card: 'Red Card',
-    substitution_in: 'Substitution In',
-    substitution_out: 'Substitution Out',
-    own_goal: 'Own Goal',
-    injury: 'Injury',
-    other: 'Other'
-  };
-  return map[eventType] || 'Event';
 }
 
 interface MatchCentreSectionProps {
@@ -165,11 +150,14 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [saveStates, setSaveStates] = useState<Record<string, { state: SaveState; message?: string }>>({});
   const [newEventMinute, setNewEventMinute] = useState('0');
-  const [newEventType, setNewEventType] = useState<MatchEventType>('goal');
+  const [newEventType, setNewEventType] = useState<FormEventChoice>('goal');
   const [newEventPlayerId, setNewEventPlayerId] = useState('');
   const [newEventRelatedPlayerId, setNewEventRelatedPlayerId] = useState('');
   const [newEventDescription, setNewEventDescription] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  // Which underlying row a substitution edit targets: the "Player Off"/"Player On" fields map
+  // to playerId/relatedPlayerId the opposite way around depending on which side is canonical.
+  const [editingSubstitutionSide, setEditingSubstitutionSide] = useState<'substitution_out' | 'substitution_in'>('substitution_out');
   const [matchVideoUrl, setMatchVideoUrl] = useState('');
   const [currentVideoSeconds, setCurrentVideoSeconds] = useState(0);
   const [isAiEventsModalOpen, setIsAiEventsModalOpen] = useState(false);
@@ -511,8 +499,70 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     }
   };
 
+  const resetEventForm = () => {
+    setEditingEventId(null);
+    setNewEventMinute('0');
+    setNewEventType('goal');
+    setNewEventPlayerId('');
+    setNewEventRelatedPlayerId('');
+    setNewEventDescription('');
+    setEditingSubstitutionSide('substitution_out');
+  };
+
   const handleAddEvent = async () => {
     if (!selectedMatch) return;
+
+    const isSubstitutionChoice = newEventType === 'substitution';
+
+    // Creating a brand new substitution: always save it as ONE action that produces the
+    // complete paired substitution_out + substitution_in match_events.
+    if (isSubstitutionChoice && !editingEventId) {
+      if (!newEventPlayerId || !newEventRelatedPlayerId || newEventPlayerId === newEventRelatedPlayerId) {
+        setSaveState('events', 'error', 'Select both the player coming off and the player coming on.');
+        return;
+      }
+
+      try {
+        setSaveState('events', 'saving');
+        const minute = Number(newEventMinute) || 0;
+        const videoTimestampSeconds = Math.max(0, Math.floor(currentVideoSeconds));
+        const description = newEventDescription || '';
+        const created = await batchCreateMatchEvents([
+          {
+            matchId: selectedMatch.id,
+            playerId: newEventPlayerId,
+            teamSide: 'our_team',
+            eventType: 'substitution_out',
+            minute,
+            videoTimestampSeconds,
+            relatedPlayerId: newEventRelatedPlayerId,
+            description
+          },
+          {
+            matchId: selectedMatch.id,
+            playerId: newEventRelatedPlayerId,
+            teamSide: 'our_team',
+            eventType: 'substitution_in',
+            minute,
+            videoTimestampSeconds,
+            relatedPlayerId: newEventPlayerId,
+            description
+          }
+        ]);
+
+        const nextEvents = [...events, ...created].sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds);
+        setEvents(nextEvents);
+        resetEventForm();
+
+        const nextStats = await recalculatePlayerMatchStatistics(selectedMatch.id);
+        setStats(nextStats);
+        setSaveState('events', 'saved');
+      } catch (error) {
+        console.error('[MatchCentreSection] Failed creating substitution', error);
+        setSaveState('events', 'error', error instanceof Error ? error.message : 'Unable to save substitution.');
+      }
+      return;
+    }
 
     try {
       setSaveState('events', 'saving');
@@ -523,14 +573,25 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         ? findPairedSubstitutionEvent(eventBeingEdited, events)
         : null;
       const isOpponent = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
+
+      // Editing an existing substitution: resolve which underlying side (out/in) this event is,
+      // and map the Player Off / Player On fields back to playerId/relatedPlayerId accordingly.
+      const effectiveEventType: MatchEventType = isSubstitutionChoice ? editingSubstitutionSide : newEventType;
+      const effectivePlayerId = isSubstitutionChoice && editingSubstitutionSide === 'substitution_in'
+        ? newEventRelatedPlayerId
+        : newEventPlayerId;
+      const effectiveRelatedPlayerId = isSubstitutionChoice && editingSubstitutionSide === 'substitution_in'
+        ? newEventPlayerId
+        : newEventRelatedPlayerId;
+
       const eventInput = {
         matchId: selectedMatch.id,
-        playerId: isOpponent ? null : (newEventPlayerId || null),
+        playerId: isOpponent ? null : (effectivePlayerId || null),
         teamSide: (isOpponent ? 'opponent' : 'our_team') as TeamSide,
-        eventType: newEventType,
+        eventType: effectiveEventType,
         minute: Number(newEventMinute) || 0,
         videoTimestampSeconds: Math.max(0, Math.floor(currentVideoSeconds)),
-        relatedPlayerId: isOpponent ? null : (newEventRelatedPlayerId || null),
+        relatedPlayerId: isOpponent ? null : (effectiveRelatedPlayerId || null),
         description: newEventDescription || ''
       };
       const saved = editingEventId
@@ -568,12 +629,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         : [...events, saved];
       nextEvents.sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds);
       setEvents(nextEvents);
-      setEditingEventId(null);
-      setNewEventMinute('0');
-      setNewEventType('goal');
-      setNewEventPlayerId('');
-      setNewEventRelatedPlayerId('');
-      setNewEventDescription('');
+      resetEventForm();
 
       const nextStats = await recalculatePlayerMatchStatistics(selectedMatch.id);
       setStats(nextStats);
@@ -633,20 +689,29 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const handleEditEvent = (event: MatchEventModel) => {
     setEditingEventId(event.id);
     setNewEventMinute(String(event.minute));
+    setNewEventDescription(event.description);
+    seekVideo(event.videoTimestampSeconds);
+
+    if (event.eventType === 'substitution_out' || event.eventType === 'substitution_in') {
+      setNewEventType('substitution');
+      setEditingSubstitutionSide(event.eventType);
+      if (event.eventType === 'substitution_out') {
+        setNewEventPlayerId(event.playerId ?? '');
+        setNewEventRelatedPlayerId(event.relatedPlayerId ?? '');
+      } else {
+        setNewEventRelatedPlayerId(event.playerId ?? '');
+        setNewEventPlayerId(event.relatedPlayerId ?? '');
+      }
+      return;
+    }
+
     setNewEventType(event.eventType);
     setNewEventPlayerId(event.playerId ?? '');
     setNewEventRelatedPlayerId(event.relatedPlayerId ?? '');
-    setNewEventDescription(event.description);
-    seekVideo(event.videoTimestampSeconds);
   };
 
   const cancelEventEdit = () => {
-    setEditingEventId(null);
-    setNewEventMinute('0');
-    setNewEventType('goal');
-    setNewEventPlayerId('');
-    setNewEventRelatedPlayerId('');
-    setNewEventDescription('');
+    resetEventForm();
   };
 
   const handleDeleteEvent = async (eventId: string) => {
@@ -1188,9 +1253,10 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         case 'red_card':
           return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 Red Card</span>;
         case 'substitution_in':
-          return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Substitution In</span>;
         case 'substitution_out':
-          return <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-black text-indigo-800">🔄 Substitution Out</span>;
+          // Only reached for unpaired/incomplete substitution rows (the fallback safety net in the
+          // Timeline); a normal, fully paired substitution renders as a single "Substitution" row instead.
+          return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">⚠️ Incomplete Substitution</span>;
         case 'injury':
           return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Injury</span>;
         default:
@@ -1324,17 +1390,23 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               {/* Secondary buttons */}
               <div className="grid grid-cols-3 gap-1.5 pt-1">
                 {[
-                  { value: 'assist' as MatchEventType, label: '👟 Assist' },
-                  { value: 'yellow_card' as MatchEventType, label: '🟨 Yellow Card' },
-                  { value: 'red_card' as MatchEventType, label: '🟥 Red Card' },
-                  { value: 'substitution_in' as MatchEventType, label: '🔄 Substitution In' },
-                  { value: 'substitution_out' as MatchEventType, label: '🔄 Substitution Out' },
-                  { value: 'injury' as MatchEventType, label: '🩹 Injury' }
+                  { value: 'assist' as FormEventChoice, label: '👟 Assist' },
+                  { value: 'yellow_card' as FormEventChoice, label: '🟨 Yellow Card' },
+                  { value: 'red_card' as FormEventChoice, label: '🟥 Red Card' },
+                  { value: 'substitution' as FormEventChoice, label: '🔄 Substitution' },
+                  { value: 'injury' as FormEventChoice, label: '🩹 Injury' }
                 ].map((item) => (
                   <button
                     key={item.value}
                     type="button"
-                    onClick={() => setNewEventType(item.value)}
+                    onClick={() => {
+                      setNewEventType(item.value);
+                      if (item.value === 'substitution') {
+                        setNewEventPlayerId('');
+                        setNewEventRelatedPlayerId('');
+                        setEditingSubstitutionSide('substitution_out');
+                      }
+                    }}
                     className={`rounded-md border px-2 py-1.5 text-[10px] font-bold transition ${
                       newEventType === item.value
                         ? 'border-[#002142] bg-[#002142] text-white'
@@ -1372,11 +1444,16 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 <select
                   value={newEventType}
                   onChange={(event) => {
-                    const val = event.target.value as MatchEventType;
+                    const val = event.target.value as FormEventChoice;
                     setNewEventType(val);
                     if (val === 'opponent_goal' || val === 'opponent_corner') {
                       setNewEventPlayerId('');
                       setNewEventRelatedPlayerId('');
+                    }
+                    if (val === 'substitution') {
+                      setNewEventPlayerId('');
+                      setNewEventRelatedPlayerId('');
+                      setEditingSubstitutionSide('substitution_out');
                     }
                   }}
                   className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case font-bold"
@@ -1393,6 +1470,39 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 <div className="rounded-md border border-rose-200 bg-rose-50/70 p-2.5 text-xs text-rose-800">
                   <span className="font-bold">Opponent team event:</span> no player from our squad needs to be assigned.
                 </div>
+              ) : newEventType === 'substitution' ? (
+                <>
+                  <label className="text-[10px] font-black uppercase text-slate-500">
+                    Player Off
+                    <select
+                      value={newEventPlayerId}
+                      onChange={(event) => setNewEventPlayerId(event.target.value)}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
+                    >
+                      <option value="">Select player</option>
+                      {squadPlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          #{player.number ?? '-'} {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-black uppercase text-slate-500">
+                    Player On
+                    <select
+                      value={newEventRelatedPlayerId}
+                      onChange={(event) => setNewEventRelatedPlayerId(event.target.value)}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
+                    >
+                      <option value="">Select player</option>
+                      {squadPlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          #{player.number ?? '-'} {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               ) : (
                 <>
                   <label className="text-[10px] font-black uppercase text-slate-500">
@@ -1411,7 +1521,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                     </select>
                   </label>
                   <label className="text-[10px] font-black uppercase text-slate-500">
-                    Related Player (Assist / Substitution)
+                    Related Player (Assist)
                     <select
                       value={newEventRelatedPlayerId}
                       onChange={(event) => setNewEventRelatedPlayerId(event.target.value)}
@@ -1498,10 +1608,93 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {events
-                  .slice()
-                  .sort((a, b) => a.videoTimestampSeconds - b.videoTimestampSeconds)
-                  .map((event) => {
+                {(() => {
+                  // Substitutions are stored as a paired substitution_out + substitution_in
+                  // match_events (unchanged schema), but must render as ONE Timeline row.
+                  const { substitutions, incompleteEvents } = reconstructLogicalSubstitutions(events);
+                  const nonSubstitutionEvents = events.filter(
+                    (event) => event.eventType !== 'substitution_in' && event.eventType !== 'substitution_out'
+                  );
+
+                  type TimelineRow =
+                    | { kind: 'event'; key: string; timestamp: number; event: MatchEventModel }
+                    | { kind: 'substitution'; key: string; timestamp: number; outEvent: MatchEventModel; inEvent: MatchEventModel };
+
+                  const timelineRows: TimelineRow[] = [
+                    ...nonSubstitutionEvents.map((event) => ({ kind: 'event' as const, key: event.id, timestamp: event.videoTimestampSeconds, event })),
+                    ...incompleteEvents.map((event) => ({ kind: 'event' as const, key: event.id, timestamp: event.videoTimestampSeconds, event })),
+                    ...substitutions.map((sub) => ({
+                      kind: 'substitution' as const,
+                      key: `${sub.outEvent.id}-${sub.inEvent.id}`,
+                      timestamp: sub.outEvent.videoTimestampSeconds,
+                      outEvent: sub.outEvent,
+                      inEvent: sub.inEvent
+                    }))
+                  ].sort((a, b) => a.timestamp - b.timestamp);
+
+                  return timelineRows.map((row) => {
+                    if (row.kind === 'substitution') {
+                      const { outEvent, inEvent } = row;
+                      return (
+                        <div
+                          key={row.key}
+                          className="group grid grid-cols-[68px_minmax(0,1fr)_72px] gap-3 py-3.5 hover:bg-slate-50/70 rounded-lg px-2 transition"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => seekVideo(outEvent.videoTimestampSeconds)}
+                            title="Jump to this moment in the video"
+                            className="self-start rounded-md bg-slate-950 px-2 py-1.5 font-mono text-xs font-black text-cyan-300 hover:bg-slate-800 transition"
+                          >
+                            {formatVideoTimestamp(outEvent.videoTimestampSeconds)}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => seekVideo(outEvent.videoTimestampSeconds)}
+                            className="min-w-0 text-left"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Substitution</span>
+                              <span className="font-mono text-xs font-black text-slate-500">
+                                {outEvent.minute}'
+                              </span>
+                            </div>
+
+                            <div className="text-sm font-black text-slate-900">
+                              {playerName(inEvent.playerId)} <span className="font-normal text-slate-400">for</span> {playerName(outEvent.playerId)}
+                            </div>
+
+                            {(outEvent.description || inEvent.description) && (
+                              <div className="mt-1 text-xs leading-5 text-slate-600">
+                                {outEvent.description || inEvent.description}
+                              </div>
+                            )}
+                          </button>
+
+                          <div className="flex items-start justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleEditEvent(outEvent)}
+                              title="Edit substitution"
+                              className="p-1.5 rounded text-slate-400 hover:bg-slate-200 hover:text-sky-700"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteEvent(outEvent.id)}
+                              title="Delete substitution"
+                              className="p-1.5 rounded text-slate-400 hover:bg-rose-100 hover:text-rose-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const event = row.event;
                     const isOpponent = event.eventType === 'opponent_goal' || event.eventType === 'opponent_corner' || event.teamSide === 'opponent';
                     const playerDisplayName = isOpponent
                       ? (selectedMatch?.opponentName ? `Opponent team (${selectedMatch.opponentName})` : 'Opponent team')
@@ -1509,7 +1702,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
                     return (
                       <div
-                        key={event.id}
+                        key={row.key}
                         className="group grid grid-cols-[68px_minmax(0,1fr)_72px] gap-3 py-3.5 hover:bg-slate-50/70 rounded-lg px-2 transition"
                       >
                         <button
@@ -1570,7 +1763,8 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                         </div>
                       </div>
                     );
-                  })}
+                  });
+                })()}
               </div>
             )}
           </section>
