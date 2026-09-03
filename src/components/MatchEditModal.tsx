@@ -12,7 +12,7 @@ import {
   Video,
   Check
 } from 'lucide-react';
-import type { Match } from '../types';
+import type { Match, MatchCategory } from '../types';
 import { updateMatch, createMatch } from '../services/matches/matchService';
 
 interface MatchEditModalProps {
@@ -45,7 +45,14 @@ const COMMON_COMPETITIONS = [
   'SAFF Women First Division',
   'SAFF Women Cup',
   'Friendly Match',
-  'Torneo Preparatorio'
+  'Preseason Tournament'
+];
+
+const MATCH_CATEGORY_OPTIONS: Array<{ value: MatchCategory; label: string }> = [
+  { value: 'official', label: 'Official Competition' },
+  { value: 'friendly', label: 'Friendly' },
+  { value: 'preseason', label: 'Preseason' },
+  { value: 'other', label: 'Other' }
 ];
 
 export const MatchEditModal: React.FC<MatchEditModalProps> = ({
@@ -63,6 +70,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
   const [opponentName, setOpponentName] = useState('');
   const [isHome, setIsHome] = useState(true);
   const [competitionName, setCompetitionName] = useState('U17 Women League');
+  const [matchCategory, setMatchCategory] = useState<MatchCategory>('official');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('18:30');
   const [venue, setVenue] = useState('');
@@ -80,6 +88,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
       setOpponentName(match.opponentName || match.opponentTeamId || '');
       setIsHome(match.isHome ?? true);
       setCompetitionName(match.competitionName || 'U17 Women League');
+      setMatchCategory(match.matchCategory || 'official');
       setDate(match.date || new Date().toISOString().split('T')[0]);
       setTime(match.time || '18:30');
       setVenue(match.venue || match.location || '');
@@ -91,6 +100,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
       setOpponentName('');
       setIsHome(true);
       setCompetitionName('U17 Women League');
+      setMatchCategory('official');
       setDate(new Date().toISOString().split('T')[0]);
       setTime('18:30');
       setVenue('AlUla Stadium');
@@ -107,11 +117,11 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!opponentName.trim()) {
-      setErrorMessage('Por favor, indica el nombre del equipo rival.');
+      setErrorMessage('Please enter the opponent team name.');
       return;
     }
     if (!date) {
-      setErrorMessage('Por favor, indica la fecha del partido.');
+      setErrorMessage('Please enter the match date.');
       return;
     }
 
@@ -129,6 +139,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
           opponentName: opponentName.trim(),
           isHome,
           competitionName: competitionName.trim() || 'U17 Women League',
+          matchCategory,
           date,
           time: time.trim() || '18:30',
           venue: venue.trim() || null,
@@ -145,6 +156,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
           opponentName: opponentName.trim(),
           isHome,
           competitionName: competitionName.trim() || 'U17 Women League',
+          matchCategory,
           date,
           time: time.trim() || '18:30',
           venue: venue.trim() || null,
@@ -160,7 +172,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[MatchEditModal] Save failed:', err);
-      setErrorMessage(err?.message || 'Error al guardar los datos del partido.');
+      setErrorMessage(err?.message || 'Failed to save the match.');
     } finally {
       setIsSaving(false);
     }
@@ -168,8 +180,8 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
 
   const handleDelete = async () => {
     if (!match || !onDelete) return;
-    const confirmName = match.opponentName || 'este partido';
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar el partido contra ${confirmName}? Esta acción borrará también sus eventos y alineaciones asociadas.`)) {
+    const confirmName = match.opponentName || 'this match';
+    if (!window.confirm(`Are you sure you want to delete the match against ${confirmName}? This will also delete its associated events and lineup.`)) {
       return;
     }
 
@@ -180,7 +192,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[MatchEditModal] Delete failed:', err);
-      setErrorMessage(err?.message || 'Error al eliminar el partido.');
+      setErrorMessage(err?.message || 'Failed to delete the match.');
     } finally {
       setIsDeleting(false);
     }
@@ -210,12 +222,12 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-black tracking-tight text-white font-display">
-                {isEditing ? 'Editar Datos del Partido' : 'Programar Nuevo Partido'}
+                {isEditing ? 'Edit Match Details' : 'Schedule New Match'}
               </h2>
               <p className="text-xs text-slate-300">
                 {isEditing
-                  ? 'Modifica los equipos, fecha, horario o resultado del encuentro.'
-                  : 'Registra un nuevo partido en el calendario de la temporada.'}
+                  ? 'Update the teams, date, time or result of this match.'
+                  : 'Add a new match to the season calendar.'}
               </p>
             </div>
           </div>
@@ -238,10 +250,10 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             </div>
           )}
 
-          {/* Condition Selector: Local vs Visitante */}
+          {/* Condition Selector: Home vs Away */}
           <div>
             <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-600">
-              Condición de Nuestro Equipo ({teamName})
+              Our Team's Condition ({teamName})
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -254,7 +266,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 }`}
               >
                 <Shield className="h-4 w-4 text-sky-600" />
-                <span>LOCAL (En Casa)</span>
+                <span>HOME</span>
               </button>
               <button
                 type="button"
@@ -266,7 +278,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 }`}
               >
                 <MapPin className="h-4 w-4 text-sky-600" />
-                <span>VISITANTE (Fuera)</span>
+                <span>AWAY</span>
               </button>
             </div>
           </div>
@@ -274,19 +286,19 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
           {/* Opponent Team Name */}
           <div>
             <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
-              Equipo Rival <span className="text-rose-500">*</span>
+              Opponent Team <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               required
               value={opponentName}
               onChange={(e) => setOpponentName(e.target.value)}
-              placeholder="Ej: Al Nassr, Al Hilal, Al Ittihad..."
+              placeholder="E.g. Al Nassr, Al Hilal, Al Ittihad..."
               className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-sky-600 focus:bg-white focus:ring-2 focus:ring-sky-500/20"
             />
             {/* Quick suggestion chips */}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-400 mr-1">Sugerencias:</span>
+              <span className="text-[11px] font-bold text-slate-400 mr-1">Suggestions:</span>
               {suggestedOpponents.map((sug) => (
                 <button
                   key={sug}
@@ -300,24 +312,44 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             </div>
           </div>
 
-          {/* Competition */}
-          <div>
-            <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
-              Competición / Torneo
-            </label>
-            <input
-              type="text"
-              value={competitionName}
-              onChange={(e) => setCompetitionName(e.target.value)}
-              placeholder="Ej: U17 Women League, SAFF Women Cup..."
-              list="competitions-list"
-              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-sky-600 focus:bg-white"
-            />
-            <datalist id="competitions-list">
-              {COMMON_COMPETITIONS.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+          {/* Competition & Category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
+                Competition / Tournament
+              </label>
+              <input
+                type="text"
+                value={competitionName}
+                onChange={(e) => setCompetitionName(e.target.value)}
+                placeholder="E.g. U17 Women League, SAFF Women Cup..."
+                list="competitions-list"
+                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-sky-600 focus:bg-white"
+              />
+              <datalist id="competitions-list">
+                {COMMON_COMPETITIONS.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
+                Match Category
+              </label>
+              <select
+                value={matchCategory}
+                onChange={(e) => setMatchCategory(e.target.value as MatchCategory)}
+                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-sky-600 focus:bg-white"
+              >
+                {MATCH_CATEGORY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] font-semibold text-slate-400">
+                Only "Official Competition" matches count towards Standings.
+              </p>
+            </div>
           </div>
 
           {/* Date & Time Grid */}
@@ -325,7 +357,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-700">
                 <Calendar className="h-3.5 w-3.5 text-sky-600" />
-                <span>Fecha del Partido <span className="text-rose-500">*</span></span>
+                <span>Match Date <span className="text-rose-500">*</span></span>
               </label>
               <input
                 type="date"
@@ -339,7 +371,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-700">
                 <Clock className="h-3.5 w-3.5 text-sky-600" />
-                <span>Horario / Kick-off</span>
+                <span>Kick-off Time</span>
               </label>
               <input
                 type="time"
@@ -354,13 +386,13 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-700">
               <MapPin className="h-3.5 w-3.5 text-sky-600" />
-              <span>Estadio / Campo / Instalación</span>
+              <span>Venue / Ground</span>
             </label>
             <input
               type="text"
               value={venue}
               onChange={(e) => setVenue(e.target.value)}
-              placeholder="Ej: AlUla Stadium - Campo Principal"
+              placeholder="E.g. AlUla Stadium - Main Pitch"
               className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-sky-600 focus:bg-white"
             />
           </div>
@@ -370,17 +402,17 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-700">
-                  Estado del Encuentro
+                  Match Status
                 </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as Match['status'])}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-sky-600"
                 >
-                  <option value="planned">📅 Programado / Pendiente (Planned)</option>
-                  <option value="played">✅ Finalizado / Jugado (Played)</option>
-                  <option value="cancelled">❌ Cancelado (Cancelled)</option>
-                  <option value="postponed">⏳ Aplazado (Postponed)</option>
+                  <option value="planned">📅 Planned</option>
+                  <option value="played">✅ Played</option>
+                  <option value="cancelled">❌ Cancelled</option>
+                  <option value="postponed">⏳ Postponed</option>
                 </select>
               </div>
 
@@ -388,7 +420,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
               <div className="flex items-center gap-2">
                 <div>
                   <label className="block text-[10px] font-black uppercase text-slate-500 text-center">
-                    {isHome ? 'Goles Local' : 'Goles AlUla'}
+                    {isHome ? 'Home Goals' : 'AlUla Goals'}
                   </label>
                   <input
                     type="number"
@@ -403,7 +435,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 <span className="text-slate-400 font-bold mt-4">:</span>
                 <div>
                   <label className="block text-[10px] font-black uppercase text-slate-500 text-center">
-                    {isHome ? 'Goles Rival' : 'Goles Visit.'}
+                    {isHome ? 'Away Goals' : 'Opponent Goals'}
                   </label>
                   <input
                     type="number"
@@ -423,7 +455,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-700">
               <Video className="h-3.5 w-3.5 text-sky-600" />
-              <span>Enlace de Vídeo de Análisis (YouTube, Vimeo o Veo)</span>
+              <span>Analysis Video Link (YouTube, Vimeo or Veo)</span>
             </label>
             <input
               type="url"
@@ -444,7 +476,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-black text-rose-700 hover:bg-rose-100 transition disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
-                <span>{isDeleting ? 'Eliminando...' : 'Eliminar Partido'}</span>
+                <span>{isDeleting ? 'Deleting...' : 'Delete Match'}</span>
               </button>
             ) : <div />}
 
@@ -455,7 +487,7 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 disabled={isSaving || isDeleting}
                 className="rounded-2xl border border-slate-300 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="submit"
@@ -465,12 +497,12 @@ export const MatchEditModal: React.FC<MatchEditModalProps> = ({
                 {isSaving ? (
                   <>
                     <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Guardando...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <Save className="h-4 w-4" />
-                    <span>{isEditing ? 'Guardar Cambios' : 'Crear Partido'}</span>
+                    <span>{isEditing ? 'Save Changes' : 'Create Match'}</span>
                   </>
                 )}
               </button>

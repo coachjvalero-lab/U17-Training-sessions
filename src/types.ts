@@ -314,6 +314,8 @@ export type OpponentAnalysisTag =
   | 'immediate_pressure'
   | 'retreat';
 
+export type MatchCategory = 'official' | 'friendly' | 'preseason' | 'other';
+
 export interface Match {
   id: string;
   teamId: string;
@@ -322,6 +324,7 @@ export interface Match {
   opponentLogoUrl?: string | null;
   fixtureId?: string | null;
   competitionName: string;
+  matchCategory: MatchCategory;
   date: string;
   time: string;
   venue?: string | null;
@@ -331,6 +334,8 @@ export interface Match {
   ourScore?: number | null;
   opponentScore?: number | null;
   videoUrl?: string | null;
+  squadCallConfirmedAt?: string | null;
+  squadCallConfirmedPlayerIds?: string[] | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -428,6 +433,81 @@ export interface MatchSetPieces {
   defensiveVideoUrl?: string | null;
   defensiveImage1Url?: string | null;
   defensiveImage2Url?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type SetPiecePlayType =
+  | 'corner'
+  | 'defensive_corner'
+  | 'attacking_free_kick'
+  | 'defensive_free_kick'
+  | 'throw_in'
+  | 'kick_off'
+  | 'other';
+
+export const SET_PIECE_PLAY_TYPES: Array<{ value: SetPiecePlayType; label: string }> = [
+  { value: 'corner', label: 'Corner' },
+  { value: 'defensive_corner', label: 'Defensive Corner' },
+  { value: 'attacking_free_kick', label: 'Attacking Free Kick' },
+  { value: 'defensive_free_kick', label: 'Defensive Free Kick' },
+  { value: 'throw_in', label: 'Throw-in' },
+  { value: 'kick_off', label: 'Kick-off' },
+  { value: 'other', label: 'Other' }
+];
+
+export type SetPieceMarkerKind = 'player' | 'opponent' | 'ball';
+
+export interface SetPieceMarker {
+  id: string;
+  kind: SetPieceMarkerKind;
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface SetPieceArrow {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  style: 'run' | 'pass';
+}
+
+export interface SetPieceZone {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label?: string;
+}
+
+export interface SetPieceText {
+  id: string;
+  x: number;
+  y: number;
+  content: string;
+}
+
+export interface SetPieceDiagram {
+  markers: SetPieceMarker[];
+  arrows: SetPieceArrow[];
+  zones: SetPieceZone[];
+  texts: SetPieceText[];
+}
+
+export const EMPTY_SET_PIECE_DIAGRAM: SetPieceDiagram = { markers: [], arrows: [], zones: [], texts: [] };
+
+export interface SetPiecePlay {
+  id: string;
+  matchId: string;
+  title: string;
+  type: SetPiecePlayType;
+  diagram: SetPieceDiagram;
+  description: string;
+  coachingPoints: string;
   createdAt?: string;
   updatedAt?: string;
 }

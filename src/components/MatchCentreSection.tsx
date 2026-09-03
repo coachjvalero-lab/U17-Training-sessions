@@ -10,13 +10,14 @@ import {
   getMatchEvents,
   updateMatchEvent
 } from '../services/matches/matchEventsService';
-import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch } from '../services/matches/matchService';
+import { createMatch, deleteMatch, getMatchById, listMatches, updateMatch, confirmSquadCall } from '../services/matches/matchService';
 import {
   createOrUpdateOpponentAnalysis,
   getOpponentAnalysisByOpponentTeamId
 } from '../services/matches/opponentAnalysisService';
-import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
+import { batchUpdateMatchLineupEntries, getMatchLineup, updateMatchLineupEntry, upsertMatchLineupEntry, removeMatchLineupEntry, type ExistingMatchLineupEntryUpdate } from '../services/matches/matchLineupService';
 import { MatchPitchBoard } from './MatchPitchBoard';
+import { SetPiecesSection } from './SetPiecesSection';
 import { getMatchPlan, upsertMatchPlanPhase } from '../services/matches/matchPlanService';
 import { getMatchSetPieces, upsertMatchSetPieces } from '../services/matches/matchSetPiecesService';
 import { derivePlayerMatchStatsFromData, getPlayerMatchStatistics, recalculatePlayerMatchStatistics } from '../services/matches/playerMatchStatisticsService';
@@ -25,11 +26,12 @@ import type { Match, MatchEvent as MatchEventModel, MatchEventType, MatchLineupE
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
-import { selectCalledUpPlayers } from '../utils/matchLineup';
+import { selectCalledUpPlayers, hasSquadCallChangedSinceConfirmation } from '../utils/matchLineup';
 import { countLogicalSubstitutions, findPairedSubstitutionEvent } from '../services/matches/substitutionLogic';
 
 const TAB_OPTIONS = [
   'opponent-analysis',
+  'squad-call',
   'line-up',
   'match-plan',
   'set-pieces',
@@ -190,6 +192,59 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     () => selectCalledUpPlayers(squadPlayers, lineupEntries),
     [lineupEntries, squadPlayers]
   );
+
+  const calledUpPlayerIds = useMemo(
+    () => calledUpPlayers.map((player) => player.id).sort(),
+    [calledUpPlayers]
+  );
+
+  const isSquadCallConfirmed = Boolean(selectedMatch?.squadCallConfirmedAt);
+  const hasSquadCallPendingChanges = useMemo(
+    () => isSquadCallConfirmed && hasSquadCallChangedSinceConfirmation(selectedMatch?.squadCallConfirmedPlayerIds, calledUpPlayerIds),
+    [isSquadCallConfirmed, selectedMatch?.squadCallConfirmedPlayerIds, calledUpPlayerIds]
+  );
+
+  const handleConfirmSquadCall = async () => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('squad-call', 'saving');
+      const updated = await confirmSquadCall(selectedMatch.id, calledUpPlayerIds);
+      setSelectedMatch(updated);
+      setSaveState('squad-call', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed confirming squad call', error);
+      setSaveState('squad-call', 'error', error instanceof Error ? error.message : 'Unable to confirm the squad call.');
+    }
+  };
+
+  const handleToggleSquadCall = async (playerId: string, isCalled: boolean) => {
+    if (!selectedMatch) return;
+    try {
+      setSaveState('squad-call', 'saving');
+      if (!isCalled) {
+        const existing = lineupEntries.find((entry) => entry.playerId === playerId);
+        if (existing) {
+          setLineupEntries((current) => current.filter((entry) => entry.id !== existing.id));
+          await removeMatchLineupEntry(existing.id);
+        }
+      } else {
+        const player = squadPlayers.find((item) => item.id === playerId);
+        const saved = await upsertMatchLineupEntry({
+          matchId: selectedMatch.id,
+          playerId,
+          starter: false,
+          position: player?.position || 'UTIL',
+          shirtNumber: player?.number ? Number(player.number) : null,
+          captain: false
+        });
+        setLineupEntries((current) => [...current.filter((entry) => entry.playerId !== playerId), saved]);
+      }
+      setSaveState('squad-call', 'saved');
+    } catch (error) {
+      console.error('[MatchCentreSection] Failed updating squad call', error);
+      setSaveState('squad-call', 'error', error instanceof Error ? error.message : 'Unable to update the squad call.');
+    }
+  };
 
   useEffect(() => {
     const handleRouteChange = () => {
@@ -767,6 +822,79 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     );
   };
 
+  const renderSquadCallTab = () => {
+    if (!selectedMatch) return null;
+
+    const filteredSquad = [...squadPlayers].sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    const calledUpIdSet = new Set(calledUpPlayerIds);
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Matchday roster</p>
+            <h2 className="text-lg font-black text-slate-950">
+              Squad Call <span className="text-slate-400">({calledUpPlayers.length})</span>
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {renderSaveStatus('squad-call')}
+            {isSquadCallConfirmed && !hasSquadCallPendingChanges ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">
+                <Check className="h-4 w-4" />
+                Squad Confirmed
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleConfirmSquadCall()}
+                disabled={calledUpPlayers.length === 0 || saveStates['squad-call']?.state === 'saving'}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white hover:bg-[#09355e] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" />
+                Confirm Squad
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isSquadCallConfirmed && hasSquadCallPendingChanges && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">
+            The squad call was confirmed but has changed since then. Confirm again to lock in the current roster.
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredSquad.map((player) => {
+              const isCalled = calledUpIdSet.has(player.id);
+              return (
+                <button
+                  key={player.id}
+                  type="button"
+                  onClick={() => void handleToggleSquadCall(player.id, !isCalled)}
+                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition ${
+                    isCalled ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-900">
+                    #{player.number ?? '-'} {player.firstName} {player.lastName}
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${isCalled ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {isCalled ? 'Called' : 'Add'}
+                  </span>
+                </button>
+              );
+            })}
+            {filteredSquad.length === 0 && (
+              <p className="col-span-full py-6 text-center text-xs font-bold text-slate-400">No squad players found.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderLineupTab = () => {
     if (!selectedMatch) return null;
 
@@ -1031,22 +1159,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
   const renderSetPiecesTab = () => {
     if (!selectedMatch) return null;
-
-    const renderSetPieceSide = (side: 'attacking' | 'defensive') => {
-      const title = side === 'attacking' ? 'Attacking routines' : 'Defensive organisation';
-      const noteKey = side === 'attacking' ? 'attackingNotes' : 'defensiveNotes';
-      const videoKey = side === 'attacking' ? 'attackingVideoUrl' : 'defensiveVideoUrl';
-      const image1Key = side === 'attacking' ? 'attackingImage1Url' : 'defensiveImage1Url';
-      const image2Key = side === 'attacking' ? 'attackingImage2Url' : 'defensiveImage2Url';
-      return <section className="space-y-3 p-5"><div><p className={`text-[10px] font-black uppercase tracking-[0.14em] ${side === 'attacking' ? 'text-emerald-700' : 'text-rose-700'}`}>{side === 'attacking' ? 'With the ball' : 'Without the ball'}</p><h3 className="text-lg font-black text-slate-950">{title}</h3></div><textarea value={setPiecesDraft[noteKey]} onChange={(event) => setSetPiecesDraft((current) => ({ ...current, [noteKey]: event.target.value }))} placeholder="Responsibilities, triggers and delivery zones..." className="min-h-[150px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-3 text-sm leading-6" /><input value={setPiecesDraft[videoKey]} onChange={(event) => setSetPiecesDraft((current) => ({ ...current, [videoKey]: event.target.value }))} placeholder="Video URL" className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />{toVideoEmbedUrl(setPiecesDraft[videoKey]) && <iframe title={`${title} video`} src={toVideoEmbedUrl(setPiecesDraft[videoKey]) ?? ''} className="aspect-video w-full rounded-md border border-slate-200" allowFullScreen />}<div className="grid gap-3 sm:grid-cols-2">{[image1Key, image2Key].map((key, index) => <div key={key}><input value={setPiecesDraft[key]} onChange={(event) => setSetPiecesDraft((current) => ({ ...current, [key]: event.target.value }))} placeholder={`Diagram ${index + 1} URL`} className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs" />{setPiecesDraft[key] && <img src={setPiecesDraft[key]} alt={`${title} diagram ${index + 1}`} className="mt-2 aspect-video w-full rounded-md object-cover" />}</div>)}</div></section>;
-    };
-
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Dead-ball strategy</p><h2 className="text-lg font-black text-slate-950">Set-piece board</h2></div><div className="flex items-center gap-3">{renderSaveStatus('set-pieces')}<button type="button" onClick={() => void saveSetPieces(setPiecesDraft)} disabled={saveStates['set-pieces']?.state === 'saving'} className="inline-flex items-center gap-2 rounded-md bg-[#002142] px-3 py-2 text-xs font-black text-white disabled:opacity-60"><Save className="h-4 w-4" />Save all</button></div></div>
-        <div className="grid divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">{renderSetPieceSide('attacking')}{renderSetPieceSide('defensive')}</div>
-      </div>
-    );
+    return <SetPiecesSection matchId={selectedMatch.id} />;
   };
 
   const renderEventsTab = () => {
@@ -1769,7 +1882,19 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     const hasScore = selectedMatch.ourScore !== null && selectedMatch.ourScore !== undefined && selectedMatch.opponentScore !== null && selectedMatch.opponentScore !== undefined;
     const homeScore = selectedMatch.isHome ? selectedMatch.ourScore : selectedMatch.opponentScore;
     const awayScore = selectedMatch.isHome ? selectedMatch.opponentScore : selectedMatch.ourScore;
-    const tabLabels: Record<MatchTab, string> = { 'opponent-analysis': 'Opposition', 'line-up': 'Line-up', 'match-plan': 'Game Plan', 'set-pieces': 'Set Pieces', events: 'Timeline', statistics: 'Statistics' };
+    const tabLabels: Record<MatchTab, string> = {
+      'opponent-analysis': 'Opposition',
+      'squad-call': 'Squad Call',
+      'line-up': 'Line-up',
+      'match-plan': 'Match Plan',
+      'set-pieces': 'Set Pieces',
+      events: 'Timeline',
+      statistics: 'Statistics'
+    };
+    const tabBadgeCount: Partial<Record<MatchTab, number>> = {
+      'squad-call': calledUpPlayers.length,
+      events: events.length
+    };
 
     return (
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
@@ -1781,7 +1906,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/20 hover:text-white transition"
             >
               <ChevronLeft className="h-4 w-4" />
-              <span>Todos los partidos</span>
+              <span>All Matches</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -1796,20 +1921,20 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => handleOpenEditMatch(selectedMatch)}
-                  title="Editar datos del partido (equipos, horario, fecha, etc.)"
+                  title="Edit match details (teams, time, date, etc.)"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-sky-500/20 px-3 py-1.5 text-xs font-bold text-sky-200 hover:bg-sky-500/30 hover:text-white transition border border-sky-400/30"
                 >
                   <Edit3 className="h-3.5 w-3.5" />
-                  <span>Editar Partido</span>
+                  <span>Edit Match</span>
                 </button>
                 <button
                   type="button"
                   onClick={(e) => void handleDeleteMatch(selectedMatch.id, e)}
-                  title="Eliminar este partido"
+                  title="Delete this match"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-500/30 hover:text-white transition border border-rose-400/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span>Eliminar</span>
+                  <span>Delete</span>
                 </button>
               </div>
             </div>
@@ -1819,7 +1944,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             <div className="flex min-w-0 flex-col items-center text-center">
               <TeamCrest name={homeTeam.name} logoUrl={homeTeam.logoUrl} isAlula={homeTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" />
               <span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{homeTeamName}</span>
-              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Home (Local)</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Home</span>
             </div>
             <div className="text-center">
               {hasScore ? (
@@ -1827,12 +1952,12 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               ) : (
                 <div className="text-xl font-black text-sky-200">VS</div>
               )}
-              <div className="mt-2 text-xs font-bold text-sky-300">{selectedMatch.time || 'Horario por definir'}</div>
+              <div className="mt-2 text-xs font-bold text-sky-300">{selectedMatch.time || 'Time TBD'}</div>
             </div>
             <div className="flex min-w-0 flex-col items-center text-center">
               <TeamCrest name={awayTeam.name} logoUrl={awayTeam.logoUrl} isAlula={awayTeam.isAlula} className="h-14 w-14 rounded-full border border-white/20 bg-white p-1 sm:h-16 sm:w-16" />
               <span className="mt-2 max-w-full truncate text-sm font-black sm:text-base">{awayTeamName}</span>
-              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Away (Visitante)</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Away</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/10 px-4 py-3 text-[11px] font-semibold text-slate-300">
@@ -1841,28 +1966,41 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           </div>
         </header>
 
-        <nav className="overflow-x-auto border-b border-slate-200 bg-white px-3" aria-label="Match workspace">
-          <div className="flex min-w-max">
-              {TAB_OPTIONS.map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`border-b-2 px-4 py-3 text-[10px] font-black uppercase tracking-[0.1em] transition ${
-                    activeTab === tab
-                      ? 'border-sky-600 text-[#002142]'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  {tabLabels[tab]}
-                </button>
-              ))}
+        <nav className="overflow-x-auto border-b border-slate-200 bg-white px-3 py-2" aria-label="Match workspace">
+          <div className="flex min-w-max gap-1">
+              {TAB_OPTIONS.map((tab) => {
+                const isActive = activeTab === tab;
+                const badgeCount = tabBadgeCount[tab];
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                      isActive
+                        ? 'bg-[#002142] text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>{tabLabels[tab]}</span>
+                    {typeof badgeCount === 'number' && (
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                        {badgeCount}
+                      </span>
+                    )}
+                    {tab === 'squad-call' && isSquadCallConfirmed && !hasSquadCallPendingChanges && (
+                      <Check className={`h-3 w-3 ${isActive ? 'text-emerald-300' : 'text-emerald-600'}`} />
+                    )}
+                  </button>
+                );
+              })}
           </div>
         </nav>
 
         <main className="p-3 sm:p-5">
           {isLoadingWorkspace ? <div role="status" className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-500">Loading match workspace...</div> : workspaceLoadError ? <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"><p className="font-black">Match workspace could not be loaded.</p><p className="mt-1 text-xs">{workspaceLoadError}</p></div> : <>
             {activeTab === 'opponent-analysis' && renderOpponentAnalysisTab()}
+            {activeTab === 'squad-call' && renderSquadCallTab()}
             {activeTab === 'line-up' && renderLineupTab()}
             {activeTab === 'match-plan' && renderPlanTab()}
             {activeTab === 'set-pieces' && renderSetPiecesTab()}

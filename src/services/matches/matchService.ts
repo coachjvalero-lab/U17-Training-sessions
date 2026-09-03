@@ -1,5 +1,6 @@
 import { supabase } from '../../supabaseClient';
-import type { Match } from '../../types';
+import type { Match, MatchCategory } from '../../types';
+import { calculateStandingsFromMatches, type StandingsEntry } from './standingsCalculator';
 
 const MATCHES_TABLE = 'matches';
 
@@ -9,6 +10,7 @@ type MatchRow = {
   opponent_team_id: string;
   fixture_id: string | null;
   competition_name: string | null;
+  match_category: MatchCategory | null;
   date: string;
   time: string | null;
   venue: string | null;
@@ -18,6 +20,8 @@ type MatchRow = {
   our_score: number | null;
   opponent_score: number | null;
   video_url: string | null;
+  squad_call_confirmed_at: string | null;
+  squad_call_confirmed_player_ids: string[] | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -42,6 +46,7 @@ function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
     opponentLogoUrl: withOpponent.opponent_logo_url ?? null,
     fixtureId: row.fixture_id ?? null,
     competitionName: row.competition_name ?? '',
+    matchCategory: row.match_category ?? 'official',
     date: row.date,
     time: row.time ?? '18:30',
     venue: row.venue ?? null,
@@ -51,6 +56,8 @@ function fromRow(row: MatchRow | MatchRowWithOpponent): Match {
     ourScore: row.our_score ?? null,
     opponentScore: row.opponent_score ?? null,
     videoUrl: row.video_url ?? null,
+    squadCallConfirmedAt: row.squad_call_confirmed_at ?? null,
+    squadCallConfirmedPlayerIds: row.squad_call_confirmed_player_ids ?? null,
     createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at ?? undefined
   };
@@ -63,6 +70,7 @@ function toRow(input: Partial<Match> & Pick<Match, 'teamId' | 'opponentTeamId' |
     opponent_team_id: input.opponentTeamId,
     fixture_id: input.fixtureId ?? null,
     competition_name: input.competitionName,
+    match_category: input.matchCategory ?? 'official',
     date: input.date,
     time: input.time,
     venue: input.venue ?? null,
@@ -266,6 +274,7 @@ export async function updateMatch(matchId: string, patch: Partial<Match> & { opp
   }
   if (patch.fixtureId !== undefined) payload.fixture_id = patch.fixtureId ?? null;
   if (patch.competitionName !== undefined) payload.competition_name = patch.competitionName;
+  if (patch.matchCategory !== undefined) payload.match_category = patch.matchCategory;
   if (patch.date !== undefined) payload.date = patch.date;
   if (patch.time !== undefined) payload.time = patch.time;
   if (patch.venue !== undefined) payload.venue = patch.venue ?? null;
@@ -275,6 +284,8 @@ export async function updateMatch(matchId: string, patch: Partial<Match> & { opp
   if (patch.ourScore !== undefined) payload.our_score = patch.ourScore ?? null;
   if (patch.opponentScore !== undefined) payload.opponent_score = patch.opponentScore ?? null;
   if (patch.videoUrl !== undefined) payload.video_url = patch.videoUrl ?? null;
+  if (patch.squadCallConfirmedAt !== undefined) payload.squad_call_confirmed_at = patch.squadCallConfirmedAt ?? null;
+  if (patch.squadCallConfirmedPlayerIds !== undefined) payload.squad_call_confirmed_player_ids = patch.squadCallConfirmedPlayerIds ?? null;
 
   const { error } = await getClient()
     .from(MATCHES_TABLE)
@@ -287,6 +298,17 @@ export async function updateMatch(matchId: string, patch: Partial<Match> & { opp
   const updated = await getMatchById(matchId);
   if (!updated) throw new Error('Updated match could not be reloaded');
   return updated;
+}
+
+/**
+ * Confirms the current squad call for a match: snapshots the called-up player ids so the UI
+ * can later detect "pending changes" by comparing this snapshot against the live roster.
+ */
+export async function confirmSquadCall(matchId: string, calledUpPlayerIds: string[]): Promise<Match> {
+  return updateMatch(matchId, {
+    squadCallConfirmedAt: new Date().toISOString(),
+    squadCallConfirmedPlayerIds: [...calledUpPlayerIds].sort()
+  });
 }
 
 export async function deleteMatch(matchId: string): Promise<void> {
@@ -313,124 +335,18 @@ export async function linkMatchToFixture(matchId: string, fixtureId: string | nu
   return fromRow(data as MatchRow);
 }
 
-export interface StandingsEntry {
-  rank: number;
-  team: string;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  gf: number;
-  ga: number;
-  pts: number;
-  form: Array<'W' | 'D' | 'L'>;
-  isUs: boolean;
-}
+export type { StandingsEntry } from './standingsCalculator';
 
-export async function calculateStandings(teamId: string, competitionName?: string): Promise<StandingsEntry[]> {
-  let query = getClient().from(MATCHES_TABLE).select('*');
-  
-  if (competitionName) {
-    query = query.eq('competition_name', competitionName);
-  }
-  
-  query = query.eq('status', 'played');
-  
-  const { data, error } = await query;
+export async function calculateStandings(teamId: string): Promise<StandingsEntry[]> {
+  const { data, error } = await getClient()
+    .from(MATCHES_TABLE)
+    .select('*')
+    .eq('status', 'played');
+
   if (error) throw error;
 
   const matches = ((data || []) as MatchRow[]).map(fromRow);
-  
-  const teamsMap = new Map<string, {
-    played: number;
-    won: number;
-    drawn: number;
-    lost: number;
-    gf: number;
-    ga: number;
-    matches: Match[];
-  }>();
-
-  matches.forEach(match => {
-    if (match.ourScore == null || match.opponentScore == null) return;
-
-    const ourTeam = match.teamId;
-    const opponent = match.opponentTeamId;
-    
-    if (!teamsMap.has(ourTeam)) {
-      teamsMap.set(ourTeam, { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, matches: [] });
-    }
-    if (!teamsMap.has(opponent)) {
-      teamsMap.set(opponent, { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, matches: [] });
-    }
-
-    const ourStats = teamsMap.get(ourTeam)!;
-    const opponentStats = teamsMap.get(opponent)!;
-
-    ourStats.played++;
-    ourStats.gf += match.ourScore;
-    ourStats.ga += match.opponentScore;
-    ourStats.matches.push(match);
-
-    opponentStats.played++;
-    opponentStats.gf += match.opponentScore;
-    opponentStats.ga += match.ourScore;
-
-    if (match.ourScore > match.opponentScore) {
-      ourStats.won++;
-      opponentStats.lost++;
-    } else if (match.ourScore < match.opponentScore) {
-      ourStats.lost++;
-      opponentStats.won++;
-    } else {
-      ourStats.drawn++;
-      opponentStats.drawn++;
-    }
-  });
-
-  const standings: StandingsEntry[] = Array.from(teamsMap.entries()).map(([team, stats]) => {
-    const recentMatches = stats.matches.slice(-5).reverse();
-    const form = recentMatches.map(m => {
-      if (m.ourScore == null || m.opponentScore == null) return 'D';
-      if (m.teamId === team) {
-        if (m.ourScore > m.opponentScore) return 'W';
-        if (m.ourScore < m.opponentScore) return 'L';
-        return 'D';
-      } else {
-        if (m.opponentScore > m.ourScore) return 'W';
-        if (m.opponentScore < m.ourScore) return 'L';
-        return 'D';
-      }
-    });
-
-    return {
-      rank: 0,
-      team,
-      played: stats.played,
-      won: stats.won,
-      drawn: stats.drawn,
-      lost: stats.lost,
-      gf: stats.gf,
-      ga: stats.ga,
-      pts: stats.won * 3 + stats.drawn,
-      form,
-      isUs: team === teamId
-    };
-  });
-
-  standings.sort((a, b) => {
-    if (b.pts !== a.pts) return b.pts - a.pts;
-    const gdA = a.gf - a.ga;
-    const gdB = b.gf - b.ga;
-    if (gdB !== gdA) return gdB - gdA;
-    return b.gf - a.gf;
-  });
-
-  standings.forEach((entry, index) => {
-    entry.rank = index + 1;
-  });
-
-  return standings;
+  return calculateStandingsFromMatches(matches, teamId);
 }
 
 export interface MatchWithScore {

@@ -102,7 +102,7 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
     void (async () => {
       try {
         setIsLoadingStandings(true);
-        const standingsList = await calculateStandings(selectedTeamId, 'Saudi U17 Premier League');
+        const standingsList = await calculateStandings(selectedTeamId);
         setStandings(standingsList);
       } catch (error) {
         console.error('[CompetitionSection] Failed loading standings', error);
