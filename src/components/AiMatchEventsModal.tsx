@@ -129,7 +129,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       const { data: sessionData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
       const accessToken = sessionData?.session?.access_token;
       if (!accessToken) {
-        throw new Error('Debes iniciar sesión para generar eventos con IA.');
+        throw new Error('You must be signed in to generate events with AI.');
       }
 
       const response = await fetch('/api/match/generate-events', {
@@ -163,7 +163,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       try {
         data = rawText ? JSON.parse(rawText) : {};
       } catch (parseErr) {
-        throw new Error(`Respuesta no válida del servidor (HTTP ${response.status}).`);
+        throw new Error(`Invalid server response (HTTP ${response.status}).`);
       }
 
       if (!response.ok || !data.success) {
@@ -172,7 +172,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
 
       // Defense in depth: only a videoAnalyzed:true success may populate applicable events.
       if (data.videoAnalyzed !== true) {
-        throw new Error('La IA no confirmó haber analizado el vídeo. No se muestran eventos.');
+        throw new Error('The AI did not confirm it analyzed the video. No events are shown.');
       }
 
       setAiSummary(data.summary || '');
@@ -209,7 +209,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       setGeneratedEvents(initialEvents);
     } catch (err: any) {
       console.error('[AiMatchEventsModal] Generation failed:', err);
-      setError(err?.message || 'No se pudieron generar los eventos con IA. Puedes reintentar o usar la plantilla base sugerida.');
+      setError(err?.message || 'Could not generate events with AI. You can retry or use the suggested base template.');
     } finally {
       setIsGenerating(false);
     }
@@ -218,7 +218,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const handleGenerateFallbackTemplate = () => {
     setError(null);
     setVideoAnalyzed(false);
-    setAiSummary('Plantilla base sugerida con distribución táctica de eventos estándar (Goles, Córners y Sustituciones). Estos eventos NO proceden de un análisis de vídeo: revísalos y edítalos antes de aplicarlos.');
+    setAiSummary('Suggested base template with a standard tactical distribution of events (Goals, Corners and Substitutions). These events do NOT come from a video analysis: review and edit them before applying.');
     
     const p1 = squadPlayers[0];
     const p2 = squadPlayers[1] || squadPlayers[0];
@@ -231,10 +231,10 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         eventType: 'corner',
         teamSide: 'our_team',
         playerId: p1 ? p1.id : null,
-        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Nuestra jugadora',
+        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Our player',
         relatedPlayerId: null,
         relatedPlayerName: '',
-        description: 'Córner a favor botado desde el sector derecho al primer palo.',
+        description: 'Corner won from the right flank to the near post.',
         selected: true
       },
       {
@@ -243,10 +243,10 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         eventType: 'goal',
         teamSide: 'our_team',
         playerId: p2 ? p2.id : null,
-        playerName: p2 ? `${p2.firstName} ${p2.lastName}` : 'Nuestra jugadora',
+        playerName: p2 ? `${p2.firstName} ${p2.lastName}` : 'Our player',
         relatedPlayerId: p1 ? p1.id : null,
         relatedPlayerName: p1 ? `${p1.firstName} ${p1.lastName}` : '',
-        description: 'Gol tras remate dentro del área culminando una jugada elaborada.',
+        description: 'Goal after a shot inside the box finishing off a well-worked move.',
         selected: true
       },
       {
@@ -258,7 +258,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         playerName: opponentName,
         relatedPlayerId: null,
         relatedPlayerName: '',
-        description: 'Córner rival botado al segundo palo defendido por nuestra zaga.',
+        description: 'Opponent corner taken to the far post, well defended by our backline.',
         selected: true
       },
       {
@@ -267,10 +267,10 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         eventType: 'substitution_in',
         teamSide: 'our_team',
         playerId: p3 ? p3.id : null,
-        playerName: p3 ? `${p3.firstName} ${p3.lastName}` : 'Nuestra jugadora',
+        playerName: p3 ? `${p3.firstName} ${p3.lastName}` : 'Our player',
         relatedPlayerId: p1 ? p1.id : null,
         relatedPlayerName: p1 ? `${p1.firstName} ${p1.lastName}` : '',
-        description: 'Sustitución táctica para refrescar el centro del campo.',
+        description: 'Tactical substitution to freshen up the midfield.',
         selected: true
       },
       {
@@ -282,7 +282,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         playerName: opponentName,
         relatedPlayerId: null,
         relatedPlayerName: '',
-        description: 'Gol del equipo rival en transición ofensiva rápida.',
+        description: 'Opponent goal on a fast attacking transition.',
         selected: true
       },
       {
@@ -291,10 +291,10 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
         eventType: 'goal',
         teamSide: 'our_team',
         playerId: p1 ? p1.id : null,
-        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Nuestra jugadora',
+        playerName: p1 ? `${p1.firstName} ${p1.lastName}` : 'Our player',
         relatedPlayerId: p3 ? p3.id : null,
         relatedPlayerName: p3 ? `${p3.firstName} ${p3.lastName}` : '',
-        description: 'Gol decisivo en los minutos finales tras disparo ajustado.',
+        description: 'Decisive late goal following a well-placed finish.',
         selected: true
       }
     ];
@@ -333,7 +333,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const handleApply = async () => {
     const selectedList = generatedEvents.filter((e) => e.selected);
     if (selectedList.length === 0) {
-      setError('Por favor selecciona al menos un evento para importar.');
+      setError('Please select at least one event to import.');
       return;
     }
 
@@ -356,7 +356,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[AiMatchEventsModal] Apply failed:', err);
-      setError(err?.message || 'Error al guardar los eventos en el partido.');
+      setError(err?.message || 'Failed to save the events to the match.');
     } finally {
       setIsApplying(false);
     }
@@ -367,26 +367,26 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
   const getEventBadge = (type: MatchEventType, team: TeamSide) => {
     switch (type) {
       case 'goal':
-        return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">⚽ Gol</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">⚽ Goal</span>;
       case 'opponent_goal':
-        return <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-800">🥅 Gol Rival</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-800">🥅 Opponent Goal</span>;
       case 'corner':
-        return <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🚩 Córner</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🚩 Corner</span>;
       case 'opponent_corner':
-        return <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🚩 Córner Rival</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🚩 Opponent Corner</span>;
       case 'assist':
-        return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">👟 Asistencia</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">👟 Assist</span>;
       case 'yellow_card':
-        return <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-black text-yellow-800">🟨 Tarjeta Amarilla</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-black text-yellow-800">🟨 Yellow Card</span>;
       case 'red_card':
-        return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 Tarjeta Roja</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 Red Card</span>;
       case 'substitution_in':
       case 'substitution_out':
-        return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Cambio</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Substitution</span>;
       case 'injury':
-        return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Lesión</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Injury</span>;
       default:
-        return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800">📌 Evento</span>;
+        return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800">📌 Event</span>;
     }
   };
 
@@ -409,7 +409,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                 </span>
               </div>
               <h2 className="text-lg font-black text-white">
-                Generador de Eventos del Partido
+                Match Event Generator
               </h2>
             </div>
           </div>
@@ -428,7 +428,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
             <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800">
               <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
               <div className="text-xs">
-                <p className="font-bold">Error en la operación</p>
+                <p className="font-bold">Operation error</p>
                 <p className="mt-0.5">{error}</p>
               </div>
             </div>
@@ -450,13 +450,13 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               <label className="block">
                 <span className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">
                   <Video className="h-3.5 w-3.5 text-sky-700" />
-                  Enlace de vídeo del partido (YouTube / Veo / Grabación)
+                  Match video link (YouTube / Veo / Recording)
                 </span>
                 <input
                   type="url"
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="https://www.youtube.com/watch?v=... o URL de vídeo"
+                  placeholder="https://www.youtube.com/watch?v=... or video URL"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 shadow-sm focus:border-sky-600 focus:outline-none"
                 />
               </label>
@@ -464,13 +464,13 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               <label className="block">
                 <span className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">
                   <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
-                  Notas tácticas adicionales / Capítulos / Minutero
+                  Additional tactical notes / Chapters / Timestamps
                 </span>
                 <input
                   type="text"
                   value={additionalNotes}
                   onChange={(e) => setAdditionalNotes(e.target.value)}
-                  placeholder="Ej: Detectar goles, córners y cambios del 1º y 2º tiempo..."
+                  placeholder="E.g.: Detect goals, corners and substitutions in the 1st and 2nd half..."
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-900 shadow-sm focus:border-sky-600 focus:outline-none"
                 />
               </label>
@@ -479,28 +479,28 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
             {/* Quick preset tags */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Sugerencias:
+                Suggestions:
               </span>
               <button
                 type="button"
-                onClick={() => setAdditionalNotes('Goles a favor, goles del rival, saques de esquina de ambos equipos y tarjetas.')}
+                onClick={() => setAdditionalNotes('Goals for, goals against, corners for both teams and cards.')}
                 className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-sky-600 hover:text-sky-700"
               >
-                ⚽ Goles + Córners + Tarjetas
+                ⚽ Goals + Corners + Cards
               </button>
               <button
                 type="button"
-                onClick={() => setAdditionalNotes('Eventos detallados con córners a favor y en contra, faltas clave y sustituciones.')}
+                onClick={() => setAdditionalNotes('Detailed events with corners for and against, key fouls and substitutions.')}
                 className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-sky-600 hover:text-sky-700"
               >
-                🚩 Córners y Balón Parado
+                🚩 Corners &amp; Set Pieces
               </button>
               <button
                 type="button"
-                onClick={() => setAdditionalNotes('Cronología completa de 90 minutos con todos los goles y ocasiones.')}
+                onClick={() => setAdditionalNotes('Full 90-minute timeline with all goals and chances.')}
                 className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-sky-600 hover:text-sky-700"
               >
-                ⏱️ Partido Completo
+                ⏱️ Full Match
               </button>
             </div>
 
@@ -510,7 +510,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                 onClick={handleGenerateFallbackTemplate}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100"
               >
-                📋 Cargar Plantilla Base de Eventos
+                📋 Load Base Event Template
               </button>
 
               <button
@@ -520,7 +520,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#002142] to-sky-900 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:opacity-95 disabled:opacity-50"
               >
                 <Sparkles className={`h-4 w-4 text-cyan-300 ${isGenerating ? 'animate-spin' : ''}`} />
-                {isGenerating ? 'Analizando con IA...' : 'Generar Cronología con IA'}
+                {isGenerating ? 'Analyzing with AI...' : 'Generate Timeline with AI'}
               </button>
             </div>
           </div>
@@ -530,19 +530,19 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
             <div className="space-y-4">
               {videoAnalyzed === true && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] font-black uppercase tracking-wide text-emerald-900">
-                  ✅ Análisis real de vídeo
+                  ✅ Real video analysis
                 </div>
               )}
               {videoAnalyzed === false && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] font-black uppercase tracking-wide text-amber-900">
-                  ⚠️ No se ha podido analizar el vídeo: plantilla base manual, no es un análisis real
+                  ⚠️ Video could not be analyzed: manual base template, not a real analysis
                 </div>
               )}
               {aiSummary && (
                 <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-4">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-900">
                     <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
-                    Resumen táctico generado por IA
+                    AI-generated tactical summary
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-slate-800">
                     {aiSummary}
@@ -553,10 +553,10 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-black text-slate-900">
-                    Eventos Detectados ({generatedEvents.length})
+                    Detected Events ({generatedEvents.length})
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Revisa, edita o selecciona los eventos antes de importarlos al partido.
+                    Review, edit or select the events before importing them into the match.
                   </p>
                 </div>
                 <button
@@ -564,7 +564,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                   onClick={toggleAllSelected}
                   className="text-xs font-bold text-sky-700 hover:underline"
                 >
-                  {generatedEvents.every((e) => e.selected) ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                  {generatedEvents.every((e) => e.selected) ? 'Deselect all' : 'Select all'}
                 </button>
               </div>
 
@@ -603,16 +603,16 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                         onChange={(e) => updateEventField(index, 'eventType', e.target.value)}
                         className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-800"
                       >
-                        <option value="goal">⚽ Gol (A favor)</option>
-                        <option value="opponent_goal">🥅 Gol Rival</option>
-                        <option value="corner">🚩 Córner (A favor)</option>
-                        <option value="opponent_corner">🚩 Córner Rival</option>
-                        <option value="assist">👟 Asistencia</option>
-                        <option value="yellow_card">🟨 Tarjeta Amarilla</option>
-                        <option value="red_card">🟥 Tarjeta Roja</option>
-                        <option value="substitution_in">🔄 Sustitución</option>
-                        <option value="injury">🩹 Lesión</option>
-                        <option value="other">📌 Otro</option>
+                        <option value="goal">⚽ Goal (For)</option>
+                        <option value="opponent_goal">🥅 Opponent Goal</option>
+                        <option value="corner">🚩 Corner (For)</option>
+                        <option value="opponent_corner">🚩 Opponent Corner</option>
+                        <option value="assist">👟 Assist</option>
+                        <option value="yellow_card">🟨 Yellow Card</option>
+                        <option value="red_card">🟥 Red Card</option>
+                        <option value="substitution_in">🔄 Substitution</option>
+                        <option value="injury">🩹 Injury</option>
+                        <option value="other">📌 Other</option>
                       </select>
                     </div>
 
@@ -620,7 +620,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                     <div className="w-48 shrink-0">
                       {event.eventType === 'opponent_goal' || event.eventType === 'opponent_corner' ? (
                         <div className="rounded-md border border-slate-200 bg-slate-100 px-2 py-1.5 text-xs font-semibold text-slate-500 italic">
-                          Equipo rival
+                          Opponent team
                         </div>
                       ) : (
                         <select
@@ -628,7 +628,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                           onChange={(e) => updateEventField(index, 'playerId', e.target.value || null)}
                           className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800"
                         >
-                          <option value="">Jugadora / Equipo</option>
+                          <option value="">Player / Team</option>
                           {squadPlayers.map((player) => (
                             <option key={player.id} value={player.id}>
                               #{player.number ?? '-'} {player.firstName} {player.lastName}
@@ -644,7 +644,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                         type="text"
                         value={event.description}
                         onChange={(e) => updateEventField(index, 'description', e.target.value)}
-                        placeholder="Descripción de la jugada..."
+                        placeholder="Description of the play..."
                         className="w-full rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:border-sky-600 focus:bg-white"
                       />
                     </div>
@@ -666,7 +666,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
                   onChange={(e) => setReplaceExisting(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
                 />
-                Reemplazar los {existingEventsCount} eventos actuales del partido
+                Replace the {existingEventsCount} current match events
               </label>
             )}
           </div>
@@ -677,7 +677,7 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               onClick={onClose}
               className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
             >
-              Cancelar
+              Cancel
             </button>
 
             {generatedEvents.length > 0 && (
@@ -689,8 +689,8 @@ export const AiMatchEventsModal: React.FC<AiMatchEventsModalProps> = ({
               >
                 <Check className="h-4 w-4" />
                 {isApplying
-                  ? 'Guardando eventos...'
-                  : `Importar ${selectedCount} eventos al partido`}
+                  ? 'Saving events...'
+                  : `Import ${selectedCount} events into the match`}
               </button>
             )}
           </div>

@@ -436,9 +436,9 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   const handleDeleteMatch = async (matchId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const matchToDelete = visibleMatches.find((m) => m.id === matchId) || (selectedMatch?.id === matchId ? selectedMatch : null);
-    const oppLabel = matchToDelete?.opponentName || 'este partido';
+    const oppLabel = matchToDelete?.opponentName || 'this match';
 
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar el partido contra "${oppLabel}"? Esta acción borrará también sus alineaciones y eventos registrados.`)) {
+    if (!window.confirm(`Are you sure you want to delete the match against "${oppLabel}"? This will also delete its lineup and events.`)) {
       return;
     }
 
@@ -452,7 +452,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       }
     } catch (error) {
       console.error('[MatchCentreSection] Failed deleting match', error);
-      alert('No se pudo eliminar el partido. Por favor, inténtalo de nuevo.');
+      alert('Could not delete the match. Please try again.');
     }
   };
 
@@ -1174,27 +1174,27 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
     const getEventBadge = (type: MatchEventType, team: TeamSide) => {
       switch (type) {
         case 'goal':
-          return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">⚽ Gol (A favor)</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">⚽ Goal</span>;
         case 'opponent_goal':
-          return <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-800">🥅 Gol Rival</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-800">🥅 Opponent Goal</span>;
         case 'corner':
-          return <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🚩 Córner</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-800">🚩 Corner</span>;
         case 'opponent_corner':
-          return <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🚩 Córner Rival</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">🚩 Opponent Corner</span>;
         case 'assist':
-          return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">👟 Asistencia</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800">👟 Assist</span>;
         case 'yellow_card':
-          return <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-black text-yellow-800">🟨 T. Amarilla</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-black text-yellow-800">🟨 Yellow Card</span>;
         case 'red_card':
-          return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 T. Roja</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800">🟥 Red Card</span>;
         case 'substitution_in':
-          return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Cambio (Entra)</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-0.5 text-[10px] font-black text-purple-800">🔄 Substitution In</span>;
         case 'substitution_out':
-          return <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-black text-indigo-800">🔄 Cambio (Sale)</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-black text-indigo-800">🔄 Substitution Out</span>;
         case 'injury':
-          return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Lesión</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-800">🩹 Injury</span>;
         default:
-          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800">📌 Evento</span>;
+          return <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-800">📌 Event</span>;
       }
     };
 
@@ -1214,7 +1214,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm font-bold text-slate-500">
                 <Video className="h-10 w-10 text-slate-700" />
-                <span>Introduce el enlace del vídeo del partido para etiquetar y reproducir momentos.</span>
+                <span>Add the match video link to log and play back moments.</span>
               </div>
             )}
           </div>
@@ -1224,7 +1224,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               <input
                 value={matchVideoUrl}
                 onChange={(event) => setMatchVideoUrl(event.target.value)}
-                placeholder="YouTube, Vimeo, Veo o URL de vídeo directa"
+                placeholder="YouTube, Vimeo, Veo or direct video URL"
                 className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium normal-case text-white placeholder:text-slate-500"
               />
             </label>
@@ -1239,7 +1239,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-black text-white hover:bg-slate-700"
               >
                 <Save className="h-4 w-4" />
-                Guardar URL
+                Save URL
               </button>
               <button
                 type="button"
@@ -1247,7 +1247,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-cyan-400 to-sky-400 px-3.5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:opacity-95"
               >
                 <Sparkles className="h-4 w-4 text-slate-950" />
-                Generar eventos con IA
+                Generate Events with AI
               </button>
             </div>
           </div>
@@ -1258,9 +1258,9 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           <section className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Botonera de eventos</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Quick Actions</p>
                 <h3 className="text-lg font-black text-slate-950">
-                  {editingEventId ? 'Editar evento' : 'Etiquetar momento'}
+                  {editingEventId ? 'Edit Event' : 'Log Event'}
                 </h3>
               </div>
               {renderSaveStatus('events')}
@@ -1269,7 +1269,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             {/* Quick buttons grid */}
             <div className="mb-4 space-y-2">
               <div className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                Acciones rápidas:
+                Shortcuts:
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
                 <button
@@ -1281,7 +1281,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                   }`}
                 >
-                  ⚽ Gol
+                  ⚽ Goal
                 </button>
 
                 <button
@@ -1293,7 +1293,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       : 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100'
                   }`}
                 >
-                  🥅 Gol Rival
+                  🥅 Opponent Goal
                 </button>
 
                 <button
@@ -1305,7 +1305,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100'
                   }`}
                 >
-                  🚩 Córner
+                  🚩 Corner
                 </button>
 
                 <button
@@ -1317,19 +1317,19 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
                   }`}
                 >
-                  🚩 Córner Rival
+                  🚩 Opponent Corner
                 </button>
               </div>
 
               {/* Secondary buttons */}
               <div className="grid grid-cols-3 gap-1.5 pt-1">
                 {[
-                  { value: 'assist' as MatchEventType, label: '👟 Asistencia' },
-                  { value: 'yellow_card' as MatchEventType, label: '🟨 T. Amarilla' },
-                  { value: 'red_card' as MatchEventType, label: '🟥 T. Roja' },
-                  { value: 'substitution_in' as MatchEventType, label: '🔄 Entra' },
-                  { value: 'substitution_out' as MatchEventType, label: '🔄 Sale' },
-                  { value: 'injury' as MatchEventType, label: '🩹 Lesión' }
+                  { value: 'assist' as MatchEventType, label: '👟 Assist' },
+                  { value: 'yellow_card' as MatchEventType, label: '🟨 Yellow Card' },
+                  { value: 'red_card' as MatchEventType, label: '🟥 Red Card' },
+                  { value: 'substitution_in' as MatchEventType, label: '🔄 Substitution In' },
+                  { value: 'substitution_out' as MatchEventType, label: '🔄 Substitution Out' },
+                  { value: 'injury' as MatchEventType, label: '🩹 Injury' }
                 ].map((item) => (
                   <button
                     key={item.value}
@@ -1349,7 +1349,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <label className="text-[10px] font-black uppercase text-slate-500">
-                Momento de vídeo
+                Video Time
                 <input
                   readOnly
                   value={formatVideoTimestamp(currentVideoSeconds)}
@@ -1357,7 +1357,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 />
               </label>
               <label className="text-[10px] font-black uppercase text-slate-500">
-                Minuto del partido
+                Match Minute
                 <input
                   type="number"
                   min="0"
@@ -1368,7 +1368,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 />
               </label>
               <label className="text-[10px] font-black uppercase text-slate-500">
-                Tipo de evento
+                Event Type
                 <select
                   value={newEventType}
                   onChange={(event) => {
@@ -1391,18 +1391,18 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
               {isOpponentSelected ? (
                 <div className="rounded-md border border-rose-200 bg-rose-50/70 p-2.5 text-xs text-rose-800">
-                  <span className="font-bold">Evento del equipo rival:</span> No requiere asignar jugadora de nuestra plantilla.
+                  <span className="font-bold">Opponent team event:</span> no player from our squad needs to be assigned.
                 </div>
               ) : (
                 <>
                   <label className="text-[10px] font-black uppercase text-slate-500">
-                    Jugadora
+                    Player
                     <select
                       value={newEventPlayerId}
                       onChange={(event) => setNewEventPlayerId(event.target.value)}
                       className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
                     >
-                      <option value="">Equipo / Sin jugadora</option>
+                      <option value="">Team / No player</option>
                       {squadPlayers.map((player) => (
                         <option key={player.id} value={player.id}>
                           #{player.number ?? '-'} {player.firstName} {player.lastName}
@@ -1411,13 +1411,13 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                     </select>
                   </label>
                   <label className="text-[10px] font-black uppercase text-slate-500">
-                    Jugadora relacionada (Asistencia / Cambio)
+                    Related Player (Assist / Substitution)
                     <select
                       value={newEventRelatedPlayerId}
                       onChange={(event) => setNewEventRelatedPlayerId(event.target.value)}
                       className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs normal-case"
                     >
-                      <option value="">Ninguna</option>
+                      <option value="">None</option>
                       {squadPlayers.map((player) => (
                         <option key={player.id} value={player.id}>
                           #{player.number ?? '-'} {player.firstName} {player.lastName}
@@ -1432,7 +1432,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             <textarea
               value={newEventDescription}
               onChange={(event) => setNewEventDescription(event.target.value)}
-              placeholder="Describe la jugada, córner, desajuste táctico o detalle..."
+              placeholder="Description of the play, corner, tactical detail..."
               className="mt-3 min-h-[90px] w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:border-sky-600 focus:bg-white"
             />
 
@@ -1443,7 +1443,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                   onClick={cancelEventEdit}
                   className="rounded-md border border-slate-300 px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                 >
-                  Cancelar
+                  Cancel
                 </button>
               )}
               <button
@@ -1453,7 +1453,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[#002142] px-3 py-2.5 text-xs font-black text-white hover:bg-[#083561] disabled:opacity-60"
               >
                 {editingEventId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {editingEventId ? 'Guardar cambios' : 'Añadir al segundo actual'}
+                {editingEventId ? 'Save Changes' : 'Save Event'}
               </button>
             </div>
           </section>
@@ -1462,12 +1462,12 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
           <section className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Cronología del partido</p>
-                <h3 className="text-lg font-black text-slate-950">Momentos y eventos</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Match Timeline</p>
+                <h3 className="text-lg font-black text-slate-950">Moments &amp; Events</h3>
               </div>
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-                  {events.length} eventos
+                  {events.length} events
                 </span>
                 <button
                   type="button"
@@ -1475,7 +1475,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                   className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-xs font-black text-cyan-900 transition hover:bg-cyan-100"
                 >
                   <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
-                  Generar con IA
+                  Generate with AI
                 </button>
               </div>
             </div>
@@ -1483,9 +1483,9 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             {events.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
                 <Sparkles className="h-8 w-8 text-cyan-600 mb-2" />
-                <p className="text-xs font-bold text-slate-700">No hay eventos registrados todavía</p>
+                <p className="text-xs font-bold text-slate-700">No events logged yet</p>
                 <p className="mt-1 text-[11px] text-slate-500 max-w-sm">
-                  Utiliza la botonera lateral para añadir goles y córners, o genera la cronología completa automáticamente con el botón de IA.
+                  Use the quick actions panel to add goals and corners, or auto-generate the full timeline with the AI button.
                 </p>
                 <button
                   type="button"
@@ -1493,7 +1493,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-[#0a3a66]"
                 >
                   <Sparkles className="h-4 w-4 text-cyan-300" />
-                  Generar eventos con IA
+                  Generate Events with AI
                 </button>
               </div>
             ) : (
@@ -1504,7 +1504,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                   .map((event) => {
                     const isOpponent = event.eventType === 'opponent_goal' || event.eventType === 'opponent_corner' || event.teamSide === 'opponent';
                     const playerDisplayName = isOpponent
-                      ? (selectedMatch?.opponentName ? `Equipo rival (${selectedMatch.opponentName})` : 'Equipo rival')
+                      ? (selectedMatch?.opponentName ? `Opponent team (${selectedMatch.opponentName})` : 'Opponent team')
                       : playerName(event.playerId);
 
                     return (
@@ -1515,7 +1515,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => seekVideo(event.videoTimestampSeconds)}
-                          title="Ir al segundo del vídeo"
+                          title="Jump to this moment in the video"
                           className="self-start rounded-md bg-slate-950 px-2 py-1.5 font-mono text-xs font-black text-cyan-300 hover:bg-slate-800 transition"
                         >
                           {formatVideoTimestamp(event.videoTimestampSeconds)}
@@ -1539,7 +1539,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
 
                           {event.relatedPlayerId && (
                             <div className="text-xs font-medium text-slate-500">
-                              Relacionada: {playerName(event.relatedPlayerId)}
+                              Related: {playerName(event.relatedPlayerId)}
                             </div>
                           )}
 
@@ -1554,7 +1554,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                           <button
                             type="button"
                             onClick={() => handleEditEvent(event)}
-                            title="Editar evento"
+                            title="Edit event"
                             className="p-1.5 rounded text-slate-400 hover:bg-slate-200 hover:text-sky-700"
                           >
                             <Edit3 className="h-4 w-4" />
@@ -1562,7 +1562,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                           <button
                             type="button"
                             onClick={() => void handleDeleteEvent(event.id)}
-                            title="Eliminar evento"
+                            title="Delete event"
                             className="p-1.5 rounded text-slate-400 hover:bg-rose-100 hover:text-rose-600"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1694,11 +1694,11 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         <div>
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Resumen del partido</p>
-              <h3 className="text-lg font-black text-slate-950 font-display">Estadísticas del encuentro</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Match Summary</p>
+              <h3 className="text-lg font-black text-slate-950 font-display">Match Statistics</h3>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-              Fuente: Cronología oficial ({events.length} eventos)
+              Source: Official Timeline ({events.length} events)
             </span>
           </div>
 
@@ -1706,7 +1706,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             {/* Goals */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Goles (Favor / Rival)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Goals (For / Against)</span>
                 <Trophy className="h-4 w-4 text-emerald-600" />
               </div>
               <div className="mt-2 flex items-baseline gap-2">
@@ -1715,14 +1715,14 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 <span className="text-2xl font-bold text-rose-600">{matchTeamStats.opponentGoals}</span>
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
-                {matchTeamStats.ourGoals} a favor · {matchTeamStats.opponentGoals} rival
+                {matchTeamStats.ourGoals} for · {matchTeamStats.opponentGoals} against
               </div>
             </div>
 
             {/* Corners */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Córners (Favor / Rival)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Corners (For / Against)</span>
                 <Flag className="h-4 w-4 text-sky-600" />
               </div>
               <div className="mt-2 flex items-baseline gap-2">
@@ -1731,36 +1731,36 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 <span className="text-2xl font-bold text-slate-500">{matchTeamStats.opponentCorners}</span>
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
-                {matchTeamStats.ourCorners} a favor · {matchTeamStats.opponentCorners} en contra
+                {matchTeamStats.ourCorners} for · {matchTeamStats.opponentCorners} against
               </div>
             </div>
 
             {/* Assists & Substitutions */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Asistencias y Cambios</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Assists &amp; Substitutions</span>
                 <Swords className="h-4 w-4 text-indigo-600" />
               </div>
               <div className="mt-2 flex items-baseline gap-3">
                 <div>
                   <span className="text-3xl font-black text-slate-900">{matchTeamStats.ourAssists}</span>
-                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">asist.</span>
+                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">assists</span>
                 </div>
                 <div className="text-slate-300">|</div>
                 <div>
                   <span className="text-2xl font-black text-slate-700">{matchTeamStats.ourSubstitutions}</span>
-                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">cambios</span>
+                  <span className="ml-1 text-[10px] uppercase font-bold text-slate-500">subs</span>
                 </div>
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
-                {matchTeamStats.ourInjuries > 0 ? `${matchTeamStats.ourInjuries} lesión(es) registradas` : 'Sin incidencias físicas'}
+                {matchTeamStats.ourInjuries > 0 ? `${matchTeamStats.ourInjuries} injury(ies) logged` : 'No physical incidents'}
               </div>
             </div>
 
             {/* Cards & Discipline */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Disciplina / Tarjetas</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Discipline / Cards</span>
                 <Shield className="h-4 w-4 text-amber-600" />
               </div>
               <div className="mt-2 flex items-center gap-3">
@@ -1774,7 +1774,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                 </div>
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
-                Amarillas: {matchTeamStats.ourYellowCards} · Rojas: {matchTeamStats.ourRedCards}
+                Yellow: {matchTeamStats.ourYellowCards} · Red: {matchTeamStats.ourRedCards}
               </div>
             </div>
           </div>
@@ -1784,11 +1784,11 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Rendimiento individual</p>
-              <h3 className="text-lg font-black text-slate-950 font-display">Estadísticas por jugadora</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">Individual Performance</p>
+              <h3 className="text-lg font-black text-slate-950 font-display">Player Statistics</h3>
             </div>
             <div className="text-xs font-bold text-slate-500">
-              {derivedPlayerStats.length} jugadoras con actividad
+              {derivedPlayerStats.length} players with activity
             </div>
           </div>
 
@@ -1796,20 +1796,20 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             <table className="min-w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700">
                 <tr>
-                  <th className="px-3 py-2.5 font-black">Jugadora</th>
-                  <th className="px-3 py-2.5 font-black text-center">Titular</th>
-                  <th className="px-3 py-2.5 font-black text-center">Minutos</th>
-                  <th className="px-3 py-2.5 font-black text-center">Goles</th>
-                  <th className="px-3 py-2.5 font-black text-center">Asistencias</th>
-                  <th className="px-3 py-2.5 font-black text-center">T. Amarillas</th>
-                  <th className="px-3 py-2.5 font-black text-center">T. Rojas</th>
+                  <th className="px-3 py-2.5 font-black">Player</th>
+                  <th className="px-3 py-2.5 font-black text-center">Starter</th>
+                  <th className="px-3 py-2.5 font-black text-center">Minutes</th>
+                  <th className="px-3 py-2.5 font-black text-center">Goals</th>
+                  <th className="px-3 py-2.5 font-black text-center">Assists</th>
+                  <th className="px-3 py-2.5 font-black text-center">Yellow Cards</th>
+                  <th className="px-3 py-2.5 font-black text-center">Red Cards</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {derivedPlayerStats.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
-                      No hay estadísticas registradas todavía para este partido.
+                      No statistics recorded yet for this match.
                     </td>
                   </tr>
                 ) : (
@@ -1819,7 +1819,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       <td className="px-3 py-2 text-center text-slate-700">
                         {stat.starts ? (
                           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">
-                            Sí
+                            Yes
                           </span>
                         ) : (
                           <span className="text-slate-400">No</span>
@@ -2082,10 +2082,10 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h2 className="text-base sm:text-lg font-black text-[#002142] font-display">
-            Calendario de Partidos & Fixtures
+            Match Calendar &amp; Fixtures
           </h2>
           <p className="text-xs font-medium text-slate-500">
-            {visibleMatches.length} {visibleMatches.length === 1 ? 'partido registrado' : 'partidos registrados'} para la temporada.
+            {visibleMatches.length} {visibleMatches.length === 1 ? 'match' : 'matches'} recorded for the season.
           </p>
         </div>
 
@@ -2095,7 +2095,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar rival o estadio..."
+            placeholder="Search opponent or venue..."
             className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-sky-600 focus:bg-white w-44 sm:w-48"
           />
 
@@ -2106,21 +2106,21 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
               onClick={() => setFilterStatus('all')}
               className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'all' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
             >
-              Todos ({visibleMatches.length})
+              All ({visibleMatches.length})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('planned')}
               className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'planned' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
             >
-              Programados
+              Scheduled
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('played')}
               className={`rounded-lg px-2.5 py-1 text-xs transition ${filterStatus === 'played' ? 'bg-[#002142] text-white shadow-sm' : 'hover:text-slate-900'}`}
             >
-              Jugados
+              Played
             </button>
           </div>
 
@@ -2130,21 +2130,21 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
             className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-sm hover:bg-emerald-500 transition active:scale-95 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            <span>Añadir Partido</span>
+            <span>Add Match</span>
           </button>
         </div>
       </div>
 
       {filteredMatches.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500 shadow-sm space-y-3">
-          <p className="font-bold text-slate-700">No hay partidos que coincidan con la búsqueda o filtro.</p>
+          <p className="font-bold text-slate-700">No matches found for the current search or filter.</p>
           <button
             type="button"
             onClick={handleOpenCreateMatch}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-4 py-2 text-xs font-black text-white hover:bg-sky-900 transition"
           >
             <Plus className="h-4 w-4" />
-            <span>Programar un nuevo partido</span>
+            <span>Schedule a new match</span>
           </button>
         </div>
       ) : (
@@ -2181,7 +2181,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleOpenEditMatch(match, e)}
-                      title="Editar partido (nombres de equipo, horario, estadio...)"
+                      title="Edit match (team names, time, venue...)"
                       className="rounded-lg p-1.5 text-slate-300 hover:bg-white/20 hover:text-white transition"
                     >
                       <Edit3 className="h-3.5 w-3.5" />
@@ -2189,7 +2189,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                     <button
                       type="button"
                       onClick={(e) => void handleDeleteMatch(match.id, e)}
-                      title="Eliminar partido"
+                      title="Delete match"
                       className="rounded-lg p-1.5 text-slate-300 hover:bg-rose-500/40 hover:text-rose-200 transition"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -2216,7 +2216,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                       <div className="mt-1 text-sm font-black text-slate-800">{formatDate(match.date)}</div>
                     </div>
                     <div className="border-l border-slate-100">
-                      <div className="text-[10px] font-black uppercase text-slate-400">Kick-off / Horario</div>
+                      <div className="text-[10px] font-black uppercase text-slate-400">Kick-off</div>
                       <div className="mt-1 text-sm font-black text-slate-800 text-sky-700">{match.time || 'TBD'}</div>
                     </div>
                   </div>
@@ -2238,7 +2238,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                         className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-black uppercase text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition"
                       >
                         <Edit3 className="h-3 w-3 text-slate-500" />
-                        <span>Editar</span>
+                        <span>Edit</span>
                       </button>
                       <button
                         type="button"
@@ -2246,7 +2246,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
                         className="inline-flex items-center gap-1.5 rounded-xl bg-[#002142] px-3 py-1.5 text-[10px] font-black uppercase text-white transition hover:bg-[#0b3a64]"
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        <span>Detalles</span>
+                        <span>Details</span>
                       </button>
                     </div>
                   </div>

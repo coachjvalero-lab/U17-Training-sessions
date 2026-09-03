@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { SetPieceDiagram, SetPieceMarkerKind, SetPiecePlay, SetPiecePlayType } from '../types';
 import { EMPTY_SET_PIECE_DIAGRAM, SET_PIECE_PLAY_TYPES } from '../types';
+import { SetPieceThumbnail } from './SetPieceThumbnail';
 import {
   createSetPiecePlay,
   deleteSetPiecePlay,
@@ -378,14 +379,15 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
           </div>
         </div>
 
-        {/* Tactical Board */}
-        <div
-          ref={pitchRef}
-          onPointerDown={handlePitchPointerDown}
-          onPointerMove={handlePitchPointerMove}
-          onPointerUp={handlePitchPointerUp}
-          className="relative mx-auto aspect-[3/2] w-full max-w-[820px] select-none touch-none overflow-visible rounded-2xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 to-emerald-900 shadow-xl"
-        >
+        {/* Tactical Board + Notes */}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div
+            ref={pitchRef}
+            onPointerDown={handlePitchPointerDown}
+            onPointerMove={handlePitchPointerMove}
+            onPointerUp={handlePitchPointerUp}
+            className="relative mx-auto aspect-[3/2] w-full select-none touch-none overflow-visible rounded-2xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 to-emerald-900 shadow-xl"
+          >
           <div className="pointer-events-none absolute inset-3 overflow-hidden rounded-xl">
             <svg className="h-full w-full text-white/70" viewBox="0 0 150 100" preserveAspectRatio="none">
               <rect x="0" y="0" width="150" height="100" fill="none" stroke="currentColor" strokeWidth="0.6" />
@@ -504,27 +506,28 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
               {marker.kind === 'ball' ? <Circle className="h-3.5 w-3.5" /> : marker.kind === 'opponent' ? 'X' : 'P'}
             </div>
           ))}
-        </div>
+          </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Description</span>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Describe the routine and player responsibilities..."
-              className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Coaching Points</span>
-            <textarea
-              value={coachingPoints}
-              onChange={(event) => setCoachingPoints(event.target.value)}
-              placeholder="Key coaching points, triggers, timing..."
-              className="min-h-[96px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
-            />
-          </label>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Description</span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Describe the routine and player responsibilities..."
+                className="min-h-[140px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Coaching Points</span>
+              <textarea
+                value={coachingPoints}
+                onChange={(event) => setCoachingPoints(event.target.value)}
+                placeholder="Key coaching points, triggers, timing..."
+                className="min-h-[140px] w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
         </div>
       </div>
     );
@@ -558,20 +561,25 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
         ) : plays.length === 0 ? (
           <p className="py-6 text-center text-xs font-bold text-slate-400">No set pieces saved yet for this match.</p>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {plays.map((play) => (
-              <div key={play.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <button type="button" onClick={() => openExistingPlay(play)} className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-xs font-black text-slate-900">{play.title || 'Untitled'}</p>
-                  <p className="text-[10px] font-bold uppercase text-slate-500">{TYPE_LABEL[play.type] || play.type}</p>
+              <div key={play.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md">
+                <button type="button" onClick={() => openExistingPlay(play)} className="block w-full">
+                  <SetPieceThumbnail diagram={play.diagram} className="aspect-[3/2] w-full" />
                 </button>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button type="button" onClick={() => openExistingPlay(play)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700" title="Edit">
-                    <Edit3 className="h-3.5 w-3.5" />
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                  <button type="button" onClick={() => openExistingPlay(play)} className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-xs font-black text-slate-900">{play.title || 'Untitled'}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-500">{TYPE_LABEL[play.type] || play.type}</p>
                   </button>
-                  <button type="button" onClick={() => void handleDeletePlay(play.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-100 hover:text-rose-700" title="Delete">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => openExistingPlay(play)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700" title="Edit">
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => void handleDeletePlay(play.id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-100 hover:text-rose-700" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
