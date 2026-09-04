@@ -357,6 +357,9 @@ export interface OpponentAnalysis {
 export interface MatchAnalysis {
   id: string;
   matchId: string;
+  // Which team this analysis is about: the match's own team, or a specific opponent team seen
+  // in that same match. Lets the same Match Report serve both own-match review and scouting.
+  analyzedTeamId: string;
   summary: string;
   createdAt?: string;
   updatedAt?: string;
@@ -377,6 +380,7 @@ export interface VideoClip {
   endTime?: number | null;
   title: string;
   notes?: string | null;
+  category?: string | null;
   createdAt?: string;
   matchAnalysisId?: string | null;
   opponentMatchNotesId?: string | null;
@@ -606,6 +610,9 @@ export interface SetPiecePlay {
   diagram: SetPieceDiagram;
   description: string;
   coachingPoints: string;
+  // Keynote-style presentation media: the primary way a Set Piece is now shown to players.
+  imageUrl?: string | null;
+  videoUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

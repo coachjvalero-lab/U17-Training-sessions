@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useTeamContext } from '../contexts/TeamContext';
 import { ScoutingSection } from './ScoutingSection';
-import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState } from './VideoClipsSection';
+import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState, type ClipCategoryOption } from './VideoClipsSection';
 import { getMatchById, listMatches } from '../services/matches/matchService';
 import {
   createOrUpdateOpponentAnalysis,
@@ -21,7 +21,7 @@ import {
   updateOpponentAnalysisSlidesUrl,
   updateOpponentAnalysisVideoUrl
 } from '../services/matches/opponentAnalysisService';
-import { createOrUpdateMatchAnalysis, getMatchAnalysisByMatchId } from '../services/matches/matchAnalysisService';
+import { createOrUpdateMatchAnalysis, getMatchAnalysis } from '../services/matches/matchAnalysisService';
 import {
   createOrUpdateTrainingAnalysis,
   getTrainingAnalysisBySessionUid,
@@ -59,6 +59,16 @@ const opponentTagGroups: Array<{ key: 'build-up' | 'pressing' | 'block' | 'defen
   { key: 'defensive-transition', title: 'Defensive Transition', values: [{ value: 'immediate_pressure', label: 'Immediate Pressure' }, { value: 'retreat', label: 'Retreat' }] }
 ];
 
+const MATCH_CLIP_CATEGORIES: ClipCategoryOption[] = [
+  { value: 'offensive_organization', label: 'Offensive Organization' },
+  { value: 'defensive_organization', label: 'Defensive Organization' },
+  { value: 'offensive_transition', label: 'Offensive Transition' },
+  { value: 'defensive_transition', label: 'Defensive Transition' },
+  { value: 'set_piece_for', label: 'Set Piece For' },
+  { value: 'set_piece_against', label: 'Set Piece Against' },
+  { value: 'individual_actions', label: 'Individual Actions' }
+];
+
 export const VideoAnalysisSection: React.FC = () => {
   const { selectedTeamId } = useTeamContext();
   const [activeTab, setActiveTab] = useState<VideoAnalysisArea>('matches');
@@ -76,6 +86,9 @@ export const VideoAnalysisSection: React.FC = () => {
     readWorkspaceRestoreState<string | null>(PENDING_OPPONENT_TEAM_ID_KEY, null)
   );
   const [selectedPlayedMatchId, setSelectedPlayedMatchId] = useState<string>('');
+  // Which team this Match Report analyzes: the match's own team by default, or its opponent (so
+  // the same form/table can be used to scout the opponent from footage of this match).
+  const [analyzedTeamId, setAnalyzedTeamId] = useState<string>('');
   const [matchAnalysis, setMatchAnalysis] = useState<MatchAnalysis | null>(null);
   const [matchAnalysisSummaryDraft, setMatchAnalysisSummaryDraft] = useState('');
   const [isLoadingMatchAnalysis, setIsLoadingMatchAnalysis] = useState(false);
@@ -126,6 +139,7 @@ export const VideoAnalysisSection: React.FC = () => {
   useEffect(() => {
     if (!selectedPlayedMatchId && playedMatches.length > 0) {
       setSelectedPlayedMatchId(playedMatches[0].id);
+      setAnalyzedTeamId(playedMatches[0].teamId);
     }
   }, [playedMatches, selectedPlayedMatchId]);
 
@@ -170,7 +184,7 @@ export const VideoAnalysisSection: React.FC = () => {
   }, [selectedMatchId, activeTab]);
 
   useEffect(() => {
-    if (!selectedPlayedMatchId || activeTab !== 'matches') {
+    if (!selectedPlayedMatchId || !analyzedTeamId || activeTab !== 'matches') {
       setMatchAnalysis(null);
       setMatchAnalysisSummaryDraft('');
       return;
@@ -179,7 +193,7 @@ export const VideoAnalysisSection: React.FC = () => {
     void (async () => {
       try {
         setIsLoadingMatchAnalysis(true);
-        const analysis = await getMatchAnalysisByMatchId(selectedPlayedMatchId);
+        const analysis = await getMatchAnalysis(selectedPlayedMatchId, analyzedTeamId);
         setMatchAnalysis(analysis);
         setMatchAnalysisSummaryDraft(analysis?.summary ?? '');
       } catch (error) {
@@ -190,7 +204,7 @@ export const VideoAnalysisSection: React.FC = () => {
         setIsLoadingMatchAnalysis(false);
       }
     })();
-  }, [selectedPlayedMatchId, activeTab]);
+  }, [selectedPlayedMatchId, analyzedTeamId, activeTab]);
 
   useEffect(() => {
     if (!matchAnalysis) {
@@ -213,13 +227,14 @@ export const VideoAnalysisSection: React.FC = () => {
   }, [matchAnalysis]);
 
   const handleSaveMatchAnalysis = async () => {
-    if (!selectedPlayedMatchId) return;
+    if (!selectedPlayedMatchId || !analyzedTeamId) return;
 
     try {
       setIsSavingMatchAnalysis(true);
       const updated = await createOrUpdateMatchAnalysis({
         id: matchAnalysis?.id,
         matchId: selectedPlayedMatchId,
+        analyzedTeamId,
         summary: matchAnalysisSummaryDraft
       });
       setMatchAnalysis(updated);
@@ -242,7 +257,8 @@ export const VideoAnalysisSection: React.FC = () => {
         startTime: Number(clipForm.startTime) || 0,
         endTime: clipForm.endTime.trim() ? Number(clipForm.endTime) : null,
         title: clipForm.title.trim(),
-        notes: clipForm.notes.trim() || null
+        notes: clipForm.notes.trim() || null,
+        category: clipForm.category || null
       });
       setVideoClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
       setClipForm(EMPTY_CLIP_FORM);
@@ -450,6 +466,8 @@ export const VideoAnalysisSection: React.FC = () => {
   }
 
   function renderMatchesTab() {
+    const selectedPlayedMatch = playedMatches.find((match) => match.id === selectedPlayedMatchId) ?? null;
+
     return (
       <div className="space-y-6">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -467,7 +485,12 @@ export const VideoAnalysisSection: React.FC = () => {
           ) : (
             <select
               value={selectedPlayedMatchId}
-              onChange={(event) => setSelectedPlayedMatchId(event.target.value)}
+              onChange={(event) => {
+                const matchId = event.target.value;
+                const match = playedMatches.find((option) => option.id === matchId);
+                setSelectedPlayedMatchId(matchId);
+                if (match) setAnalyzedTeamId(match.teamId);
+              }}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-sky-500"
             >
               {playedMatches.map((match) => (
@@ -490,13 +513,42 @@ export const VideoAnalysisSection: React.FC = () => {
         ) : (
           <>
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h3 className="text-base font-black text-slate-900">Match Report</h3>
+                {selectedPlayedMatch && (
+                  <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setAnalyzedTeamId(selectedPlayedMatch.teamId)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                        analyzedTeamId === selectedPlayedMatch.teamId ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                      }`}
+                    >
+                      Our Team
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAnalyzedTeamId(selectedPlayedMatch.opponentTeamId)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                        analyzedTeamId === selectedPlayedMatch.opponentTeamId ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                      }`}
+                    >
+                      {selectedPlayedMatch.opponentName || 'Opponent'}
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between gap-3 mb-3">
-                <h3 className="text-base font-black text-slate-900">Match Summary</h3>
+                <p className="text-xs font-medium text-slate-500">
+                  {analyzedTeamId === selectedPlayedMatch?.opponentTeamId
+                    ? `Analyzing ${selectedPlayedMatch?.opponentName || 'the opponent'} from this match's footage.`
+                    : 'Analyzing our own performance in this match.'}
+                </p>
                 <button
                   type="button"
                   onClick={() => void handleSaveMatchAnalysis()}
                   disabled={isSavingMatchAnalysis}
-                  className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-60"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-60"
                 >
                   <Save className="w-3.5 h-3.5" />
                   {matchAnalysis ? 'Save' : 'Create Analysis'}
@@ -520,6 +572,7 @@ export const VideoAnalysisSection: React.FC = () => {
               onFormChange={setClipForm}
               onSubmit={(event) => void handleAddClip(event)}
               onDelete={(clipId) => void handleDeleteClip(clipId)}
+              categoryOptions={MATCH_CLIP_CATEGORIES}
             />
           </>
         )}

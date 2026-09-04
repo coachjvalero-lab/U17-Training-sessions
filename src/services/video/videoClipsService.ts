@@ -10,6 +10,7 @@ type VideoClipRow = {
   end_time: number | null;
   title: string;
   notes: string | null;
+  category: string | null;
   created_at: string | null;
   match_analysis_id: string | null;
   opponent_match_notes_id: string | null;
@@ -30,6 +31,7 @@ function fromRow(row: VideoClipRow): VideoClip {
     endTime: row.end_time,
     title: row.title,
     notes: row.notes,
+    category: row.category,
     createdAt: row.created_at ?? undefined,
     matchAnalysisId: row.match_analysis_id,
     opponentMatchNotesId: row.opponent_match_notes_id,
@@ -51,7 +53,7 @@ export async function listVideoClipsByMatchAnalysisId(matchAnalysisId: string): 
 
 export async function createVideoClipForMatchAnalysis(
   matchAnalysisId: string,
-  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes'>
+  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes' | 'category'>
 ): Promise<VideoClip> {
   const payload = {
     video_url: input.videoUrl,
@@ -59,6 +61,7 @@ export async function createVideoClipForMatchAnalysis(
     end_time: input.endTime ?? null,
     title: input.title,
     notes: input.notes ?? null,
+    category: input.category ?? null,
     match_analysis_id: matchAnalysisId
   };
 
@@ -85,7 +88,7 @@ export async function listVideoClipsByTrainingAnalysisId(trainingAnalysisId: str
 
 export async function createVideoClipForTrainingAnalysis(
   trainingAnalysisId: string,
-  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes'>
+  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes' | 'category'>
 ): Promise<VideoClip> {
   const payload = {
     video_url: input.videoUrl,
@@ -93,6 +96,7 @@ export async function createVideoClipForTrainingAnalysis(
     end_time: input.endTime ?? null,
     title: input.title,
     notes: input.notes ?? null,
+    category: input.category ?? null,
     training_analysis_id: trainingAnalysisId
   };
 
@@ -128,7 +132,7 @@ export async function listVideoClipsByScoutingReportId(scoutingReportId: string)
 
 export async function createVideoClipForScoutingReport(
   scoutingReportId: string,
-  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes'>
+  input: Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes' | 'category'>
 ): Promise<VideoClip> {
   const payload = {
     video_url: input.videoUrl,
@@ -136,6 +140,7 @@ export async function createVideoClipForScoutingReport(
     end_time: input.endTime ?? null,
     title: input.title,
     notes: input.notes ?? null,
+    category: input.category ?? null,
     scouting_report_id: scoutingReportId
   };
 

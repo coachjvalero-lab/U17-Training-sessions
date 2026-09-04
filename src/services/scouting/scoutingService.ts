@@ -308,6 +308,17 @@ export async function listPlayerReports(playerId: string): Promise<ScoutingPlaye
   return ((data || []) as ScoutingPlayerReportRow[]).map(reportFromRow);
 }
 
+export async function listReportsForTrip(tripId: string): Promise<ScoutingPlayerReport[]> {
+  const { data, error } = await getClient()
+    .from(SCOUTING_PLAYER_REPORTS_TABLE)
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return ((data || []) as ScoutingPlayerReportRow[]).map(reportFromRow);
+}
+
 export async function createOrUpdatePlayerReport(
   input: Partial<ScoutingPlayerReport> & Pick<ScoutingPlayerReport, 'playerId' | 'notes'>
 ): Promise<ScoutingPlayerReport> {

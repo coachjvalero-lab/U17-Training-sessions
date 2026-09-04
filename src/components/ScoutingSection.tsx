@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit3, Save, X, Users, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, Edit3, Save, X, Users, ClipboardList, FileText } from 'lucide-react';
 import {
   addTripTarget,
   createOrUpdatePlayerReport,
@@ -12,6 +12,7 @@ import {
   listAssignableUsers,
   listClubTeams,
   listPlayerReports,
+  listReportsForTrip,
   listScoutingPlayers,
   listScoutingTrips,
   listTripTargets,
@@ -23,7 +24,7 @@ import {
   deleteVideoClip,
   listVideoClipsByScoutingReportId
 } from '../services/video/videoClipsService';
-import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState } from './VideoClipsSection';
+import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState, type ClipCategoryOption } from './VideoClipsSection';
 import type {
   AssignableUser,
   ClubTeamOption,
@@ -36,7 +37,7 @@ import type {
   VideoClip
 } from '../types';
 
-type ScoutingSubTab = 'planning' | 'players' | 'reports';
+type ScoutingSubTab = 'planning' | 'players' | 'reports' | 'comparison';
 
 const NEW_CLUB_OPTION_VALUE = '__new__';
 
@@ -103,6 +104,15 @@ function emptyTripForm(): TripFormState {
 
 const RATING_OPTIONS = [1, 2, 3, 4, 5];
 
+const SCOUTING_CLIP_CATEGORIES: ClipCategoryOption[] = [
+  { value: 'technical', label: 'Technical' },
+  { value: 'tactical', label: 'Tactical' },
+  { value: 'physical', label: 'Physical' },
+  { value: 'mental', label: 'Mental' },
+  { value: 'strengths', label: 'Strengths' },
+  { value: 'weaknesses', label: 'Weaknesses' }
+];
+
 type ReportFormState = {
   tripId: string;
   technicalRating: string;
@@ -144,6 +154,10 @@ export const ScoutingSection: React.FC = () => {
   const [tripTargets, setTripTargets] = useState<ScoutingTripTarget[]>([]);
   const [isLoadingTripTargets, setIsLoadingTripTargets] = useState(false);
   const [newTargetPlayerId, setNewTargetPlayerId] = useState('');
+  const [tripReportId, setTripReportId] = useState<string | null>(null);
+  const [tripReportTargets, setTripReportTargets] = useState<ScoutingTripTarget[]>([]);
+  const [tripReports, setTripReports] = useState<ScoutingPlayerReport[]>([]);
+  const [isLoadingTripReport, setIsLoadingTripReport] = useState(false);
 
   const [selectedReportPlayerId, setSelectedReportPlayerId] = useState('');
   const [playerReports, setPlayerReports] = useState<ScoutingPlayerReport[]>([]);
@@ -216,6 +230,32 @@ export const ScoutingSection: React.FC = () => {
       }
     })();
   }, [expandedTripId]);
+
+  useEffect(() => {
+    if (!tripReportId) {
+      setTripReportTargets([]);
+      setTripReports([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingTripReport(true);
+        const [targets, reports] = await Promise.all([
+          listTripTargets(tripReportId),
+          listReportsForTrip(tripReportId)
+        ]);
+        setTripReportTargets(targets);
+        setTripReports(reports);
+      } catch (error) {
+        console.error('[ScoutingSection] Failed loading trip report', error);
+        setTripReportTargets([]);
+        setTripReports([]);
+      } finally {
+        setIsLoadingTripReport(false);
+      }
+    })();
+  }, [tripReportId]);
 
   useEffect(() => {
     if (!selectedReportPlayerId) {
@@ -493,7 +533,8 @@ export const ScoutingSection: React.FC = () => {
         startTime: Number(reportClipForm.startTime) || 0,
         endTime: reportClipForm.endTime.trim() ? Number(reportClipForm.endTime) : null,
         title: reportClipForm.title.trim(),
-        notes: reportClipForm.notes.trim() || null
+        notes: reportClipForm.notes.trim() || null,
+        category: reportClipForm.category || null
       });
       setReportClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
       setReportClipForm(EMPTY_CLIP_FORM);
@@ -708,6 +749,14 @@ export const ScoutingSection: React.FC = () => {
                           <Users className="w-3.5 h-3.5" />
                           Targets
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setTripReportId(tripReportId === trip.id ? null : trip.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Trip Report
+                        </button>
                         <button type="button" onClick={() => handleOpenEditTrip(trip)} className="p-1.5 text-slate-500 hover:bg-slate-200 rounded-lg">
                           <Edit3 className="w-4 h-4" />
                         </button>
@@ -716,6 +765,44 @@ export const ScoutingSection: React.FC = () => {
                         </button>
                       </div>
                     </div>
+
+                    {tripReportId === trip.id && (
+                      <div className="border-t border-slate-200 p-4 space-y-2">
+                        {isLoadingTripReport ? (
+                          <p className="text-xs text-slate-400">Loading trip report...</p>
+                        ) : tripReportTargets.length === 0 ? (
+                          <p className="text-xs text-slate-400">No target players added to this trip yet.</p>
+                        ) : (
+                          tripReportTargets.map((target) => {
+                            const player = players.find((candidate) => candidate.id === target.playerId);
+                            const reportsForPlayer = tripReports.filter((report) => report.playerId === target.playerId);
+                            const latestReport = reportsForPlayer[0] ?? null;
+                            const ratings = latestReport
+                              ? [latestReport.technicalRating, latestReport.tacticalRating, latestReport.physicalRating, latestReport.mentalRating].filter(
+                                  (value): value is number => typeof value === 'number'
+                                )
+                              : [];
+                            const averageRating = ratings.length > 0 ? (ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(1) : null;
+                            const firstNoteLine = latestReport?.notes?.split('\n').find((line) => line.trim().length > 0) ?? '';
+                            return (
+                              <div key={target.id} className="rounded-lg bg-white px-3 py-2 border border-slate-200">
+                                <p className="text-xs font-bold text-slate-800">
+                                  {player ? `${player.firstName} ${player.lastName}` : 'Unknown player'}
+                                </p>
+                                {latestReport ? (
+                                  <p className="text-xs text-slate-500">
+                                    {averageRating ? `Avg rating: ${averageRating}` : 'No ratings'}
+                                    {firstNoteLine ? ` · ${firstNoteLine}` : ''}
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-slate-400">Not yet reported</p>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
 
                     {isExpanded && (
                       <div className="border-t border-slate-200 p-4 space-y-3">
@@ -954,6 +1041,7 @@ export const ScoutingSection: React.FC = () => {
                 onFormChange={setReportClipForm}
                 onSubmit={(event) => void handleAddReportClip(event)}
                 onDelete={(clipId) => void handleDeleteReportClip(clipId)}
+                categoryOptions={SCOUTING_CLIP_CATEGORIES}
               />
             )}
 
@@ -993,6 +1081,15 @@ export const ScoutingSection: React.FC = () => {
     );
   }
 
+  function renderComparisonTab() {
+    return (
+      <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+        <p className="text-sm font-bold text-slate-500">Comparison / Shortlist</p>
+        <p className="mt-1 text-xs text-slate-400">Coming soon.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -1023,9 +1120,24 @@ export const ScoutingSection: React.FC = () => {
         >
           Reports
         </button>
+        <button
+          type="button"
+          onClick={() => setSubTab('comparison')}
+          className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            subTab === 'comparison' ? 'bg-[#002142] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          Comparison
+        </button>
       </div>
 
-      {subTab === 'planning' ? renderPlanningTab() : subTab === 'players' ? renderPlayersTab() : renderReportsTab()}
+      {subTab === 'planning'
+        ? renderPlanningTab()
+        : subTab === 'players'
+          ? renderPlayersTab()
+          : subTab === 'reports'
+            ? renderReportsTab()
+            : renderComparisonTab()}
     </div>
   );
 };

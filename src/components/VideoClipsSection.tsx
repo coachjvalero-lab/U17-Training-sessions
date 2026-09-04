@@ -3,8 +3,13 @@ import { Plus, Trash2 } from 'lucide-react';
 import type { VideoClip } from '../types';
 import { formatVideoTimestamp } from '../utils/mediaUrls';
 
-export type ClipFormState = { videoUrl: string; startTime: string; endTime: string; title: string; notes: string };
-export const EMPTY_CLIP_FORM: ClipFormState = { videoUrl: '', startTime: '0', endTime: '', title: '', notes: '' };
+export type ClipFormState = { videoUrl: string; startTime: string; endTime: string; title: string; notes: string; category: string };
+export const EMPTY_CLIP_FORM: ClipFormState = { videoUrl: '', startTime: '0', endTime: '', title: '', notes: '', category: '' };
+
+export interface ClipCategoryOption {
+  value: string;
+  label: string;
+}
 
 interface VideoClipsSectionProps {
   analysisId: string | null;
@@ -16,6 +21,9 @@ interface VideoClipsSectionProps {
   onFormChange: (form: ClipFormState) => void;
   onSubmit: (event: React.FormEvent) => void;
   onDelete: (clipId: string) => void;
+  // When provided, shows a category dropdown for this tab's taxonomy (Matches vs Scouting use
+  // different, unrelated category sets); omit to hide the field entirely (e.g. Training Sessions).
+  categoryOptions?: ClipCategoryOption[];
 }
 
 // Shared "attach video clips" panel reused across Video Analysis' Matches, Training Sessions and
@@ -29,7 +37,8 @@ export const VideoClipsSection: React.FC<VideoClipsSectionProps> = ({
   form,
   onFormChange,
   onSubmit,
-  onDelete
+  onDelete,
+  categoryOptions
 }) => {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -76,6 +85,18 @@ export const VideoClipsSection: React.FC<VideoClipsSectionProps> = ({
               placeholder="Notes (optional)"
               className="sm:col-span-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
             />
+            {categoryOptions && categoryOptions.length > 0 && (
+              <select
+                value={form.category}
+                onChange={(event) => onFormChange({ ...form, category: event.target.value })}
+                className="sm:col-span-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+              >
+                <option value="">No category</option>
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            )}
             <button
               type="submit"
               disabled={isSavingClip}
@@ -100,6 +121,11 @@ export const VideoClipsSection: React.FC<VideoClipsSectionProps> = ({
                       {formatVideoTimestamp(clip.startTime)}
                       {clip.endTime != null ? ` – ${formatVideoTimestamp(clip.endTime)}` : ''}
                     </p>
+                    {clip.category && (
+                      <span className="mt-0.5 inline-block rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
+                        {categoryOptions?.find((option) => option.value === clip.category)?.label ?? clip.category}
+                      </span>
+                    )}
                     {clip.notes && <p className="mt-0.5 text-xs text-slate-500">{clip.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
