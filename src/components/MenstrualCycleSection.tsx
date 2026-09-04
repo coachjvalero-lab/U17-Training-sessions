@@ -26,7 +26,8 @@ type MenstrualCycleSectionProps = {
 const PHASE_STYLES: Record<string, string> = {
   Follicular: 'bg-cyan-100 text-cyan-950 border-cyan-300',
   Ovulatory: 'bg-fuchsia-100 text-fuchsia-950 border-fuchsia-300',
-  Luteal: 'bg-indigo-100 text-indigo-950 border-indigo-300'
+  Luteal: 'bg-indigo-100 text-indigo-950 border-indigo-300',
+  Unknown: 'bg-stone-100 text-stone-900 border-stone-300'
 };
 
 export const MenstrualCycleSection: React.FC<MenstrualCycleSectionProps> = ({ wellnessSnapshot }) => {
@@ -143,7 +144,7 @@ export const MenstrualCycleSection: React.FC<MenstrualCycleSectionProps> = ({ we
           <LegendItem className={PHASE_STYLES.Follicular} label="Follicular" />
           <LegendItem className={PHASE_STYLES.Ovulatory} label="Ovulatory" />
           <LegendItem className={PHASE_STYLES.Luteal} label="Luteal" />
-          <LegendItem className="bg-stone-100 text-stone-900 border-stone-300" label="Unknown phase with clinical record" />
+          <LegendItem className={PHASE_STYLES.Unknown} label="Unknown phase with clinical record" />
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-700">
             <Droplets className="h-3.5 w-3.5 text-slate-900" />
             Menstrual cycle = Yes
@@ -463,13 +464,13 @@ function getIdentityBadgeClass(status: string): string {
 
 function getCellClass(cell: MenstrualCalendarCell): string {
   const hasClinicalRecord = cell.injuries.length > 0 || cell.complaints.length > 0;
-  if (!cell.hasWellnessResponse && hasClinicalRecord) return 'border-stone-300 bg-stone-100 text-stone-900 hover:bg-stone-200';
+  if (!cell.hasWellnessResponse && hasClinicalRecord) return `${PHASE_STYLES.Unknown} hover:bg-stone-200`;
   if (!cell.hasWellnessResponse) return 'border-slate-200 bg-white text-slate-300 hover:bg-slate-50';
   if (!cell.hasMenstrualInformation) return 'border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200';
 
-  const phaseClass = PHASE_STYLES[cell.cyclePhase];
+  const phaseClass = PHASE_STYLES[cell.cyclePhaseKey];
   if (phaseClass) return `${phaseClass} hover:brightness-95`;
-  return 'border-stone-300 bg-stone-100 text-stone-900 hover:bg-stone-200';
+  return `${PHASE_STYLES.Unknown} hover:bg-stone-200`;
 }
 
 function buildCellTitle(playerName: string, cell: MenstrualCalendarCell): string {

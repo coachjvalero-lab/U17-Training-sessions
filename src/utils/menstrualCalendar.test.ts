@@ -145,6 +145,20 @@ test('preserves Cycle phase exactly', () => {
   ]), '2026-02');
 
   assert.equal(model.players[0].cells[2].cyclePhase, 'Ovulatory');
+  assert.equal(model.players[0].cells[2].cyclePhaseKey, 'Ovulatory');
+});
+
+test('normalizes Cycle phase casing and spacing for visual phase colors only', () => {
+  const model = buildMenstrualCalendarModel(snapshot([
+    row({ dateKey: '2026-02-03', cyclePhase: ' follicular phase ' }),
+    row({ dateKey: '2026-02-04', cyclePhase: 'OVULATORY PHASE' }),
+    row({ dateKey: '2026-02-05', cyclePhase: 'luteal' })
+  ]), '2026-02');
+
+  assert.equal(model.players[0].cells[2].cyclePhase, 'follicular phase');
+  assert.equal(model.players[0].cells[2].cyclePhaseKey, 'Follicular');
+  assert.equal(model.players[0].cells[3].cyclePhaseKey, 'Ovulatory');
+  assert.equal(model.players[0].cells[4].cyclePhaseKey, 'Luteal');
 });
 
 test('generates 28 or 29 February days correctly', () => {

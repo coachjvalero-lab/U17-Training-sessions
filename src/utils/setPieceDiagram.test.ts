@@ -6,7 +6,9 @@ import {
   addText,
   addZone,
   countElements,
+  getSetPieceVisualViewport,
   moveMarker,
+  projectSetPieceDiagramForView,
   removeElement,
   updateTextContent
 } from './setPieceDiagram';
@@ -86,4 +88,32 @@ test('a full create/place/move/annotate/delete workflow behaves as expected end 
   diagram = removeElement(diagram, diagram.zones[0].id);
   assert.equal(diagram.zones.length, 0);
   assert.equal(countElements(diagram), 4);
+});
+
+test('corner diagrams project into a zoomed goal-area view without mutating saved coordinates', () => {
+  let diagram = EMPTY_SET_PIECE_DIAGRAM;
+  diagram = addMarker(diagram, 'player', 8, 46, 'Near post');
+  diagram = addMarker(diagram, 'opponent', 18, 52, 'Defender');
+  diagram = addArrow(diagram, 4, 6, 18, 50, 'pass');
+
+  const originalFirstMarker = { ...diagram.markers[0] };
+  const viewport = getSetPieceVisualViewport(diagram, 'corner');
+  const visualDiagram = projectSetPieceDiagramForView(diagram, viewport);
+
+  assert.deepEqual(diagram.markers[0], originalFirstMarker);
+  assert.equal(viewport.minX, 0);
+  assert.ok(viewport.maxX < 100);
+  assert.ok(visualDiagram.markers[1].x > diagram.markers[1].x);
+});
+
+test('zoomed set piece viewport expands enough to keep distant markers visible', () => {
+  let diagram = EMPTY_SET_PIECE_DIAGRAM;
+  diagram = addMarker(diagram, 'player', 8, 45);
+  diagram = addMarker(diagram, 'player', 82, 60);
+
+  const viewport = getSetPieceVisualViewport(diagram, 'defensive_corner');
+  const visualDiagram = projectSetPieceDiagramForView(diagram, viewport);
+
+  assert.ok(viewport.maxX >= 87);
+  assert.ok(visualDiagram.markers.every((marker) => marker.x >= 0 && marker.x <= 100 && marker.y >= 0 && marker.y <= 100));
 });

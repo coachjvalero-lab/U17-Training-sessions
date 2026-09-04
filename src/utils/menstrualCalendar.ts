@@ -22,6 +22,7 @@ export type MenstrualCalendarCell = {
   menstrualCycle: string;
   periodDay: string;
   cyclePhase: string;
+  cyclePhaseKey: MenstrualCalendarPhaseKey;
   injuries: Injury[];
   complaints: PhysioComplaint[];
 };
@@ -220,6 +221,7 @@ function makeEmptyCell(dateKey: string, day: number): MenstrualCalendarCell {
     menstrualCycle: '',
     periodDay: '',
     cyclePhase: '',
+    cyclePhaseKey: 'Unknown',
     injuries: [],
     complaints: []
   };
@@ -229,6 +231,7 @@ function makeFilledCell(row: MenstrualWellnessRow, day: number): MenstrualCalend
   const menstrualCycle = normalizeSheetBlank(row.menstrualCycle);
   const periodDay = normalizeSheetBlank(row.dayOfPeriod);
   const cyclePhase = normalizeSheetBlank(row.cyclePhase);
+  const cyclePhaseKey = resolvePhaseKey(cyclePhase);
 
   return {
     dateKey: row.dateKey,
@@ -239,6 +242,7 @@ function makeFilledCell(row: MenstrualWellnessRow, day: number): MenstrualCalend
     menstrualCycle,
     periodDay,
     cyclePhase,
+    cyclePhaseKey,
     injuries: [],
     complaints: []
   };
@@ -265,7 +269,7 @@ function makeEmptyPhaseDistribution(): MenstrualCalendarPhaseDistribution {
 function buildSummary(cells: MenstrualCalendarCell[]): MenstrualCalendarSummary {
   const summary = makeEmptySummary();
   cells.forEach((cell) => {
-    const phase = resolvePhaseKey(cell.cyclePhase);
+    const phase = cell.cyclePhaseKey;
     if (cell.injuries.length > 0) {
       summary.injuryCount += cell.injuries.length;
       summary.injuriesByPhase[phase] += cell.injuries.length;
@@ -279,7 +283,10 @@ function buildSummary(cells: MenstrualCalendarCell[]): MenstrualCalendarSummary 
 }
 
 function resolvePhaseKey(value: string): MenstrualCalendarPhaseKey {
-  if (value === 'Follicular' || value === 'Ovulatory' || value === 'Luteal') return value;
+  const normalized = value.trim().toLowerCase().replace(/\s+phase$/, '');
+  if (normalized === 'follicular') return 'Follicular';
+  if (normalized === 'ovulatory') return 'Ovulatory';
+  if (normalized === 'luteal') return 'Luteal';
   return 'Unknown';
 }
 

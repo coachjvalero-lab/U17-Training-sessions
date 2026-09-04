@@ -146,6 +146,69 @@ html.dark textarea::placeholder {
     padding: 0 !important;
     margin: 0 !important;
   }
+
+  body.print-rpe-report-mode #root {
+    display: none !important;
+  }
+
+  body.print-rpe-report-mode .rpe-report-overlay {
+    position: static !important;
+    overflow: visible !important;
+    background: none !important;
+    padding: 0 !important;
+    z-index: auto !important;
+  }
+
+  body.print-rpe-report-mode .rpe-report-print-shell {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  body.print-rpe-report-mode .rpe-report-controls {
+    display: none !important;
+  }
+
+  body.print-rpe-report-mode .rpe-report-block,
+  body.print-rpe-report-mode .rpe-report-chart {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  body.print-rpe-report-mode .rpe-report-chart {
+    height: 50mm !important;
+  }
+
+  body.print-rpe-report-mode table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  body.print-rpe-report-mode thead {
+    display: table-header-group !important;
+  }
+
+  body.print-rpe-report-mode tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  body.print-rpe-report-mode th,
+  body.print-rpe-report-mode td {
+    padding: 1px 3px !important;
+    font-size: 6.5pt !important;
+    line-height: 1.15 !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    border-color: #cbd5e1 !important;
+  }
   
   html, body {
     background-color: #ffffff !important;
