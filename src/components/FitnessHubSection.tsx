@@ -5,6 +5,7 @@ import type { CloudTrainingSession, FitnessSession, PlayerAttendance, PlayerGrou
 import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
 import { RpeSection } from './RpeSection';
+import { MenstrualCycleSection } from './MenstrualCycleSection';
 import { deleteFitnessSession, readCachedFitnessSessions, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
@@ -361,6 +362,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   const [wellnessLoadState, setWellnessLoadState] = useState<WellnessLoadState>({ status: 'idle' });
   const [selectedWellnessDate, setSelectedWellnessDate] = useState('');
   const [selectedWellnessRowId, setSelectedWellnessRowId] = useState('');
+  const [wellnessView, setWellnessView] = useState<'daily' | 'menstrual'>('daily');
 
   const isWellnessVisible = fitnessSubTab === 'monitoring' && monitoringTab === 'wellness';
 
@@ -991,20 +993,39 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                     <p className="text-xs font-semibold text-slate-500 mt-1">Read-only data loaded on entry from the Google Sheet.</p>
                   </div>
 
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                    <span>Available date</span>
-                    <select
-                      value={selectedWellnessDate}
-                      onChange={(event) => setSelectedWellnessDate(event.target.value)}
-                      className="min-w-44 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002142]/10"
-                    >
-                      {wellnessSnapshot?.availableDates.map((date) => (
-                        <option key={date} value={date}>{date}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {wellnessView === 'daily' ? (
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                      <span>Available date</span>
+                      <select
+                        value={selectedWellnessDate}
+                        onChange={(event) => setSelectedWellnessDate(event.target.value)}
+                        className="min-w-44 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#002142]/10"
+                      >
+                        {wellnessSnapshot?.availableDates.map((date) => (
+                          <option key={date} value={date}>{date}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
 
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+                  {[
+                    { key: 'daily' as const, label: 'Daily Wellness' },
+                    { key: 'menstrual' as const, label: 'Menstrual Cycle' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setWellnessView(item.key)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${wellnessView === item.key ? 'bg-[#002142] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {wellnessView === 'daily' ? (
                 <div className="w-full">
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1331,6 +1352,9 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                     </div>
                   </div>
                 </div>
+                ) : (
+                  <MenstrualCycleSection wellnessSnapshot={wellnessSnapshot} />
+                )}
               </div>
             ) : monitoringTab === 'trainingLoad' ? (
               <RpeSection squadPlayers={squadPlayers} trainingSessions={trainingSessions} />
