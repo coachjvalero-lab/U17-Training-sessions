@@ -28,8 +28,13 @@ import {
   addMarker,
   addText,
   addZone,
+  getSetPieceVisualViewport,
   moveMarker,
+  projectSetPieceDiagramForView,
+  projectSetPieceRectForView,
+  projectSetPiecePoint,
   removeElement,
+  unprojectSetPieceDiagramPoint,
   updateTextContent
 } from '../utils/setPieceDiagram';
 
@@ -174,7 +179,7 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
     const rect = el.getBoundingClientRect();
     const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100);
     const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100);
-    return { x, y };
+    return unprojectSetPieceDiagramPoint({ x, y }, visualViewport);
   };
 
   const findElementIdAtEvent = (event: React.PointerEvent<HTMLDivElement>): string | null => {
@@ -291,6 +296,32 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
     () => diagram.texts.find((text) => text.id === selectedId)?.content ?? null,
     [diagram.texts, selectedId]
   );
+  const visualViewport = useMemo(() => getSetPieceVisualViewport(diagram, type), [diagram, type]);
+  const visualDiagram = useMemo(() => projectSetPieceDiagramForView(diagram, visualViewport), [diagram, visualViewport]);
+  const toVisualPoint = (x: number, y: number) => ({
+    x: projectSetPiecePoint(x, visualViewport.minX, visualViewport.maxX),
+    y: projectSetPiecePoint(y, visualViewport.minY, visualViewport.maxY)
+  });
+  const fieldShapes = {
+    halfwayX: projectSetPiecePoint(50, visualViewport.minX, visualViewport.maxX),
+    center: toVisualPoint(50, 50),
+    leftPenalty: projectSetPieceRectForView({ x: 0, y: 20, width: 22, height: 60 }, visualViewport),
+    leftGoalArea: projectSetPieceRectForView({ x: 0, y: 34, width: 8, height: 32 }, visualViewport),
+    leftGoal: projectSetPieceRectForView({ x: 0, y: 44, width: 2, height: 12 }, visualViewport),
+    leftSpot: toVisualPoint(14, 50),
+    rightPenalty: projectSetPieceRectForView({ x: 78, y: 20, width: 22, height: 60 }, visualViewport),
+    rightGoalArea: projectSetPieceRectForView({ x: 92, y: 34, width: 8, height: 32 }, visualViewport),
+    rightGoal: projectSetPieceRectForView({ x: 98, y: 44, width: 2, height: 12 }, visualViewport),
+    rightSpot: toVisualPoint(86, 50)
+  };
+  const drawingZonePreview = drawingZone
+    ? projectSetPieceRectForView({
+        x: Math.min(drawingZone.x1, drawingZone.x2),
+        y: Math.min(drawingZone.y1, drawingZone.y2),
+        width: Math.abs(drawingZone.x2 - drawingZone.x1),
+        height: Math.abs(drawingZone.y2 - drawingZone.y1)
+      }, visualViewport)
+    : null;
 
   if (isEditorOpen) {
     return (
@@ -389,19 +420,33 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
             className="relative mx-auto aspect-[3/2] w-full select-none touch-none overflow-visible rounded-2xl border-4 border-slate-800/20 bg-gradient-to-b from-emerald-800 to-emerald-900 shadow-xl"
           >
           <div className="pointer-events-none absolute inset-3 overflow-hidden rounded-xl">
-            <svg className="h-full w-full text-white/70" viewBox="0 0 150 100" preserveAspectRatio="none">
-              <rect x="0" y="0" width="150" height="100" fill="none" stroke="currentColor" strokeWidth="0.6" />
-              <line x1="75" y1="0" x2="75" y2="100" stroke="currentColor" strokeWidth="0.6" />
-              <circle cx="75" cy="50" r="10" fill="none" stroke="currentColor" strokeWidth="0.6" />
-              <rect x="0" y="21" width="16" height="58" fill="none" stroke="currentColor" strokeWidth="0.6" />
-              <rect x="0" y="36" width="6" height="28" fill="none" stroke="currentColor" strokeWidth="0.6" />
-              <rect x="134" y="21" width="16" height="58" fill="none" stroke="currentColor" strokeWidth="0.6" />
-              <rect x="144" y="36" width="6" height="28" fill="none" stroke="currentColor" strokeWidth="0.6" />
+            <svg className="h-full w-full text-white/75" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <rect x="0" y="0" width="100" height="100" fill="none" stroke="currentColor" strokeWidth="0.8" />
+              {fieldShapes.halfwayX >= 0 && fieldShapes.halfwayX <= 100 && (
+                <line x1={fieldShapes.halfwayX} y1="0" x2={fieldShapes.halfwayX} y2="100" stroke="currentColor" strokeWidth="0.55" />
+              )}
+              {fieldShapes.center.x >= -10 && fieldShapes.center.x <= 110 && fieldShapes.center.y >= -10 && fieldShapes.center.y <= 110 && (
+                <circle cx={fieldShapes.center.x} cy={fieldShapes.center.y} r="7" fill="none" stroke="currentColor" strokeWidth="0.55" />
+              )}
+              {[fieldShapes.leftPenalty, fieldShapes.rightPenalty].map((rect, index) => (
+                <rect key={`penalty-${index}`} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill="none" stroke="currentColor" strokeWidth="0.8" />
+              ))}
+              {[fieldShapes.leftGoalArea, fieldShapes.rightGoalArea].map((rect, index) => (
+                <rect key={`goal-area-${index}`} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill="none" stroke="currentColor" strokeWidth="0.8" />
+              ))}
+              {[fieldShapes.leftGoal, fieldShapes.rightGoal].map((rect, index) => (
+                <rect key={`goal-${index}`} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill="rgba(255,255,255,0.9)" />
+              ))}
+              {[fieldShapes.leftSpot, fieldShapes.rightSpot].map((point, index) => (
+                point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100
+                  ? <circle key={`spot-${index}`} cx={point.x} cy={point.y} r="1.1" fill="currentColor" />
+                  : null
+              ))}
             </svg>
           </div>
 
           {/* Zones */}
-          {diagram.zones.map((zone) => (
+          {visualDiagram.zones.map((zone) => (
             <div
               key={zone.id}
               data-element-id={zone.id}
@@ -417,7 +462,7 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
                 <path d="M0,0 L6,3 L0,6 Z" fill="#facc15" />
               </marker>
             </defs>
-            {diagram.arrows.map((arrow) => (
+            {visualDiagram.arrows.map((arrow) => (
               <line
                 key={arrow.id}
                 x1={`${arrow.x1}%`}
@@ -434,10 +479,10 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
             ))}
             {drawingArrow && (
               <line
-                x1={`${drawingArrow.x1}%`}
-                y1={`${drawingArrow.y1}%`}
-                x2={`${drawingArrow.x2}%`}
-                y2={`${drawingArrow.y2}%`}
+                x1={`${projectSetPiecePoint(drawingArrow.x1, visualViewport.minX, visualViewport.maxX)}%`}
+                y1={`${projectSetPiecePoint(drawingArrow.y1, visualViewport.minY, visualViewport.maxY)}%`}
+                x2={`${projectSetPiecePoint(drawingArrow.x2, visualViewport.minX, visualViewport.maxX)}%`}
+                y2={`${projectSetPiecePoint(drawingArrow.y2, visualViewport.minY, visualViewport.maxY)}%`}
                 stroke="#fde047"
                 strokeWidth={2}
                 strokeDasharray="4 4"
@@ -446,20 +491,20 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
           </svg>
 
           {/* Zone being drawn (preview) */}
-          {drawingZone && (
+          {drawingZonePreview && (
             <div
               style={{
-                left: `${Math.min(drawingZone.x1, drawingZone.x2)}%`,
-                top: `${Math.min(drawingZone.y1, drawingZone.y2)}%`,
-                width: `${Math.abs(drawingZone.x2 - drawingZone.x1)}%`,
-                height: `${Math.abs(drawingZone.y2 - drawingZone.y1)}%`
+                left: `${drawingZonePreview.x}%`,
+                top: `${drawingZonePreview.y}%`,
+                width: `${drawingZonePreview.width}%`,
+                height: `${drawingZonePreview.height}%`
               }}
               className="pointer-events-none absolute rounded-md border-2 border-dashed border-cyan-200 bg-cyan-200/10"
             />
           )}
 
           {/* Text annotations */}
-          {diagram.texts.map((text) => (
+          {visualDiagram.texts.map((text) => (
             <div
               key={text.id}
               data-element-id={text.id}
@@ -475,7 +520,10 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
           {/* Pending text input */}
           {textDraft && (
             <div
-              style={{ left: `${textDraft.x}%`, top: `${textDraft.y}%` }}
+              style={{
+                left: `${projectSetPiecePoint(textDraft.x, visualViewport.minX, visualViewport.maxX)}%`,
+                top: `${projectSetPiecePoint(textDraft.y, visualViewport.minY, visualViewport.maxY)}%`
+              }}
               className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
             >
               <input
@@ -494,12 +542,12 @@ export const SetPiecesSection: React.FC<SetPiecesSectionProps> = ({ matchId }) =
           )}
 
           {/* Markers */}
-          {diagram.markers.map((marker) => (
+          {visualDiagram.markers.map((marker) => (
             <div
               key={marker.id}
               data-element-id={marker.id}
               style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-              className={`absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 text-[10px] font-black shadow-md active:cursor-grabbing ${markerStyle(marker.kind)} ${
+              className={`absolute flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 text-[10px] font-black shadow-md active:cursor-grabbing ${markerStyle(marker.kind)} ${
                 selectedId === marker.id ? 'ring-4 ring-amber-300' : ''
               }`}
             >
