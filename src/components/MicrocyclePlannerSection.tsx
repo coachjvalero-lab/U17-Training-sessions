@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Calendar,
@@ -173,14 +173,15 @@ function createDaysFromRange(startDate: string, endDate: string): MicrocycleDay[
   return days;
 }
 
+// Days keep their position in the week: only dates/labels are re-mapped, never the content.
 function reconcileDaysForRange(draft: Microcycle): Microcycle {
   const templateDays = createDaysFromRange(draft.startDate, draft.endDate);
-  const existingByDate = new Map(draft.days.map((day) => [day.dayDate, day]));
+  const existingDays = [...draft.days].sort((a, b) => a.dayOrder - b.dayOrder);
 
   return {
     ...draft,
-    days: templateDays.map((templateDay) => {
-      const existing = existingByDate.get(templateDay.dayDate);
+    days: templateDays.map((templateDay, index) => {
+      const existing = existingDays[index];
       if (!existing) {
         return {
           ...templateDay,
@@ -253,6 +254,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
+  const lastRangeRef = useRef<{ id: string; startDate: string; endDate: string } | null>(null);
   
   // Navigation between Cards gallery and Active Week editor
   const [subNav, setSubNav] = useState<'cards' | 'editor'>('cards');
@@ -364,17 +366,28 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
   }, [isDirty, selectedMicrocycleId]);
 
   useEffect(() => {
-    if (!draft) return;
+    if (!draft) {
+      lastRangeRef.current = null;
+      return;
+    }
 
-    const expectedDates = createDaysFromRange(draft.startDate, draft.endDate).map((day) => day.dayDate).join('|');
-    const currentDates = draft.days.map((day) => day.dayDate).join('|');
-    if (expectedDates === currentDates) return;
+    const previous = lastRangeRef.current;
+    lastRangeRef.current = { id: draft.id, startDate: draft.startDate, endDate: draft.endDate };
+
+    // Only a real header date edit on the same microcycle may re-map days; loading/duplicating must not.
+    if (!previous || previous.id !== draft.id) return;
+    if (previous.startDate === draft.startDate && previous.endDate === draft.endDate) return;
 
     const reconciled = reconcileDaysForRange(draft);
-    if (reconciled.days.length !== draft.days.length || reconciled.days.some((day, index) => day.dayDate !== draft.days[index]?.dayDate)) {
+    const changed =
+      reconciled.days.length !== draft.days.length ||
+      reconciled.days.some(
+        (day, index) => day.dayDate !== draft.days[index]?.dayDate || day.dayOrder !== draft.days[index]?.dayOrder
+      );
+    if (changed) {
       updateDraft(reconciled);
     }
-  }, [draft?.startDate, draft?.endDate]);
+  }, [draft?.id, draft?.startDate, draft?.endDate]);
 
   const filteredMicrocycles = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

@@ -163,8 +163,49 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     return () => unsubscribe();
   }, [selectedTeamId]);
 
+  const parseIsoDate = (value?: string): Date | null => {
+    if (!value) return null;
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utc = new Date(Date.UTC(year, month - 1, day));
+    if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) return null;
+    return utc;
+  };
+
+  const calculateAgeFromDob = (dob?: string): number | undefined => {
+    const parsedDob = parseIsoDate(dob);
+    if (!parsedDob) return undefined;
+
+    const today = new Date();
+    let age = today.getUTCFullYear() - parsedDob.getUTCFullYear();
+    const monthDiff = today.getUTCMonth() - parsedDob.getUTCMonth();
+    const dayDiff = today.getUTCDate() - parsedDob.getUTCDate();
+    if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+      age -= 1;
+    }
+
+    return age >= 0 ? age : undefined;
+  };
+
+  const formatDob = (dob?: string): string => {
+    if (!parseIsoDate(dob)) return '-';
+    return dob as string;
+  };
+
   const effectivePlayers = useMemo(() => {
-    return syncSquadPlayersWithInjuries(players, physioInjuries);
+    const playersWithDynamicAge = players.map((player) => {
+      const computedAge = calculateAgeFromDob(player.joinedDate);
+      if (computedAge === undefined || player.age === computedAge) return player;
+      return {
+        ...player,
+        age: computedAge
+      };
+    });
+
+    return syncSquadPlayersWithInjuries(playersWithDynamicAge, physioInjuries);
   }, [players, physioInjuries]);
 
   const dataUrlToBlob = (dataUrl: string): Blob => {
@@ -318,7 +359,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     position: SquadPlayer['position'];
     status: SquadPlayer['status'];
     notes: string;
-    age: string;
+    dateOfBirth: string;
     nationality: string;
     preferredFoot: 'Right' | 'Left' | 'Both';
     heightCm: string;
@@ -330,7 +371,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     position: 'CM',
     status: 'Active',
     notes: '',
-    age: '16',
+    dateOfBirth: '',
     nationality: 'Saudi Arabia 🇸🇦',
     preferredFoot: 'Right',
     heightCm: '168',
@@ -359,7 +400,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: 'CM',
       status: 'Active',
       notes: '',
-      age: '16',
+      dateOfBirth: '',
       nationality: 'Saudi Arabia 🇸🇦',
       preferredFoot: 'Right',
       heightCm: '168',
@@ -380,7 +421,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       position: player.position,
       status: player.status,
       notes: player.notes || '',
-      age: String(player.age || 16),
+      dateOfBirth: player.joinedDate || '',
       nationality: player.nationality || 'Saudi Arabia 🇸🇦',
       preferredFoot: player.preferredFoot || 'Right',
       heightCm: String(player.heightCm || 168),
@@ -409,7 +450,8 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 position: formData.position,
                 status: formData.status,
                 notes: formData.notes.trim(),
-                age: formData.age ? Number(formData.age) : undefined,
+                joinedDate: formData.dateOfBirth || undefined,
+                age: calculateAgeFromDob(formData.dateOfBirth),
                 nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
                 preferredFoot: formData.preferredFoot,
                 heightCm: formData.heightCm ? Number(formData.heightCm) : undefined,
@@ -427,12 +469,12 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           position: formData.position,
           status: formData.status,
           notes: formData.notes.trim(),
-          age: formData.age ? Number(formData.age) : 16,
+          joinedDate: formData.dateOfBirth || undefined,
+          age: calculateAgeFromDob(formData.dateOfBirth),
           nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
           preferredFoot: formData.preferredFoot,
           heightCm: formData.heightCm ? Number(formData.heightCm) : 168,
-          weightKg: formData.weightKg ? Number(formData.weightKg) : 56,
-          joinedDate: new Date().toISOString().split('T')[0]
+          weightKg: formData.weightKg ? Number(formData.weightKg) : 56
         };
         await onUpdatePlayers([...effectivePlayers, newPlayer]);
       }
@@ -1285,7 +1327,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                       <p className="text-[11px] font-semibold text-slate-400 mt-0.5 flex items-center justify-center space-x-1">
                         <span>{player.nationality || 'Saudi Arabia 🇸🇦'}</span>
                         <span>•</span>
-                        <span>{player.age || 16} yrs</span>
+                        <span>DOB {formatDob(player.joinedDate)}</span>
                       </p>
                     </div>
                   </div>
@@ -1375,7 +1417,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                   <th className="py-3 px-4 w-12 text-center">#</th>
                   <th className="py-3 px-4">Player</th>
                   <th className="py-3 px-4">Position</th>
-                  <th className="py-3 px-4">Age & Nat.</th>
+                  <th className="py-3 px-4">DOB & Nat.</th>
                   <th className="py-3 px-4">Physical Stats</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Notes</th>
@@ -1427,7 +1469,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                         {getPositionBadge(player.position)}
                       </td>
                       <td className="py-3 px-4 font-semibold text-slate-600">
-                        {player.nationality || 'Saudi Arabia 🇸🇦'} ({player.age || 16}y)
+                        {player.nationality || 'Saudi Arabia 🇸🇦'} (DOB {formatDob(player.joinedDate)})
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
                         {player.heightCm || 168}cm • {player.weightKg || 56}kg • Foot: {player.preferredFoot || 'R'}
@@ -1640,17 +1682,16 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                 </div>
               </div>
 
-              {/* Age, Nationality, Foot, Height, Weight */}
+              {/* DOB, Nationality, Foot, Height, Weight */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Age (Years)
+                    DOB (Date of Birth)
                   </label>
                   <input
-                    type="number"
-                    value={formData.age}
-                    onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                    placeholder="16"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
                   />
                 </div>

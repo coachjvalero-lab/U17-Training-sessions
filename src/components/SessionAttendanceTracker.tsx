@@ -17,7 +17,7 @@ import {
   Shield,
   Globe2
 } from 'lucide-react';
-import { PlayerAttendance, AbsenceReason } from '../types';
+import { PlayerAttendance, AbsenceReason, Injury } from '../types';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { DEFAULT_SQUAD_PLAYERS } from '../constants/squad';
 import type { SquadPlayer } from '../types';
@@ -27,6 +27,9 @@ import {
   DEFAULT_ATTENDANCE_ALIASES
 } from '../utils/attendanceIdentity';
 import { readAttendanceIdentityMappings } from '../utils/attendanceIdentityStore';
+import { useTeamContext } from '../contexts/TeamContext';
+import { subscribeToInjuries } from '../services/physio/injuriesService';
+import { determineSquadStatusFromPlayerInjuries, getInjuriesForPlayer } from '../services/physio/squadInjurySync';
 
 const PLAYER_NAME_HISTORY_KEY = 'u17_manual_player_name_history';
 
@@ -105,12 +108,29 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const [newPlayerName, setNewPlayerName] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [nameHistory, setNameHistory] = useState<string[]>(() => readPlayerNameHistory());
+  const [physioInjuries, setPhysioInjuries] = useState<Injury[]>([]);
+  const { selectedTeamId } = useTeamContext();
 
   useEffect(() => {
     if (showAddModal) {
       setNameHistory(readPlayerNameHistory());
     }
   }, [showAddModal]);
+
+  useEffect(() => {
+    if (!selectedTeamId) {
+      setPhysioInjuries([]);
+      return;
+    }
+
+    const unsubscribe = subscribeToInjuries(
+      selectedTeamId,
+      (list) => setPhysioInjuries(list),
+      () => setPhysioInjuries([])
+    );
+
+    return () => unsubscribe();
+  }, [selectedTeamId]);
 
   useEffect(() => {
     writeWorkspaceRestoreState(contextStorageKey, { isExpanded, filter });
@@ -134,18 +154,34 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
     identityMappings
   );
 
+  const findSquadPlayerByRosterName = (name: string): SquadPlayer | undefined => {
+    const playerResolution = resolver.resolveName(name);
+    if (playerResolution.kind === 'matched') {
+      return squadPlayers.find((p) => p.id === playerResolution.playerId);
+    }
+
+    return squadPlayers.find(
+      (p) =>
+        `${p.firstName} ${p.lastName}`.toLowerCase() === name.toLowerCase() ||
+        p.firstName.toLowerCase() === name.toLowerCase() ||
+        `${p.firstName} (gk)`.toLowerCase() === name.toLowerCase()
+    );
+  };
+
+  const getDerivedPlayerHealthStatus = (name: string): SquadPlayer['status'] | undefined => {
+    const matchedSquadPlayer = findSquadPlayerByRosterName(name);
+    if (!matchedSquadPlayer) return undefined;
+
+    const playerInjuries = getInjuriesForPlayer(matchedSquadPlayer, physioInjuries);
+    return determineSquadStatusFromPlayerInjuries(playerInjuries, matchedSquadPlayer.status);
+  };
+
+  const isPlayerCurrentlyInjured = (name: string): boolean => getDerivedPlayerHealthStatus(name) === 'Injured';
+
   // Synchronize attendance list with squad roster
   const effectiveAttendance: PlayerAttendance[] = cleanRoster.map(player => {
+    const isSquadInjured = isPlayerCurrentlyInjured(player);
     const playerResolution = resolver.resolveName(player);
-    const matchedSquadPlayer = playerResolution.kind === 'matched'
-      ? squadPlayers.find((p) => p.id === playerResolution.playerId)
-      : squadPlayers.find(
-          (p) =>
-            `${p.firstName} ${p.lastName}`.toLowerCase() === player.toLowerCase() ||
-            p.firstName.toLowerCase() === player.toLowerCase() ||
-            `${p.firstName} (gk)`.toLowerCase() === player.toLowerCase()
-        );
-    const isSquadInjured = matchedSquadPlayer?.status === 'Injured';
 
     const existing = attendance.find((entry) => {
       const entryResolution = resolver.resolveName(entry.playerName);
@@ -155,7 +191,16 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
 
       return entry.playerName.toLowerCase() === player.toLowerCase();
     });
-    if (existing) return existing;
+    if (existing) {
+      if (isSquadInjured && (existing.status !== 'Absent' || existing.absenceReason !== 'Injury')) {
+        return {
+          ...existing,
+          status: 'Absent' as const,
+          absenceReason: 'Injury' as const
+        };
+      }
+      return existing;
+    }
     return {
       playerName: player,
       status: isSquadInjured ? ('Absent' as const) : ('Attending' as const),
@@ -225,16 +270,7 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
   const handleMarkAllAttending = () => {
     if (readOnly) return;
     const updated = effectiveAttendance.map(a => {
-      const playerResolution = resolver.resolveName(a.playerName);
-      const matchedSquadPlayer = playerResolution.kind === 'matched'
-        ? squadPlayers.find((p) => p.id === playerResolution.playerId)
-        : squadPlayers.find(
-            (p) =>
-              `${p.firstName} ${p.lastName}`.toLowerCase() === a.playerName.toLowerCase() ||
-              p.firstName.toLowerCase() === a.playerName.toLowerCase() ||
-              `${p.firstName} (gk)`.toLowerCase() === a.playerName.toLowerCase()
-          );
-      const isInjured = matchedSquadPlayer?.status === 'Injured';
+      const isInjured = isPlayerCurrentlyInjured(a.playerName);
       if (isInjured) {
         return {
           ...a,
@@ -565,17 +601,9 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                 }
               }
 
-              const playerResolution = resolver.resolveName(record.playerName);
-              const matchedSquadPlayer = playerResolution.kind === 'matched'
-                ? squadPlayers.find((p) => p.id === playerResolution.playerId)
-                : squadPlayers.find(
-                    (p) =>
-                      `${p.firstName} ${p.lastName}`.toLowerCase() === record.playerName.toLowerCase() ||
-                      p.firstName.toLowerCase() === record.playerName.toLowerCase() ||
-                      `${p.firstName} (gk)`.toLowerCase() === record.playerName.toLowerCase()
-                  );
-              const isPhysioInjured = matchedSquadPlayer?.status === 'Injured';
-              const isPhysioRecovering = matchedSquadPlayer?.status === 'Recovering';
+              const derivedHealthStatus = getDerivedPlayerHealthStatus(record.playerName);
+              const isPhysioInjured = derivedHealthStatus === 'Injured';
+              const isPhysioRecovering = derivedHealthStatus === 'Recovering';
 
               return (
                 <div
@@ -619,8 +647,8 @@ export const SessionAttendanceTracker: React.FC<SessionAttendanceTrackerProps> =
                     )}
                   </div>
 
-                  {/* Physio status reminder if marked attending while registered injured */}
-                  {isPhysioInjured && record.status === 'Attending' && !readOnly && (
+                  {/* Physio status reminder if attendance is manually set against active injury */}
+                  {isPhysioInjured && record.status !== 'Absent' && !readOnly && (
                     <div className="flex items-center justify-between px-2 py-1 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-800 font-semibold">
                       <span>Reported injured in Physio</span>
                       <button

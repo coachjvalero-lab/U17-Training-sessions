@@ -436,6 +436,10 @@ export async function createMicrocycle(input: CreateMicrocycleInput): Promise<Mi
 }
 
 export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
+  // Set once the remote rows have been deleted: from that point a failure means real data loss,
+  // so it must surface instead of being masked by the local-cache fallback.
+  let hasDeletedRemoteChildren = false;
+
   try {
     const client = getClient();
 
@@ -459,6 +463,7 @@ export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
       .eq('microcycle_id', microcycle.id);
 
     if (deleteDaysErr) throw deleteDaysErr;
+    hasDeletedRemoteChildren = true;
 
     const { error: deleteAvailabilityErr } = await client
       .from(MICROCYCLE_AVAILABILITY_TABLE)
@@ -508,6 +513,7 @@ export async function saveMicrocycle(microcycle: Microcycle): Promise<void> {
     const nextRows = rows.filter((item) => item.id !== microcycle.id);
     nextRows.unshift(microcycle);
     writeLocalMicrocycles(nextRows);
+    if (hasDeletedRemoteChildren) throw error;
   }
 }
 

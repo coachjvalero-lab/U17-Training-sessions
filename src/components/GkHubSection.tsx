@@ -254,12 +254,15 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
         );
       })
       .sort((left, right) => {
-        const numComparison = compareSessionNumbers(left.sessionNumber, right.sessionNumber);
-        if (numComparison !== 0) {
-          return numComparison;
-        }
+        // Canonical order: most recently updated first (matches the gk_sessions
+        // query ordering and what the create flow optimistically prepends),
+        // so a newly created session appears exactly where it will after refresh.
         if (left.updatedAt !== right.updatedAt) {
           return right.updatedAt - left.updatedAt;
+        }
+        const numComparison = compareSessionNumbers(right.sessionNumber, left.sessionNumber);
+        if (numComparison !== 0) {
+          return numComparison;
         }
         return left.id.localeCompare(right.id);
       });
