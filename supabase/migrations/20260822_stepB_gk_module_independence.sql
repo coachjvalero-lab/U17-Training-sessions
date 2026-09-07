@@ -53,8 +53,10 @@ create policy gk_sessions_section_gk
   on public.gk_sessions
   for all
   to authenticated
-  using (public.user_has_section_access('gk'))
-  with check (public.user_has_section_access('gk'));
+  -- Wrapped in a scalar subselect so Postgres evaluates it once per statement
+  -- (InitPlan) instead of once per scanned row; see 20260907090000 migration.
+  using ((select public.user_has_section_access('gk')))
+  with check ((select public.user_has_section_access('gk')));
 
 -- -----------------------------------------------------------------------------
 -- 2) Backfill historical GK sessions from legacy sessions (only sessions with GK content)
