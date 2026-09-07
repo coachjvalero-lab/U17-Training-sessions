@@ -153,14 +153,32 @@ function createDraftFromLoaded(source: Microcycle): Microcycle {
   return deepClone(source);
 }
 
+// `<input type="date">` emits partial values while the year is being typed ('' or year 0002),
+// so every range consumer must reject them before deriving days from the header dates.
+function isValidPlannerDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const year = Number(value.slice(0, 4));
+  if (year < 2000 || year > 2100) return false;
+  return !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+}
+
+function isValidPlannerRange(startDate: string, endDate: string): boolean {
+  if (!isValidPlannerDate(startDate) || !isValidPlannerDate(endDate)) return false;
+  return startDate <= endDate;
+}
+
+const MAX_MICROCYCLE_RANGE_DAYS = 60;
+
 function createDaysFromRange(startDate: string, endDate: string): MicrocycleDay[] {
+  if (!isValidPlannerRange(startDate, endDate)) return [];
+
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   const days: MicrocycleDay[] = [];
   const cursor = new Date(start);
   let order = 0;
 
-  while (cursor <= end) {
+  while (cursor <= end && order < MAX_MICROCYCLE_RANGE_DAYS) {
     const base = createMicrocycleDayTemplate(startDate, order);
     const iso = cursor.toISOString().slice(0, 10);
     base.dayDate = iso;
@@ -377,8 +395,11 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
     // Only a real header date edit on the same microcycle may re-map days; loading/duplicating must not.
     if (!previous || previous.id !== draft.id) return;
     if (previous.startDate === draft.startDate && previous.endDate === draft.endDate) return;
+    if (!isValidPlannerRange(draft.startDate, draft.endDate)) return;
 
     const reconciled = reconcileDaysForRange(draft);
+    if (reconciled.days.length === 0 && draft.days.length > 0) return;
+
     const changed =
       reconciled.days.length !== draft.days.length ||
       reconciled.days.some(
@@ -586,6 +607,12 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
 
   const handleSave = async () => {
     if (!draft) return;
+
+    if (!isValidPlannerRange(draft.startDate, draft.endDate)) {
+      setSaveStatus('error');
+      setSaveError('Start Date and End Date must form a valid range.');
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -1127,6 +1154,7 @@ export const MicrocyclePlannerSection: React.FC<MicrocyclePlannerSectionProps> =
                       type="button"
                       onClick={() => {
                         if (!draft) return;
+                        if (!isValidPlannerRange(draft.startDate, draft.endDate)) return;
                         const next = deepClone(draft);
                         next.days = createDaysFromRange(next.startDate, next.endDate).map((day) => {
                           const existing = draft.days.find((item) => item.dayDate === day.dayDate);

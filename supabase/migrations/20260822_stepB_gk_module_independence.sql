@@ -9,31 +9,14 @@
 begin;
 
 -- -----------------------------------------------------------------------------
--- 1) Session catalog (canonical link layer) - ensure table and indexes exist
--- -----------------------------------------------------------------------------
-create table if not exists public.session_catalog (
-  session_uid text primary key,
-  session_number text not null,
-  session_date text,
-  source_legacy_session_id text unique,
-  created_at bigint not null,
-  updated_at bigint not null
-);
-
-create index if not exists session_catalog_session_number_idx
-  on public.session_catalog (session_number);
-
-create index if not exists session_catalog_session_date_idx
-  on public.session_catalog (session_date);
-
-alter table public.session_catalog enable row level security;
-
--- -----------------------------------------------------------------------------
--- 2) Independent Goalkeeper sessions table (public.gk_sessions)
+-- 1) Independent Goalkeeper sessions table (public.gk_sessions)
+--    Self-contained: session_uid is a plain data column (unique), with NO
+--    foreign key to session_catalog. The GK module does not create or depend on
+--    public.session_catalog.
 -- -----------------------------------------------------------------------------
 create table if not exists public.gk_sessions (
   id text primary key,
-  session_uid text not null references public.session_catalog(session_uid) on delete cascade,
+  session_uid text not null,
   legacy_session_id text,
   team_name text not null,
   date text not null,
@@ -70,46 +53,13 @@ create policy gk_sessions_section_gk
   on public.gk_sessions
   for all
   to authenticated
-  using (
-    public.user_has_section_access('gk')
-    or public.has_section_access('gk')
-  )
-  with check (
-    public.user_has_section_access('gk')
-    or public.has_section_access('gk')
-  );
+  using (public.user_has_section_access('gk'))
+  with check (public.user_has_section_access('gk'));
 
 -- -----------------------------------------------------------------------------
--- 3) Backfill historical GK sessions from legacy sessions (only sessions with GK content)
+-- 2) Backfill historical GK sessions from legacy sessions (only sessions with GK content)
+--    Source: public.sessions. Target: public.gk_sessions. No session_catalog involved.
 -- -----------------------------------------------------------------------------
-insert into public.session_catalog (
-  session_uid,
-  session_number,
-  session_date,
-  source_legacy_session_id,
-  created_at,
-  updated_at
-)
-select
-  s.id,
-  coalesce(s.session_number, ''),
-  s.date,
-  s.id,
-  coalesce(s.updated_at, (extract(epoch from now()) * 1000)::bigint),
-  coalesce(s.updated_at, (extract(epoch from now()) * 1000)::bigint)
-from public.sessions s
-where
-  s.gk_updated_at is not null
-  or (s.gk_warm_up is not null and s.gk_warm_up != 'null'::jsonb and s.gk_warm_up != '{}'::jsonb)
-  or (s.gk_main_part is not null and s.gk_main_part != 'null'::jsonb and s.gk_main_part != '{}'::jsonb)
-  or (s.gk_cool_down is not null and s.gk_cool_down != 'null'::jsonb and s.gk_cool_down != '{}'::jsonb)
-  or (s.gk_player_groups is not null and s.gk_player_groups != 'null'::jsonb and s.gk_player_groups != '[]'::jsonb and s.gk_player_groups != '{}'::jsonb)
-on conflict (session_uid) do update
-set
-  session_number = excluded.session_number,
-  session_date = excluded.session_date,
-  updated_at = greatest(public.session_catalog.updated_at, excluded.updated_at);
-
 insert into public.gk_sessions (
   id,
   session_uid,
