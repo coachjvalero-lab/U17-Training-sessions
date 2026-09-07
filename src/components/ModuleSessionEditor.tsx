@@ -7,6 +7,7 @@ import { ExerciseBlock } from './ExerciseBlock';
 import { Exercise, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { getModuleGameMoments, getModuleSessionView, TrainingModuleId } from '../modules/trainingModules';
 import { calculateSessionTotalDurationMinutes } from '../utils/duration';
+import { selectMalikaParticipants } from '../utils/malikaLeague';
 
 interface ModuleSessionEditorProps {
   moduleId: TrainingModuleId;
@@ -28,12 +29,6 @@ interface ModuleSessionEditorProps {
   onExcludePlayer: (name: string) => void;
   onIncludePlayer: (name: string) => void;
   onUpdateLogo: (newLogo: string) => void;
-  onApplyMalikaPoints?: (payload: {
-    sessionId: string;
-    exerciseId: string;
-    challenge: string;
-    awards: Array<{ playerId: string; points: number }>;
-  }) => void;
 }
 
 export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
@@ -55,8 +50,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   onToggleExpand,
   onExcludePlayer,
   onIncludePlayer,
-  onUpdateLogo,
-  onApplyMalikaPoints
+  onUpdateLogo
 }) => {
   const moduleView = getModuleSessionView(session, moduleId);
   const totalDurationMinutes = calculateSessionTotalDurationMinutes([
@@ -89,6 +83,7 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
     .map((entry) => entry.playerName?.trim())
     .filter((name): name is string => Boolean(name));
   const rosterForAttendance = Array.from(new Set([...planningRoster, ...attendanceOnlyPlayers]));
+  const malikaParticipants = selectMalikaParticipants(squadPlayers, sessionAttendance);
 
   const sessionWithSharedHeader: TrainingSession = isGk
     ? session
@@ -155,8 +150,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         gameMoments={getModuleGameMoments(moduleId)}
         allowSecondGameMoment={moduleId === 'football'}
         sessionId={session.id}
+        sessionDate={session.date}
         squadPlayers={squadPlayers}
-        onApplyMalikaPoints={onApplyMalikaPoints}
+        malikaParticipants={malikaParticipants}
       />
 
       <ExerciseBlock
@@ -168,8 +164,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         gameMoments={getModuleGameMoments(moduleId)}
         allowSecondGameMoment={moduleId === 'football'}
         sessionId={session.id}
+        sessionDate={session.date}
         squadPlayers={squadPlayers}
-        onApplyMalikaPoints={onApplyMalikaPoints}
+        malikaParticipants={malikaParticipants}
       />
 
       <div className="print:hidden">
@@ -182,8 +179,9 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
           gameMoments={getModuleGameMoments(moduleId)}
           allowSecondGameMoment={moduleId === 'football'}
           sessionId={session.id}
+          sessionDate={session.date}
           squadPlayers={squadPlayers}
-          onApplyMalikaPoints={onApplyMalikaPoints}
+          malikaParticipants={malikaParticipants}
         />
       </div>
 

@@ -1019,18 +1019,11 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 text-xs">
+                    <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-200 text-xs">
                       <div className="bg-white p-2 rounded-xl border border-slate-100">
                         <span className="text-[10px] text-slate-400 block font-semibold">Status</span>
                         <span className="font-extrabold text-slate-800 capitalize">
                           {player.status || 'Active'}
-                        </span>
-                      </div>
-                      <div className="bg-white p-2 rounded-xl border border-slate-100">
-                        <span className="text-[10px] text-slate-400 block font-semibold">Malika Points</span>
-                        <span className="font-extrabold text-amber-600 flex items-center space-x-1">
-                          <Award className="w-3.5 h-3.5 text-amber-500" />
-                          <span>{player.malikaPoints || 0} pts</span>
                         </span>
                       </div>
                     </div>

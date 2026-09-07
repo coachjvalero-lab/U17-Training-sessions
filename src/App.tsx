@@ -46,8 +46,8 @@ import {
 } from './services/squad/squadService';
 import { subscribeToInjuries } from './services/physio/injuriesService';
 import { buildDefaultAttendanceFromRoster, syncSquadPlayersWithInjuries } from './services/physio/squadInjurySync';
-import { applyMalikaAwardsToSquad } from './services/squad/malikaService';
 import { normalizeSquadPlayerPhotos } from './utils/squadPhotos';
+import { selectMalikaParticipants } from './utils/malikaLeague';
 import {
   addExcludedPlayers,
   removeExcludedPlayers,
@@ -607,6 +607,7 @@ export default function App() {
   }, [cloudSessions, excludedPlayers, session, syncedSquadPlayers]);
 
   const squadPlayersWithStats = squadStatistics.players;
+  const malikaParticipants = selectMalikaParticipants(squadPlayersWithStats, session.attendance);
 
   useEffect(() => {
     const isDark = themeMode === 'dark';
@@ -1181,36 +1182,6 @@ export default function App() {
       console.warn('Cloud save failed for squad player:', err);
     });
   }, [cloudSessions, session.attendance, squadPlayers, squadStatistics.players]);
-
-  const handleApplyMalikaPoints = async ({
-    sessionId,
-    exerciseId,
-    challenge,
-    awards
-  }: {
-    sessionId: string;
-    exerciseId: string;
-    challenge: string;
-    awards: Array<{ playerId: string; points: number }>;
-  }) => {
-    if (!sessionId || !exerciseId || awards.length === 0) return;
-
-    const nextPlayers = applyMalikaAwardsToSquad(squadPlayers, {
-      sessionId,
-      exerciseId,
-      challenge,
-      awards,
-      awardedAt: Date.now()
-    });
-    try {
-      await handleUpdateSquadPlayers(nextPlayers);
-    } catch (err: unknown) {
-      const errorObj = err as { message?: string; details?: string; hint?: string };
-      const errMsg = errorObj?.message || errorObj?.details || 'Error updating Malika points in Supabase';
-      console.error('Failed to persist Malika Golden points to Supabase:', err);
-      alert(`Supabase save error: ${errMsg}`);
-    }
-  };
 
   const handleUpdateAttendance = (attendance: PlayerAttendance[]) => {
     setSession(prev => ({
@@ -1841,7 +1812,6 @@ export default function App() {
                 onExcludePlayer={handleExcludePlayer}
                 onIncludePlayer={handleIncludePlayer}
                 onUpdateLogo={handleUpdateTeamLogo}
-                onApplyMalikaPoints={handleApplyMalikaPoints}
               />
             )}
           />
@@ -1890,7 +1860,6 @@ export default function App() {
                   onExcludePlayer={handleExcludePlayer}
                   onIncludePlayer={handleIncludePlayer}
                   onUpdateLogo={handleUpdateTeamLogo}
-                  onApplyMalikaPoints={handleApplyMalikaPoints}
                 />
               )}
             />
@@ -1954,6 +1923,10 @@ export default function App() {
               sessionGroups={session.playerGroups}
               gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
               allowSecondGameMoment
+              sessionId={session.id}
+              sessionDate={session.date}
+              squadPlayers={squadPlayersWithStats}
+              malikaParticipants={malikaParticipants}
             />
 
             {/* Section: Main Part Block */}
@@ -1965,6 +1938,10 @@ export default function App() {
               sessionGroups={session.playerGroups}
               gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
               allowSecondGameMoment
+              sessionId={session.id}
+              sessionDate={session.date}
+              squadPlayers={squadPlayersWithStats}
+              malikaParticipants={malikaParticipants}
             />
 
             {/* Section: Cool Down Block */}
@@ -1977,6 +1954,10 @@ export default function App() {
                 sessionGroups={session.playerGroups}
                 gameMoments={getModuleGameMoments(DEFAULT_MODULE_ID)}
                 allowSecondGameMoment
+                sessionId={session.id}
+                sessionDate={session.date}
+                squadPlayers={squadPlayersWithStats}
+                malikaParticipants={malikaParticipants}
               />
             </div>
 
