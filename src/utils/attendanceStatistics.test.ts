@@ -117,8 +117,15 @@ test('excludes goalkeepers and injured players from training groups when squadPl
   const resolver = (name: string) => {
     const clean = name.toLowerCase().replace(/\s*\(gk\)$/i, '').trim();
     const found = squadPlayers.find(p => p.firstName.toLowerCase() === clean);
-    if (found) return { kind: 'matched' as const, playerId: found.id, displayName: `${found.firstName} ${found.lastName}` };
-    return { kind: 'unmatched' as const, historicalName: name, normalizedHistoricalName: clean };
+    if (found) {
+      return {
+        kind: 'matched' as const,
+        playerId: found.id,
+        displayName: `${found.firstName} ${found.lastName}`,
+        normalizedName: clean
+      };
+    }
+    return { kind: 'unmatched' as const, normalizedName: clean };
   };
 
   const available = getAvailablePlayerNamesForGroups(roster, attendance, {
@@ -145,7 +152,8 @@ test('excludes injured player even if an erroneous attending record exists for t
   const resolver = (name: string) => ({
     kind: 'matched' as const,
     playerId: 'p10',
-    displayName: 'Leen Alhidari'
+    displayName: 'Leen Alhidari',
+    normalizedName: name.toLowerCase().trim()
   });
 
   const available = getAvailablePlayerNamesForGroups(roster, attendance, {
