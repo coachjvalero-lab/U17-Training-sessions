@@ -195,7 +195,10 @@ export function normalizeSessionRoster(sess: TrainingSession): TrainingSession {
 
   let updatedRoster = currentRoster.map(renamePlayer);
 
-  const hasLeen = updatedRoster.some(p => p.trim().toLowerCase() === 'leen');
+  const hasLeen = updatedRoster.some(p => {
+    const low = p.trim().toLowerCase();
+    return low === 'leen' || low.startsWith('leen ');
+  });
   if (!hasLeen) {
     const lateenIdx = updatedRoster.findIndex(p => p.trim().toLowerCase() === 'lateen');
     if (lateenIdx !== -1) {
@@ -210,17 +213,6 @@ export function normalizeSessionRoster(sess: TrainingSession): TrainingSession {
     ...a,
     playerName: renamePlayer(a.playerName)
   }));
-
-  const hasLeenAtt = updatedAttendance.some(a => a.playerName.trim().toLowerCase() === 'leen');
-  if (!hasLeenAtt) {
-    const lateenIdx = updatedAttendance.findIndex(a => a.playerName.trim().toLowerCase() === 'lateen');
-    const leenObj: PlayerAttendance = { playerName: 'Leen', status: 'Attending' };
-    if (lateenIdx !== -1) {
-      updatedAttendance.splice(lateenIdx + 1, 0, leenObj);
-    } else {
-      updatedAttendance.push(leenObj);
-    }
-  }
 
   const replaceTextNames = (text: string): string => {
     if (!text) return text;

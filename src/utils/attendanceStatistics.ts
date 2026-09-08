@@ -1,4 +1,4 @@
-import type { AbsenceReason, PlayerAttendance } from '../types';
+import type { AbsenceReason, PlayerAttendance, SquadPlayer } from '../types';
 import {
   normalizeAttendanceName,
   type AttendanceNameResolution
@@ -167,14 +167,26 @@ export function getAvailablePlayerNamesForGroups(
   options?: {
     resolveName?: AttendanceNameResolver;
     includeExternalPlayers?: boolean;
+    squadPlayers?: SquadPlayer[];
   }
 ): string[] {
   const resolveName = options?.resolveName;
+  const squadPlayers = options?.squadPlayers;
 
   if (!resolveName) {
-    return squadRoster.filter(
-      (playerName) => findAttendanceRecord(attendance, playerName)?.status === 'Attending'
-    );
+    return squadRoster.filter((playerName) => {
+      if (squadPlayers) {
+        const clean = playerName.toLowerCase().replace(/\s*\(gk\)$/i, '').trim();
+        const sp = squadPlayers.find(
+          (p) =>
+            p.firstName.toLowerCase() === clean ||
+            `${p.firstName} ${p.lastName}`.toLowerCase() === clean
+        );
+        if (sp?.position === 'GK') return false;
+        if (sp?.status === 'Injured') return false;
+      }
+      return findAttendanceRecord(attendance, playerName)?.status === 'Attending';
+    });
   }
 
   const seenIdentities = new Set<string>();
@@ -185,12 +197,29 @@ export function getAvailablePlayerNamesForGroups(
     if (playerResolution.kind !== 'matched') return;
     if (seenIdentities.has(playerResolution.playerId)) return;
 
+    // Check real squad player state
+    const matchedPlayer = squadPlayers?.find((p) => p.id === playerResolution.playerId);
+
+    // Exclude Goalkeepers (position === 'GK') from training groups
+    if (matchedPlayer?.position === 'GK') return;
+
+    // Exclude players whose real state is Injured
+    if (matchedPlayer?.status === 'Injured') return;
+
     const isAttending = (attendance || []).some((record) => {
       if (record.status !== 'Attending') return false;
       const recordResolution = resolveName(record.playerName);
       return recordResolution.kind === 'matched' && recordResolution.playerId === playerResolution.playerId;
     });
     if (!isAttending) return;
+
+    // A player marked Absent (due to injury or otherwise) must not be treated as attending
+    const hasAbsentRecord = (attendance || []).some((record) => {
+      if (record.status !== 'Absent') return false;
+      const recordResolution = resolveName(record.playerName);
+      return recordResolution.kind === 'matched' && recordResolution.playerId === playerResolution.playerId;
+    });
+    if (hasAbsentRecord) return;
 
     seenIdentities.add(playerResolution.playerId);
     // Aliases such as "Leen" and "Leen Alhaidari" share one identity, so the squad display name wins.

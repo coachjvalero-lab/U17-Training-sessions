@@ -96,3 +96,62 @@ test('only explicitly attending players are available for player groups', () => 
 
   assert.deepEqual(getAvailablePlayerNamesForGroups(roster, attendance), ['Alba']);
 });
+
+test('excludes goalkeepers and injured players from training groups when squadPlayers are provided', () => {
+  const squadPlayers: any[] = [
+    { id: 'p1', firstName: 'Alba', lastName: 'Mellado', position: 'ST', status: 'Active' },
+    { id: 'p2', firstName: 'Ranse', lastName: 'AlGhamdi', position: 'GK', status: 'Active' },
+    { id: 'p10', firstName: 'Leen', lastName: 'Alhidari', position: 'CM', status: 'Injured' },
+    { id: 'p9', firstName: 'Lateen', lastName: 'AlZahrani', position: 'RW', status: 'Active' }
+  ];
+
+  const roster = ['Alba', 'Ranse (GK)', 'Leen', 'Lateen'];
+  const attendance: PlayerAttendance[] = [
+    { playerName: 'Alba', status: 'Attending' },
+    { playerName: 'Ranse (GK)', status: 'Attending' },
+    { playerName: 'Leen', status: 'Absent', absenceReason: 'Injury' },
+    { playerName: 'Lateen', status: 'Attending' }
+  ];
+
+  // Resolver matching names
+  const resolver = (name: string) => {
+    const clean = name.toLowerCase().replace(/\s*\(gk\)$/i, '').trim();
+    const found = squadPlayers.find(p => p.firstName.toLowerCase() === clean);
+    if (found) return { kind: 'matched' as const, playerId: found.id, displayName: `${found.firstName} ${found.lastName}` };
+    return { kind: 'unmatched' as const, historicalName: name, normalizedHistoricalName: clean };
+  };
+
+  const available = getAvailablePlayerNamesForGroups(roster, attendance, {
+    resolveName: resolver,
+    squadPlayers
+  });
+
+  // Ranse is GK -> excluded. Leen is Injured -> excluded. Only Alba and Lateen remain.
+  assert.deepEqual(available, ['Alba Mellado', 'Lateen AlZahrani']);
+});
+
+test('excludes injured player even if an erroneous attending record exists for the same player', () => {
+  const squadPlayers: any[] = [
+    { id: 'p10', firstName: 'Leen', lastName: 'Alhidari', position: 'CM', status: 'Injured' }
+  ];
+
+  const roster = ['Leen'];
+  // Even if both an absent and attending record existed
+  const attendance: PlayerAttendance[] = [
+    { playerName: 'Leen', status: 'Absent', absenceReason: 'Injury' },
+    { playerName: 'Leen', status: 'Attending' }
+  ];
+
+  const resolver = (name: string) => ({
+    kind: 'matched' as const,
+    playerId: 'p10',
+    displayName: 'Leen Alhidari'
+  });
+
+  const available = getAvailablePlayerNamesForGroups(roster, attendance, {
+    resolveName: resolver,
+    squadPlayers
+  });
+
+  assert.deepEqual(available, []);
+});

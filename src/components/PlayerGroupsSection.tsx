@@ -51,9 +51,10 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   const attendingPlayers = useMemo(() => {
     return getAvailablePlayerNamesForGroups(squadRoster, attendance, {
       resolveName: resolver.resolveName,
-      includeExternalPlayers
+      includeExternalPlayers,
+      squadPlayers
     });
-  }, [attendance, includeExternalPlayers, resolver, squadRoster]);
+  }, [attendance, includeExternalPlayers, resolver, squadPlayers, squadRoster]);
 
   const identityKeyOf = useMemo(
     () => (playerName: string) => getPlayerIdentityKey(playerName, resolver.resolveName),
@@ -61,10 +62,24 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
   );
 
   const selectablePlayersTotal = useMemo(() => {
-    const identities = new Set(squadRoster.map(identityKeyOf));
+    const identities = new Set<string>();
+    squadRoster.forEach((name) => {
+      const resolution = resolver.resolveName(name);
+      if (resolution.kind === 'matched') {
+        const sp = squadPlayers.find((p) => p.id === resolution.playerId);
+        if (sp?.position === 'GK') return;
+        if (sp?.status === 'Injured') return;
+      }
+      identities.add(identityKeyOf(name));
+    });
     attendingPlayers.forEach((name) => identities.add(identityKeyOf(name)));
     return identities.size;
-  }, [attendingPlayers, identityKeyOf, squadRoster]);
+  }, [attendingPlayers, identityKeyOf, resolver, squadPlayers, squadRoster]);
+
+  const attendingIdentities = useMemo(
+    () => new Set(attendingPlayers.map(identityKeyOf)),
+    [attendingPlayers, identityKeyOf]
+  );
 
   const gymPlayers = useMemo(() => {
     if (!attendance || attendance.length === 0) return [];
@@ -458,7 +473,7 @@ export const PlayerGroupsSection: React.FC<PlayerGroupsSectionProps> = ({
             // Only render players who are currently Attending; a status change to
             // First Team / National Team Call / Absent / Gym hides them here without
             // mutating the stored group assignment (they reappear if Attending again).
-            const playerList = getGroupPlayersList(group).filter((player) => attendingPlayers.includes(player));
+            const playerList = getGroupPlayersList(group).filter((player) => attendingIdentities.has(identityKeyOf(player)));
 
             return (
               <div 
