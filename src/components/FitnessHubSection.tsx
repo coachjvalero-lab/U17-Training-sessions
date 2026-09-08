@@ -6,6 +6,7 @@ import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
 import { RpeSection } from './RpeSection';
 import { MenstrualCycleSection } from './MenstrualCycleSection';
+import { WeeklyWeightSection } from './WeeklyWeightSection';
 import { deleteFitnessSession, readCachedFitnessSessions, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
@@ -956,17 +957,21 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               <div>
                 <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">Player Monitoring</h2>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Wellness and Training Load (RPE) are active. Testing is not implemented yet.
+                  Wellness, Training Load (RPE) and Weekly Weight are active.
                 </p>
               </div>
-              <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">Read Only</span>
+              {monitoringTab === 'testing' ? (
+                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Editable</span>
+              ) : (
+                <span className="text-[10px] font-extrabold text-[#8a7549] bg-[#ede9e6] px-2.5 py-1 rounded-lg border border-[#a79078]/30">Read Only</span>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2">
               {[
                 { key: 'wellness' as const, label: 'Wellness' },
                 { key: 'trainingLoad' as const, label: 'Training Load' },
-                { key: 'testing' as const, label: 'Testing' }
+                { key: 'testing' as const, label: 'Weekly Weight' }
               ].map((item) => (
                 <button
                   key={item.key}
@@ -1359,12 +1364,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
             ) : monitoringTab === 'trainingLoad' ? (
               <RpeSection squadPlayers={squadPlayers} trainingSessions={trainingSessions} />
             ) : (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Testing</div>
-                <p className="mt-2 text-xs font-semibold text-slate-700 leading-relaxed">
-                  Navigation placeholder only. Functional screens for this area will be added later.
-                </p>
-              </div>
+              <WeeklyWeightSection squadPlayers={squadPlayers} />
             )}
           </div>
         </div>

@@ -54,6 +54,18 @@ export interface SquadPlayer {
   malikaHistory?: MalikaHistoryEntry[];
 }
 
+export interface PlayerWeeklyWeight {
+  id: string;
+  playerId: string;
+  /** Monday (ISO week start) of the measured week, YYYY-MM-DD. */
+  weekStartDate: string;
+  weightKg: number;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type PhysioContext = 'training' | 'match' | 'external' | 'unknown';
 export type ClinicalInjuryStatus = 'open' | 'under_treatment' | 'rehab' | 'return_to_training' | 'return_to_play' | 'closed';
 export type AffectedSide = 'right' | 'left' | 'bilateral' | 'not_applicable' | 'unknown';
