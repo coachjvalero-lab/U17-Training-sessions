@@ -376,7 +376,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
     nationality: 'Saudi Arabia 🇸🇦',
     preferredFoot: 'Right',
     heightCm: '168',
-    weightKg: '56'
+    weightKg: ''
   });
 
   useEffect(() => {
@@ -405,7 +405,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       nationality: 'Saudi Arabia 🇸🇦',
       preferredFoot: 'Right',
       heightCm: '168',
-      weightKg: '56'
+      weightKg: ''
     });
     setIsModalOpen(true);
   };
@@ -426,7 +426,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
       nationality: player.nationality || 'Saudi Arabia 🇸🇦',
       preferredFoot: player.preferredFoot || 'Right',
       heightCm: String(player.heightCm || 168),
-      weightKg: String(player.weightKg || 56)
+      weightKg: player.weightKg !== undefined && player.weightKg !== null ? String(player.weightKg) : ''
     });
     setIsModalOpen(true);
   };
@@ -475,7 +475,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
           nationality: formData.nationality.trim() || 'Saudi Arabia 🇸🇦',
           preferredFoot: formData.preferredFoot,
           heightCm: formData.heightCm ? Number(formData.heightCm) : 168,
-          weightKg: formData.weightKg ? Number(formData.weightKg) : 56
+          weightKg: formData.weightKg ? Number(formData.weightKg) : undefined
         };
         await onUpdatePlayers([...effectivePlayers, newPlayer]);
       }
@@ -1230,7 +1230,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                     </div>
                     <div className="border-x border-slate-200 px-1">
                       <span className="block text-[9px] text-slate-400 font-sans font-bold uppercase">Weight</span>
-                      <span className="font-bold text-slate-800">{player.weightKg || 56} kg</span>
+                      <span className="font-bold text-slate-800">{player.weightKg ? `${player.weightKg} kg` : '—'}</span>
                     </div>
                     <div>
                       <span className="block text-[9px] text-slate-400 font-sans font-bold uppercase">Foot</span>
@@ -1351,7 +1351,7 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                         {player.nationality || 'Saudi Arabia 🇸🇦'} (DOB {formatDob(player.joinedDate)})
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
-                        {player.heightCm || 168}cm • {player.weightKg || 56}kg • Foot: {player.preferredFoot || 'R'}
+                        {player.heightCm || 168}cm • {player.weightKg ? `${player.weightKg}kg` : '—'} • Foot: {player.preferredFoot || 'R'}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
@@ -1627,10 +1627,10 @@ export const SquadRosterSection: React.FC<SquadRosterSectionProps> = ({
                     value={formData.weightKg}
                     readOnly
                     disabled
-                    title="Managed automatically from Fitness → Testing → Weekly Weight"
+                    title="Managed automatically from Fitness → Testing → Weight"
                     className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed"
                   />
-                  <p className="mt-1 text-[10px] font-semibold text-slate-400">Auto-updated from Weekly Weight</p>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">Auto-updated from Fitness → Testing → Weight</p>
                 </div>
               </div>
 

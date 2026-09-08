@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BookOpen, Calendar, Edit3, FileText, FolderOpen, Layers, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Calendar, Edit3, FileText, FolderOpen, Layers, Plus, Scale, Search, Trash2 } from 'lucide-react';
 import { getEmptySession } from '../defaultSession';
 import type { CloudTrainingSession, FitnessSession, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { ModuleSessionEditor } from './ModuleSessionEditor';
@@ -339,13 +339,14 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   const initialFitnessSubTab =
     restoredContext.fitnessSubTab === 'sessions' ||
     restoredContext.fitnessSubTab === 'monitoring' ||
+    restoredContext.fitnessSubTab === 'testing' ||
     restoredContext.fitnessSubTab === 'library'
       ? restoredContext.fitnessSubTab
       : restoredContext.fitnessSubTab === 'wellness'
         ? 'monitoring'
         : 'sessions';
 
-  const [fitnessSubTab, setFitnessSubTab] = useState<'sessions' | 'monitoring' | 'library'>(initialFitnessSubTab);
+  const [fitnessSubTab, setFitnessSubTab] = useState<'sessions' | 'monitoring' | 'testing' | 'library'>(initialFitnessSubTab);
   const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>(restoredContext.sessionSubNav);
   const [monitoringTab, setMonitoringTab] = useState<'wellness' | 'trainingLoad' | 'testing'>('wellness');
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
@@ -684,7 +685,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <button
             type="button"
             onClick={() => setFitnessSubTab('sessions')}
@@ -709,7 +710,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                 <div>
                   <h3 className="text-base font-extrabold text-white group-hover:text-emerald-300 transition-colors">Sessions</h3>
                   <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
-                    Manage fitness sessions, editor fields, attendance, and the fitness-specific warm-up, main part, and cool-down content.
+                    Manage fitness sessions, editor fields, attendance, and warm-up/main/cool-down content.
                   </p>
                 </div>
               </div>
@@ -737,7 +738,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PLAYER MONITORING</span>
                 <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${fitnessSubTab === 'monitoring' ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black' : 'bg-indigo-950/60 text-indigo-400 border-indigo-800/60'}`}>
-                  Structure only
+                  Wellness & Load
                 </span>
               </div>
               <div className="flex items-start space-x-3">
@@ -745,17 +746,58 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-white group-hover:text-emerald-300 transition-colors">Player Monitoring</h3>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-emerald-300 transition-colors">Monitoring</h3>
                   <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
-                    Visual container for wellness, training load, and testing navigation only.
+                    Daily Wellness sheets, Menstrual Cycle tracking, and Training Load (RPE) analytics.
                   </p>
                 </div>
               </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
-              <span className="text-[11px] font-mono text-slate-400">Monitoring Shell</span>
+              <span className="text-[11px] font-mono text-slate-400">Wellness & RPE</span>
               <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
                 <span>Open Module</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFitnessSubTab('testing');
+              setMonitoringTab('testing');
+            }}
+            className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
+              fitnessSubTab === 'testing'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
+                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+            }`}
+          >
+            <div className={`absolute top-0 inset-x-0 h-1 transition-colors ${fitnessSubTab === 'testing' ? 'bg-emerald-500' : 'bg-slate-800 group-hover:bg-emerald-600'}`} />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PHYSICAL TESTING</span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${fitnessSubTab === 'testing' ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black' : 'bg-amber-950/60 text-amber-400 border-amber-800/60'}`}>
+                  Testing Hub
+                </span>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className={`p-3 rounded-xl border shrink-0 transition-transform ${fitnessSubTab === 'testing' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 scale-105' : 'bg-slate-800 text-slate-300 border-slate-700 group-hover:text-emerald-400'}`}>
+                  <Scale className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white group-hover:text-emerald-300 transition-colors">Testing</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
+                    Weekly body weight measurement tracking and physical testing batteries.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span className="text-[11px] font-mono text-slate-400">Weight Tracking</span>
+              <div className="flex items-center space-x-1 text-emerald-400 font-bold group-hover:translate-x-1 transition-transform">
+                <span>Open Testing</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -766,7 +808,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
             onClick={() => setFitnessSubTab('library')}
             className={`group text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between relative overflow-hidden cursor-pointer ${
               fitnessSubTab === 'library'
-                ? 'bg-slate-900 border-emerald-500 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]'
+                ? 'bg-[#0f5981] border-[#5ea4c5] shadow-lg ring-2 ring-[#5ea4c5]/40 scale-[1.01]'
                 : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
             }`}
           >
@@ -1366,6 +1408,35 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
             ) : (
               <WeeklyWeightSection squadPlayers={squadPlayers} />
             )}
+          </div>
+        </div>
+      ) : fitnessSubTab === 'testing' ? (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  <span>Fitness → Testing</span>
+                </div>
+                <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">Physical Testing Battery</h2>
+                <p className="text-[10px] text-slate-400 font-bold">
+                  Weekly body weight measurements and physical testing.
+                </p>
+              </div>
+              <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Active</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-xl text-xs font-black bg-[#002142] text-white shadow-md flex items-center gap-1.5 cursor-default"
+              >
+                <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Weight</span>
+              </button>
+            </div>
+
+            <WeeklyWeightSection squadPlayers={squadPlayers} />
           </div>
         </div>
       ) : (
