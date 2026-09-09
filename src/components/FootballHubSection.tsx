@@ -11,7 +11,8 @@ import {
   Clock, 
   FolderOpen,
   BookOpen,
-  Trash2
+  Trash2,
+  Copy
 } from 'lucide-react';
 import { TrainingSession, Exercise, CloudTrainingSession, SquadPlayer } from '../types';
 import { PlanificationSection } from './PlanificationSection';
@@ -87,11 +88,13 @@ interface FootballHubSectionProps {
   ) => void;
   onLoadCloudSession?: (sess: CloudTrainingSession) => void;
   onDeleteCloudSession?: (id: string, sessNum: string, e: React.MouseEvent) => void;
+  onDuplicateCloudSession?: (sess: CloudTrainingSession) => void;
   onNewSession?: () => void;
   role?: 'football' | 'fitness' | 'gk';
   moduleDataWarning?: string | null;
   currentLogo?: string | null;
   onNavigateToVideoAnalysis?: (opponentTeamId: string) => void;
+  isSaving?: boolean;
 }
 
 export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
@@ -103,11 +106,13 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
   onAddExerciseToSession,
   onLoadCloudSession,
   onDeleteCloudSession,
+  onDuplicateCloudSession,
   onNewSession,
   role = 'football',
   moduleDataWarning = null,
   currentLogo,
-  onNavigateToVideoAnalysis
+  onNavigateToVideoAnalysis,
+  isSaving = false
 }) => {
   const modulePresentation = MODULE_PRESENTATION[role];
   const contextStorageKey = `u17_football_hub_context_${role}`;
@@ -628,8 +633,26 @@ export const FootballHubSection: React.FC<FootballHubSectionProps> = ({
                           </div>
                         </div>
 
-                        {/* CARD FOOTER - Delete Button */}
-                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end">
+                        {/* CARD FOOTER - Duplicate & Delete Buttons */}
+                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2">
+                          {onDuplicateCloudSession && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const target = cloudSessions.find((item) => item.id === sess.id);
+                                if (target) {
+                                  onDuplicateCloudSession(target);
+                                  setSessionSubNav('editor');
+                                }
+                              }}
+                              disabled={isSaving}
+                              className="p-2 text-slate-600 hover:text-slate-950 hover:bg-slate-200 rounded-lg transition-all border border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Duplicate Session"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {

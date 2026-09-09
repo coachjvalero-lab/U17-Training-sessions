@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { HeaderSection } from './HeaderSection';
 import { SessionAttendanceTracker } from './SessionAttendanceTracker';
 import { PlayerGroupsSection } from './PlayerGroupsSection';
@@ -21,6 +21,8 @@ interface ModuleSessionEditorProps {
   excludedPlayers: string[];
   onUpdateHeader: (fields: Partial<TrainingSession>) => void;
   onSave: () => void;
+  onDuplicate?: () => Promise<void> | void;
+  isDuplicating?: boolean;
   onUpdateAttendance: (attendance: PlayerAttendance[]) => void;
   onUpdateRoster: (squadRoster: string[]) => void;
   onUpdateGroups: (groups: PlayerGroup[]) => void;
@@ -43,6 +45,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   excludedPlayers,
   onUpdateHeader,
   onSave,
+  onDuplicate,
+  isDuplicating,
   onUpdateAttendance,
   onUpdateRoster,
   onUpdateGroups,
@@ -101,8 +105,69 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
   const updateAttendance = isSharedDataReadOnly ? (() => {}) : onUpdateAttendance;
   const updateRoster = isSharedDataReadOnly ? (() => {}) : onUpdateRoster;
 
+  const [internalIsDuplicating, setInternalIsDuplicating] = useState(false);
+  const [duplicateFeedback, setDuplicateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const effectiveIsDuplicating = isDuplicating ?? internalIsDuplicating;
+
+  const handleDuplicate = onDuplicate
+    ? async () => {
+        if (effectiveIsDuplicating || isSaving) return;
+        setDuplicateFeedback(null);
+        setInternalIsDuplicating(true);
+        try {
+          await onDuplicate();
+          setDuplicateFeedback({
+            type: 'success',
+            message: 'Session duplicated successfully! You are now editing the new independent session.'
+          });
+          setTimeout(() => {
+            setDuplicateFeedback((prev) => (prev?.type === 'success' ? null : prev));
+          }, 6000);
+        } catch (err: any) {
+          console.error('[ModuleSessionEditor] Failed to duplicate session:', err);
+          const msg = err?.message || 'Failed to duplicate session. Please try again.';
+          setDuplicateFeedback({
+            type: 'error',
+            message: msg
+          });
+        } finally {
+          setInternalIsDuplicating(false);
+        }
+      }
+    : undefined;
+
   return (
     <main className="session-print-flow space-y-6 md:space-y-8 print:space-y-1.5">
+      {duplicateFeedback && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`flex items-center justify-between p-4 rounded-2xl border text-xs sm:text-sm font-bold shadow-sm transition-all print:hidden ${
+            duplicateFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center space-x-2.5">
+            {duplicateFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span>{duplicateFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDuplicateFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/5 text-slate-500 hover:text-slate-800 transition-colors"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <HeaderSection
         session={sessionWithSharedHeader}
         onChange={updateHeaderFields}
@@ -110,6 +175,8 @@ export const ModuleSessionEditor: React.FC<ModuleSessionEditorProps> = ({
         onUpdateLogo={onUpdateLogo}
         onSave={onSave}
         isSaving={isSaving}
+        onDuplicate={handleDuplicate}
+        isDuplicating={effectiveIsDuplicating}
         readOnly={isHeaderReadOnly}
         totalDurationMinutes={totalDurationMinutes}
       />

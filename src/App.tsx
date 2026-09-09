@@ -46,6 +46,7 @@ import {
 } from './services/squad/squadService';
 import { subscribeToInjuries } from './services/physio/injuriesService';
 import { buildDefaultAttendanceFromRoster, syncSquadPlayersWithInjuries } from './services/physio/squadInjurySync';
+import { duplicateTrainingSession, extractExerciseIds, getNextSessionNumber } from './utils/sessionDuplication';
 import { normalizeSquadPlayerPhotos } from './utils/squadPhotos';
 import { selectMalikaParticipants } from './utils/malikaLeague';
 import {
@@ -1386,6 +1387,104 @@ export default function App() {
     }
   };
 
+  const handleDuplicateSession = async (sourceOverride?: TrainingSession | CloudTrainingSession) => {
+    if (isCloudSaving) return;
+    const role = getModuleIdFromSection(activeSection) || DEFAULT_MODULE_ID;
+    const isGk = role === 'gk';
+    const sourceSession = sourceOverride
+      ? (sourceOverride as TrainingSession)
+      : (activeSection === 'football' ? footballSessionView : session);
+
+    const rosterFromSquad = isGk
+      ? goalkeeperRoster
+      : formatSessionRosterFromSquad(squadPlayersWithStats);
+
+    const nextSessionNumber = getNextSessionNumber(cloudSessions, sourceSession.sessionNumber);
+
+    const duplicatedSession = duplicateTrainingSession(sourceSession, {
+      moduleId: role,
+      nextSessionNumber,
+      existingSessions: cloudSessions,
+      squadPlayers: squadPlayersWithStats,
+      roster: rosterFromSquad
+    });
+
+    try {
+      setIsCloudSaving(true);
+      const optimisticTime = Date.now();
+      initializeSessionSyncState(duplicatedSession, {
+        global: optimisticTime,
+        football: role === 'football' ? optimisticTime : 0,
+        fitness: role === 'fitness' ? optimisticTime : 0,
+        gk: isGk ? optimisticTime : 0
+      });
+      setSession(duplicatedSession);
+
+      const { savedAt: savedTime } = await saveTrainingSessionBySection(activeSection, duplicatedSession);
+
+      if (!isGk) {
+        const cloudSession: CloudTrainingSession = {
+          ...duplicatedSession,
+          updatedAt: savedTime,
+          footballUpdatedAt: role === 'football' ? savedTime : undefined,
+          fitnessUpdatedAt: role === 'fitness' ? savedTime : undefined,
+          gkUpdatedAt: undefined
+        };
+
+        setCloudSessions((prev) => {
+          const withoutCurrent = prev.filter((item) => item.id !== cloudSession.id);
+          return [cloudSession, ...withoutCurrent];
+        });
+
+        try {
+          localStorage.setItem(
+            CLOUD_SESSIONS_CACHE_KEY,
+            JSON.stringify([
+              cloudSession,
+              ...cloudSessions.filter((item) => item.id !== cloudSession.id)
+            ])
+          );
+        } catch (e) {}
+      }
+
+      initializeSessionSyncState(duplicatedSession, {
+        global: savedTime,
+        football: role === 'football' ? savedTime : 0,
+        fitness: role === 'fitness' ? savedTime : 0,
+        gk: isGk ? savedTime : 0
+      });
+
+      const exIds = extractExerciseIds(duplicatedSession);
+      if (exIds.length > 0) {
+        setExpandedExercises((prev) => {
+          const next = { ...prev };
+          exIds.forEach((id) => {
+            next[id] = true;
+          });
+          return next;
+        });
+      }
+
+      if (duplicatedSession.id && window.history.replaceState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('session', duplicatedSession.id);
+        window.history.replaceState({}, '', url.toString());
+      }
+
+      setCloudSyncStatus({ status: 'saved' });
+      setTimeout(() => {
+        setCloudSyncStatus((prev) => (prev.status === 'saved' ? { status: 'idle' } : prev));
+      }, 2500);
+    } catch (error) {
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : 'unknown';
+      console.error('[handleDuplicateSession] Failed to duplicate session:', error);
+      setCloudSyncStatus({ status: 'error', message: `Duplicate session failed (${errorCode})` });
+      throw error;
+    } finally {
+      setIsCloudSaving(false);
+    }
+  };
+
   const handleLoadCloudSession = (loadedSession: CloudTrainingSession) => {
     if (confirm(`Do you want to load session #${loadedSession.sessionNumber} (${loadedSession.date})? Your current unsaved local changes will be replaced.`)) {
       const { teamLogo: _legacyLogo, ...baseSession } = loadedSession as CloudTrainingSession & { teamLogo?: string };
@@ -1784,6 +1883,7 @@ export default function App() {
             onAddExerciseToSession={handleAddExerciseFromLibrary}
             onLoadCloudSession={handleLoadCloudSession}
             onDeleteCloudSession={handleDeleteCloudSession}
+            onDuplicateCloudSession={handleDuplicateSession}
             onNewSession={handleCreateNewCloudSession}
             squadPlayers={squadPlayersWithStats}
             squadRoster={fullSquadRoster}
@@ -1791,6 +1891,7 @@ export default function App() {
             moduleDataWarning={footballFitnessLoadError}
             currentLogo={teamLogo}
             onNavigateToVideoAnalysis={handleNavigateToVideoAnalysis}
+            isSaving={isCloudSaving}
             renderActiveSessionEditor={() => (
               <ModuleSessionEditor
                 moduleId="football"
@@ -1804,6 +1905,8 @@ export default function App() {
                 excludedPlayers={excludedPlayers}
                 onUpdateHeader={handleUpdateSession}
                 onSave={handleSaveActiveToCloud}
+                onDuplicate={handleDuplicateSession}
+                isDuplicating={isCloudSaving}
                 onUpdateAttendance={handleUpdateAttendance}
                 onUpdateRoster={handleUpdateRoster}
                 onUpdateGroups={handleUpdateGroups}
@@ -1839,6 +1942,7 @@ export default function App() {
               squadRoster={fullSquadRoster}
               role="fitness"
               currentLogo={teamLogo}
+              isSaving={isCloudSaving}
               renderActiveSessionEditor={() => (
                 <ModuleSessionEditor
                   moduleId="fitness"
@@ -1852,6 +1956,8 @@ export default function App() {
                   excludedPlayers={excludedPlayers}
                   onUpdateHeader={handleUpdateSession}
                   onSave={handleSaveActiveToCloud}
+                  onDuplicate={handleDuplicateSession}
+                  isDuplicating={isCloudSaving}
                   onUpdateAttendance={handleUpdateAttendance}
                   onUpdateRoster={handleUpdateRoster}
                   onUpdateGroups={handleUpdateGroups}

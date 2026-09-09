@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BookOpen, Calendar, Edit3, FileText, FolderOpen, Layers, Plus, Scale, Search, Trash2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Calendar, Edit3, FileText, FolderOpen, Layers, Plus, Scale, Search, Trash2, Copy } from 'lucide-react';
 import { getEmptySession } from '../defaultSession';
 import type { CloudTrainingSession, FitnessSession, PlayerAttendance, PlayerGroup, SharedSessionHeader, SquadPlayer, TrainingSession } from '../types';
 import { ModuleSessionEditor } from './ModuleSessionEditor';
@@ -8,6 +8,7 @@ import { RpeSection } from './RpeSection';
 import { MenstrualCycleSection } from './MenstrualCycleSection';
 import { WeeklyWeightSection } from './WeeklyWeightSection';
 import { deleteFitnessSession, readCachedFitnessSessions, saveFitnessSession, subscribeToFitnessSessions } from '../services/fitness/fitnessSessionsService';
+import { duplicateTrainingSession, extractExerciseIds, getNextSessionNumber } from '../utils/sessionDuplication';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { resolveWellnessPlayerName, type WellnessPlayerResolution } from '../utils/wellnessMatching';
 import { selectWellnessRowsForDate } from '../utils/wellnessVisibility';
@@ -639,6 +640,58 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
     }
   };
 
+  const handleDuplicateSession = async (sourceItem?: FitnessSession) => {
+    if (isSaving) return;
+    const source = sourceItem ? toTrainingSession(sourceItem) : editorSession;
+    if (!source || !source.id) return;
+    setSaveValidationError(null);
+
+    const nextSessionNumber = getNextSessionNumber(fitnessSessions, source.sessionNumber);
+
+    const roster = planningRoster.length > 0
+      ? planningRoster
+      : squadPlayers.map((player) => (player.position === 'GK' ? `${player.firstName} (GK)` : `${player.firstName} ${player.lastName}`.trim()));
+
+    const duplicated = duplicateTrainingSession(source, {
+      moduleId: 'fitness',
+      nextSessionNumber,
+      existingSessions: fitnessSessions,
+      squadPlayers,
+      roster
+    });
+
+    const recordId = `fit-${duplicated.id}`;
+    const payload = toFitnessSession(recordId, duplicated);
+
+    setIsSaving(true);
+    try {
+      await saveFitnessSession(payload);
+
+      const exIds = extractExerciseIds(duplicated);
+      if (exIds.length > 0) {
+        setExpandedExercises((prev) => {
+          const next = { ...prev };
+          exIds.forEach((id) => {
+            next[id] = true;
+          });
+          return next;
+        });
+      }
+
+      setFitnessSessions((prev) => [payload, ...prev.filter((item) => item.id !== payload.id)]);
+      setSelectedFitnessId(payload.id);
+      setEditorSession(toTrainingSession(payload));
+      setSessionSubNav('editor');
+    } catch (error: any) {
+      console.error('[FitnessHubSection] Failed to duplicate session:', error);
+      const message = error?.message || 'Fitness session duplication failed.';
+      setSaveValidationError(message);
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleDelete = async (item: FitnessSession) => {
     if (!confirm(`Delete Fitness Session #${item.sessionNumber}?`)) return;
     await deleteFitnessSession(item.id);
@@ -950,15 +1003,25 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
                           setEditorSession(toTrainingSession(item));
                           setSessionSubNav('editor');
                         }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#002142] text-white text-xs font-bold"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#002142] text-white text-xs font-bold hover:bg-[#002f5e] transition-colors"
                       >
                         <FolderOpen className="w-3.5 h-3.5" />
                         <span>Open</span>
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleDuplicateSession(item)}
+                        disabled={isSaving}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-300 transition-colors disabled:opacity-50"
+                        title="Duplicate session"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Duplicate</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleDelete(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold hover:bg-rose-100 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Delete</span>
@@ -977,6 +1040,8 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               currentLogo={currentLogo}
               squadPlayers={squadPlayers}
               isSaving={isSaving}
+              onDuplicate={() => handleDuplicateSession()}
+              isDuplicating={isSaving}
               expandedExercises={expandedExercises}
               excludedPlayers={excludedPlayers}
               onUpdateHeader={handleUpdateHeader}

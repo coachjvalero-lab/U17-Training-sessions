@@ -31,6 +31,7 @@ import type {
 import { ModuleSessionEditor } from './ModuleSessionEditor';
 import { ExercisesLibrary } from './ExercisesLibrary';
 import { deleteGkSession, saveGkSession, subscribeToGkSessions } from '../services/gk/gkSessionsService';
+import { duplicateTrainingSession, extractExerciseIds, getNextSessionNumber } from '../utils/sessionDuplication';
 import { readWorkspaceRestoreState, writeWorkspaceRestoreState } from '../utils/workspaceRestore';
 import { SmartImage } from './SmartImage';
 
@@ -420,28 +421,49 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
     setExpandedExercises(expanded);
   };
 
-  const handleDuplicateSession = async (item: GkSession) => {
-    const duplicated: GkSession = {
-      ...item,
-      id: `gk-session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      sessionUid: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      sessionNumber: `${item.sessionNumber || 'GK'}-copy`,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+  const handleDuplicateSession = async (item?: GkSession) => {
+    if (isSaving) return;
+    const source = item ? toTrainingSession(item) : editorSession;
+    if (!source || !source.id) return;
+    setSaveValidationError(null);
 
-    // Immediate optimistic state update
-    setGkSessions((prev) => [duplicated, ...prev.filter((s) => s.id !== duplicated.id)]);
-    setSelectedGkId(duplicated.id);
-    setEditorSession(toTrainingSession(duplicated));
-    setSessionSubNav('editor');
+    const nextSessionNumber = getNextSessionNumber(gkSessions, source.sessionNumber);
 
+    const duplicated = duplicateTrainingSession(source, {
+      moduleId: 'gk',
+      nextSessionNumber,
+      existingSessions: gkSessions,
+      squadPlayers: goalkeeperSquadPlayers,
+      roster: planningRoster.length > 0 ? planningRoster : goalkeeperRoster
+    });
+
+    const recordId = `gk-${duplicated.id}`;
+    const payload = toGkSession(recordId, duplicated);
+
+    setIsSaving(true);
     try {
-      setIsSaving(true);
-      await saveGkSession(duplicated);
-    } catch (err) {
-      console.error('Failed to duplicate session:', err);
+      await saveGkSession(payload);
+
+      const exIds = extractExerciseIds(duplicated);
+      if (exIds.length > 0) {
+        setExpandedExercises((prev) => {
+          const next = { ...prev };
+          exIds.forEach((id) => {
+            next[id] = true;
+          });
+          return next;
+        });
+      }
+
+      setGkSessions((prev) => [payload, ...prev.filter((s) => s.id !== payload.id)]);
+      setSelectedGkId(payload.id);
+      setEditorSession(toTrainingSession(payload));
+      setSessionSubNav('editor');
+    } catch (err: any) {
+      console.error('[GkHubSection] Failed to duplicate session:', err);
+      const msg = err?.message || 'Failed to duplicate Goalkeeper session.';
+      setSaveValidationError(msg);
+      throw err;
     } finally {
       setIsSaving(false);
     }
@@ -880,8 +902,9 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
                               e.stopPropagation();
                               handleDuplicateSession(item);
                             }}
+                            disabled={isSaving}
                             title="Duplicate session"
-                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
@@ -934,6 +957,8 @@ export const GkHubSection: React.FC<GkHubSectionProps> = ({
                 currentLogo={currentLogo}
                 squadPlayers={goalkeeperSquadPlayers}
                 isSaving={isSaving}
+                onDuplicate={() => handleDuplicateSession()}
+                isDuplicating={isSaving}
                 expandedExercises={expandedExercises}
                 excludedPlayers={excludedPlayers}
                 onUpdateHeader={handleUpdateHeader}
