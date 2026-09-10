@@ -350,6 +350,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
   const [fitnessSubTab, setFitnessSubTab] = useState<'sessions' | 'monitoring' | 'testing' | 'library'>(initialFitnessSubTab);
   const [sessionSubNav, setSessionSubNav] = useState<'cards' | 'editor'>(restoredContext.sessionSubNav);
   const [monitoringTab, setMonitoringTab] = useState<'wellness' | 'trainingLoad' | 'testing'>('wellness');
+  const [testingTab, setTestingTab] = useState<'weight'>('weight');
   const [searchTerm, setSearchTerm] = useState(restoredContext.searchTerm);
   const [fitnessSessions, setFitnessSessions] = useState<FitnessSession[]>(() => readCachedFitnessSessions());
   const [selectedFitnessId, setSelectedFitnessId] = useState<string>('');
@@ -1064,7 +1065,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               <div>
                 <h2 className="text-sm font-display font-black text-slate-900 uppercase tracking-wider">Player Monitoring</h2>
                 <p className="text-[10px] text-slate-400 font-bold">
-                  Wellness, Training Load (RPE) and Weekly Weight are active.
+                  Wellness, Training Load (RPE) and Testing are active.
                 </p>
               </div>
               {monitoringTab === 'testing' ? (
@@ -1078,7 +1079,7 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
               {[
                 { key: 'wellness' as const, label: 'Wellness' },
                 { key: 'trainingLoad' as const, label: 'Training Load' },
-                { key: 'testing' as const, label: 'Weekly Weight' }
+                { key: 'testing' as const, label: 'Testing' }
               ].map((item) => (
                 <button
                   key={item.key}
@@ -1471,7 +1472,22 @@ export const FitnessHubSection: React.FC<FitnessHubSectionProps> = ({
             ) : monitoringTab === 'trainingLoad' ? (
               <RpeSection squadPlayers={squadPlayers} trainingSessions={trainingSessions} />
             ) : (
-              <WeeklyWeightSection squadPlayers={squadPlayers} />
+              <div className="mt-5 space-y-4">
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+                  {[{ key: 'weight' as const, label: 'Weight' }].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setTestingTab(item.key)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${testingTab === item.key ? 'bg-[#002142] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <WeeklyWeightSection squadPlayers={squadPlayers} />
+              </div>
             )}
           </div>
         </div>
