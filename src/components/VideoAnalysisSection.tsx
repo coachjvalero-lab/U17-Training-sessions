@@ -30,12 +30,16 @@ import {
 } from '../services/training/trainingAnalysisService';
 import {
   createVideoClipForMatchAnalysis,
+  createVideoClipForOwner,
   createVideoClipForTrainingAnalysis,
   deleteVideoClip,
   listVideoClipsByMatchAnalysisId,
+  listVideoClipsByOwner,
   listVideoClipsByTrainingAnalysisId
 } from '../services/video/videoClipsService';
-import { Match, MatchAnalysis, OpponentAnalysis, OpponentAnalysisTag, TrainingAnalysis, VideoClip } from '../types';
+import { getMatchEvents } from '../services/matches/matchEventsService';
+import { AiVideoAnalysisPanel } from './AiVideoAnalysisPanel';
+import { Match, MatchAnalysis, MatchEvent, OpponentAnalysis, OpponentAnalysisTag, TrainingAnalysis, VideoClip } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState } from '../utils/workspaceRestore';
 
@@ -97,6 +101,13 @@ export const VideoAnalysisSection: React.FC = () => {
   const [isLoadingClips, setIsLoadingClips] = useState(false);
   const [isSavingClip, setIsSavingClip] = useState(false);
   const [clipForm, setClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
+  // Bumped whenever the AI review flow creates clips, so the clip lists reload.
+  const [clipsRefreshToken, setClipsRefreshToken] = useState(0);
+  const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  const [opponentVideoClips, setOpponentVideoClips] = useState<VideoClip[]>([]);
+  const [isLoadingOpponentClips, setIsLoadingOpponentClips] = useState(false);
+  const [isSavingOpponentClip, setIsSavingOpponentClip] = useState(false);
+  const [opponentClipForm, setOpponentClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
   const [trainingSessions, setTrainingSessions] = useState<FootballSessionSummary[]>([]);
   const [selectedTrainingSessionUid, setSelectedTrainingSessionUid] = useState<string>('');
   const [trainingAnalysis, setTrainingAnalysis] = useState<TrainingAnalysis | null>(null);
@@ -224,7 +235,78 @@ export const VideoAnalysisSection: React.FC = () => {
         setIsLoadingClips(false);
       }
     })();
-  }, [matchAnalysis]);
+  }, [matchAnalysis, clipsRefreshToken]);
+
+  // Existing Match Events are read only to LINK clips to them; Match keeps owning the events.
+  useEffect(() => {
+    if (!selectedPlayedMatchId || activeTab !== 'matches') {
+      setMatchEvents([]);
+      return;
+    }
+
+    void getMatchEvents(selectedPlayedMatchId)
+      .then(setMatchEvents)
+      .catch((error) => {
+        console.error('[VideoAnalysisSection] Failed loading match events', error);
+        setMatchEvents([]);
+      });
+  }, [selectedPlayedMatchId, activeTab]);
+
+  useEffect(() => {
+    if (!opponentAnalysis) {
+      setOpponentVideoClips([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        setIsLoadingOpponentClips(true);
+        setOpponentVideoClips(await listVideoClipsByOwner({ opponentAnalysisId: opponentAnalysis.id }));
+      } catch (error) {
+        console.error('[VideoAnalysisSection] Failed loading opponent clips', error);
+        setOpponentVideoClips([]);
+      } finally {
+        setIsLoadingOpponentClips(false);
+      }
+    })();
+  }, [opponentAnalysis, clipsRefreshToken]);
+
+  const handleAddOpponentClip = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!opponentAnalysis || !opponentClipForm.videoUrl.trim() || !opponentClipForm.title.trim()) return;
+
+    try {
+      setIsSavingOpponentClip(true);
+      const created = await createVideoClipForOwner(
+        { opponentAnalysisId: opponentAnalysis.id },
+        {
+          videoUrl: opponentClipForm.videoUrl.trim(),
+          startTime: Number(opponentClipForm.startTime) || 0,
+          endTime: opponentClipForm.endTime.trim() ? Number(opponentClipForm.endTime) : null,
+          title: opponentClipForm.title.trim(),
+          notes: opponentClipForm.notes.trim() || null,
+          category: opponentClipForm.category || null,
+          aiFindingId: null,
+          matchEventId: null
+        }
+      );
+      setOpponentVideoClips((prev) => [...prev, created].sort((a, b) => a.startTime - b.startTime));
+      setOpponentClipForm(EMPTY_CLIP_FORM);
+    } catch (error) {
+      console.error('[VideoAnalysisSection] Failed creating opponent clip', error);
+    } finally {
+      setIsSavingOpponentClip(false);
+    }
+  };
+
+  const handleDeleteOpponentClip = async (clipId: string) => {
+    try {
+      await deleteVideoClip(clipId);
+      setOpponentVideoClips((prev) => prev.filter((clip) => clip.id !== clipId));
+    } catch (error) {
+      console.error('[VideoAnalysisSection] Failed deleting opponent clip', error);
+    }
+  };
 
   const handleSaveMatchAnalysis = async () => {
     if (!selectedPlayedMatchId || !analyzedTeamId) return;
@@ -331,7 +413,7 @@ export const VideoAnalysisSection: React.FC = () => {
         setIsLoadingTrainingClips(false);
       }
     })();
-  }, [trainingAnalysis]);
+  }, [trainingAnalysis, clipsRefreshToken]);
 
   const handleSaveTrainingAnalysis = async () => {
     if (!selectedTrainingSessionUid) return;
@@ -561,6 +643,23 @@ export const VideoAnalysisSection: React.FC = () => {
                 className="min-h-32 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-800 outline-none focus:border-sky-500"
               />
             </div>
+
+            <AiVideoAnalysisPanel
+              context={analyzedTeamId === selectedPlayedMatch?.opponentTeamId ? 'opponent_analysis' : 'my_analysis'}
+              owner={{ matchAnalysisId: matchAnalysis?.id ?? null }}
+              ownerReady={Boolean(matchAnalysis)}
+              emptyOwnerMessage="Create the match analysis above before running the AI."
+              videoUrl={selectedPlayedMatch?.videoUrl ?? ''}
+              subject={{
+                teamName: selectedPlayedMatch?.teamId,
+                opponentName: selectedPlayedMatch?.opponentName ?? selectedPlayedMatch?.opponentTeamId,
+                competition: selectedPlayedMatch?.competitionName,
+                date: selectedPlayedMatch?.date
+              }}
+              taxonomy={MATCH_CLIP_CATEGORIES}
+              matchEvents={matchEvents}
+              onClipsCreated={() => setClipsRefreshToken((token) => token + 1)}
+            />
 
             <VideoClipsSection
               analysisId={matchAnalysis?.id ?? null}
@@ -804,6 +903,34 @@ export const VideoAnalysisSection: React.FC = () => {
                 </div>
                 <textarea value={analysisSummary} onChange={(event) => setAnalysisSummary(event.target.value)} placeholder="Key patterns, threats, weaknesses and coaching priorities" className="min-h-32 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-800 outline-none focus:border-sky-500" />
               </div>
+
+              <AiVideoAnalysisPanel
+                context="opponent_analysis"
+                owner={{ opponentAnalysisId: opponentAnalysis.id }}
+                ownerReady
+                emptyOwnerMessage="Create the opponent analysis before running the AI."
+                videoUrl={newVideoUrl || opponentAnalysis.videoUrl || ''}
+                subject={{
+                  opponentName: selectedMatch.opponentName ?? selectedMatch.opponentTeamId,
+                  competition: selectedMatch.competitionName,
+                  date: selectedMatch.date
+                }}
+                taxonomy={MATCH_CLIP_CATEGORIES}
+                onClipsCreated={() => setClipsRefreshToken((token) => token + 1)}
+              />
+
+              <VideoClipsSection
+                analysisId={opponentAnalysis.id}
+                emptyAnalysisMessage="Create the opponent analysis before adding clips."
+                clips={opponentVideoClips}
+                isLoadingClips={isLoadingOpponentClips}
+                isSavingClip={isSavingOpponentClip}
+                form={opponentClipForm}
+                onFormChange={setOpponentClipForm}
+                onSubmit={(event) => void handleAddOpponentClip(event)}
+                onDelete={(clipId) => void handleDeleteOpponentClip(clipId)}
+                categoryOptions={MATCH_CLIP_CATEGORIES}
+              />
 
               {/* Google Slides and Video */}
               <div className="grid gap-6 lg:grid-cols-2">

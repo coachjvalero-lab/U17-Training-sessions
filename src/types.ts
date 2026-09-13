@@ -398,6 +398,36 @@ export interface VideoClip {
   opponentMatchNotesId?: string | null;
   trainingAnalysisId?: string | null;
   scoutingReportId?: string | null;
+  /** Set when the clip was generated from a confirmed AI finding. */
+  aiFindingId?: string | null;
+  /** Reference to an existing Match Event; the event itself stays owned by Match. */
+  matchEventId?: string | null;
+}
+
+export type VideoAnalysisAiContext = 'my_analysis' | 'opponent_analysis' | 'scouting';
+
+export type VideoAiFindingStatus = 'pending' | 'confirmed' | 'rejected' | 'edited';
+
+/** An AI proposal. Not a validated conclusion until the analyst confirms or edits it. */
+export interface VideoAiFinding {
+  id: string;
+  context: VideoAnalysisAiContext;
+  matchAnalysisId?: string | null;
+  opponentAnalysisId?: string | null;
+  trainingAnalysisId?: string | null;
+  scoutingReportId?: string | null;
+  category?: string | null;
+  title: string;
+  observation: string;
+  suggestedTags: string[];
+  confidence?: number | null;
+  reviewStatus: VideoAiFindingStatus;
+  videoUrl?: string | null;
+  startTime?: number | null;
+  endTime?: number | null;
+  model?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type ScoutingPlayerStatus = 'shortlist' | 'watching' | 'discarded' | 'signed';

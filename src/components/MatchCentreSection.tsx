@@ -24,6 +24,7 @@ import { AiMatchEventsModal } from './AiMatchEventsModal';
 import { MatchEditModal } from './MatchEditModal';
 import { selectCalledUpPlayers, hasSquadCallChangedSinceConfirmation } from '../utils/matchLineup';
 import { countLogicalSubstitutions, findPairedSubstitutionEvent, reconstructLogicalSubstitutions } from '../services/matches/substitutionLogic';
+import { buildMatchEventInput, deriveTeamEventMetrics, isOpponentEventType } from '../services/matches/matchEventLogic';
 
 const TAB_OPTIONS = [
   'overview',
@@ -502,8 +503,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       const pairedEvent = eventBeingEdited
         ? findPairedSubstitutionEvent(eventBeingEdited, events)
         : null;
-      const isOpponent = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
-
       // Editing an existing substitution: resolve which underlying side (out/in) this event is,
       // and map the Player Off / Player On fields back to playerId/relatedPlayerId accordingly.
       const effectiveEventType: MatchEventType = isSubstitutionChoice ? editingSubstitutionSide : newEventType;
@@ -514,16 +513,15 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         ? newEventPlayerId
         : newEventRelatedPlayerId;
 
-      const eventInput = {
+      const eventInput = buildMatchEventInput({
         matchId: selectedMatch.id,
-        playerId: isOpponent ? null : (effectivePlayerId || null),
-        teamSide: (isOpponent ? 'opponent' : 'our_team') as TeamSide,
+        playerId: effectivePlayerId,
         eventType: effectiveEventType,
         minute: Number(newEventMinute) || 0,
         videoTimestampSeconds: Math.max(0, Math.floor(currentVideoSeconds)),
-        relatedPlayerId: isOpponent ? null : (effectiveRelatedPlayerId || null),
+        relatedPlayerId: effectiveRelatedPlayerId,
         description: newEventDescription || ''
-      };
+      });
       const saved = editingEventId
         ? await updateMatchEvent(editingEventId, eventInput)
         : await createMatchEvent(eventInput);
@@ -1122,7 +1120,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
       return player ? `${player.firstName} ${player.lastName}` : playerId || 'Team event';
     };
 
-    const isOpponentSelected = newEventType === 'opponent_goal' || newEventType === 'opponent_corner';
+    const isOpponentSelected = newEventType !== 'substitution' && isOpponentEventType(newEventType);
 
     const getEventBadge = (type: MatchEventType, team: TeamSide) => {
       switch (type) {
@@ -1690,12 +1688,7 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
   }, [lineupEntries, events, squadPlayers, selectedMatch?.id, stats]);
 
   const matchTeamStats = useMemo(() => {
-    const ourGoals = events.filter(
-      (e) => (e.eventType === 'goal' && (e.teamSide === 'our_team' || !e.teamSide))
-    ).length;
-    const opponentGoals = events.filter(
-      (e) => e.eventType === 'opponent_goal' || (e.eventType === 'goal' && e.teamSide === 'opponent')
-    ).length;
+    const { ourGoals, opponentGoals, ourCorners, opponentCorners } = deriveTeamEventMetrics(events);
 
     const directAssistEvents = events.filter(
       (e) => (e.teamSide === 'our_team' || !e.teamSide) && e.eventType === 'assist'
@@ -1715,13 +1708,6 @@ export const MatchCentreSection: React.FC<MatchCentreSectionProps> = ({
         )
     );
     const ourAssists = directAssistEvents.length + goalAssistEvents.length;
-
-    const ourCorners = events.filter(
-      (e) => (e.eventType === 'corner' && (e.teamSide === 'our_team' || !e.teamSide))
-    ).length;
-    const opponentCorners = events.filter(
-      (e) => e.eventType === 'opponent_corner' || (e.eventType === 'corner' && e.teamSide === 'opponent')
-    ).length;
 
     const ourYellowCards = events.filter(
       (e) => e.eventType === 'yellow_card' && (e.teamSide === 'our_team' || !e.teamSide)

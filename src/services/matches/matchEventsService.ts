@@ -16,6 +16,8 @@ type MatchEventRow = {
   created_at: string | null;
 };
 
+export type MatchEventWriteRow = Omit<MatchEventRow, 'id' | 'created_at'> & { id?: string };
+
 function getClient() {
   if (!supabase) throw new Error('Supabase client is not configured');
   return supabase;
@@ -36,6 +38,22 @@ function fromRow(row: MatchEventRow): MatchEvent {
   };
 }
 
+export function toMatchEventWriteRow(
+  input: Omit<MatchEvent, 'id' | 'createdAt'> & { id?: string }
+): MatchEventWriteRow {
+  return {
+    id: input.id,
+    match_id: input.matchId,
+    player_id: input.playerId ?? null,
+    team_side: input.teamSide,
+    event_type: input.eventType,
+    minute: input.minute,
+    video_timestamp_seconds: input.videoTimestampSeconds,
+    related_player_id: input.relatedPlayerId ?? null,
+    description: input.description ?? ''
+  };
+}
+
 export async function getMatchEvents(matchId: string): Promise<MatchEvent[]> {
   const { data, error } = await getClient()
     .from(MATCH_EVENTS_TABLE)
@@ -50,17 +68,7 @@ export async function getMatchEvents(matchId: string): Promise<MatchEvent[]> {
 export async function createMatchEvent(input: Omit<MatchEvent, 'id' | 'createdAt'> & { id?: string }): Promise<MatchEvent> {
   const { data, error } = await getClient()
     .from(MATCH_EVENTS_TABLE)
-    .insert({
-      id: input.id,
-      match_id: input.matchId,
-      player_id: input.playerId ?? null,
-      team_side: input.teamSide,
-      event_type: input.eventType,
-      minute: input.minute,
-      video_timestamp_seconds: input.videoTimestampSeconds,
-      related_player_id: input.relatedPlayerId ?? null,
-      description: input.description ?? ''
-    })
+    .insert(toMatchEventWriteRow(input))
     .select('*')
     .single();
 
@@ -101,16 +109,7 @@ export async function deleteMatchEvent(eventId: string): Promise<void> {
 
 export async function batchCreateMatchEvents(inputs: Array<Omit<MatchEvent, 'id' | 'createdAt'>>): Promise<MatchEvent[]> {
   if (inputs.length === 0) return [];
-  const rowsToInsert = inputs.map((input) => ({
-    match_id: input.matchId,
-    player_id: input.playerId ?? null,
-    team_side: input.teamSide,
-    event_type: input.eventType,
-    minute: input.minute,
-    video_timestamp_seconds: input.videoTimestampSeconds,
-    related_player_id: input.relatedPlayerId ?? null,
-    description: input.description ?? ''
-  }));
+  const rowsToInsert = inputs.map(toMatchEventWriteRow);
 
   const { data, error } = await getClient()
     .from(MATCH_EVENTS_TABLE)

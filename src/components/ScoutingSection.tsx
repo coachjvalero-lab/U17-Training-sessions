@@ -25,6 +25,7 @@ import {
   listVideoClipsByScoutingReportId
 } from '../services/video/videoClipsService';
 import { VideoClipsSection, EMPTY_CLIP_FORM, type ClipFormState, type ClipCategoryOption } from './VideoClipsSection';
+import { AiVideoAnalysisPanel } from './AiVideoAnalysisPanel';
 import type {
   AssignableUser,
   ClubTeamOption,
@@ -170,6 +171,8 @@ export const ScoutingSection: React.FC = () => {
   const [isLoadingReportClips, setIsLoadingReportClips] = useState(false);
   const [isSavingReportClip, setIsSavingReportClip] = useState(false);
   const [reportClipForm, setReportClipForm] = useState<ClipFormState>(EMPTY_CLIP_FORM);
+  // Bumped whenever the AI review flow creates clips, so the clip list reloads.
+  const [reportClipsRefreshToken, setReportClipsRefreshToken] = useState(0);
 
   const loadPlayers = async () => {
     try {
@@ -301,7 +304,7 @@ export const ScoutingSection: React.FC = () => {
         setIsLoadingReportClips(false);
       }
     })();
-  }, [editingReportId]);
+  }, [editingReportId, reportClipsRefreshToken]);
 
   const filteredPlayers = playerStatusFilter === 'all'
     ? players
@@ -1029,6 +1032,21 @@ export const ScoutingSection: React.FC = () => {
                 </button>
               </form>
             </div>
+
+            {editingReportId && (
+              <AiVideoAnalysisPanel
+                context="scouting"
+                owner={{ scoutingReportId: editingReportId }}
+                ownerReady
+                emptyOwnerMessage="Save the report above before running the AI."
+                videoUrl={reportClips[0]?.videoUrl ?? ''}
+                subject={{
+                  playerName: selectedPlayer ? `${selectedPlayer.firstName} ${selectedPlayer.lastName}`.trim() : undefined
+                }}
+                taxonomy={SCOUTING_CLIP_CATEGORIES}
+                onClipsCreated={() => setReportClipsRefreshToken((token) => token + 1)}
+              />
+            )}
 
             {editingReportId && (
               <VideoClipsSection

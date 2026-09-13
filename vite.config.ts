@@ -4,6 +4,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { defineConfig, Plugin } from 'vite';
 import { generateMatchEvents, isGenerateMatchEventsFailure } from './api/_lib/matchEventsAi';
+import { analyseVideo, isAnalyseVideoFailure } from './api/_lib/videoAnalysisAi';
+import { statusForAnalyseVideoError } from './api/video/analyse';
 import { requireSupabaseUser } from './api/_lib/supabaseAuth';
 
 // Server-only secrets (GEMINI_API_KEY) are not exposed by Vite's env handling,
@@ -52,6 +54,43 @@ function apiEndpointsPlugin(): Plugin {
               res.statusCode = !isGenerateMatchEventsFailure(result)
                 ? 200
                 : result.errorCode === 'not_configured' ? 500 : result.errorCode === 'analysis_failed' ? 502 : 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err?.message || 'Error processing request' }));
+            }
+          });
+          return;
+        }
+
+        if (url === '/api/video/analyse' && req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Allow', 'POST');
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'Method Not Allowed. Use POST.' }));
+          return;
+        }
+
+        if (url === '/api/video/analyse' && req.method === 'POST') {
+          const isAuthenticated = await requireSupabaseUser(req.headers?.authorization);
+          if (!isAuthenticated) {
+            res.statusCode = 401;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: 'Not authenticated. Sign in to analyse video with AI.' }));
+            return;
+          }
+
+          let videoBodyStr = '';
+          req.on('data', (chunk) => {
+            videoBodyStr += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = videoBodyStr ? JSON.parse(videoBodyStr) : {};
+              const result = await analyseVideo(body || {}, process.env.GEMINI_API_KEY);
+              res.statusCode = !isAnalyseVideoFailure(result) ? 200 : statusForAnalyseVideoError(result.errorCode);
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify(result));
             } catch (err: any) {
