@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, FileText, Film, RotateCcw, Sparkles, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { MatchEvent, VideoAiFinding, VideoAnalysisAiContext } from '../types';
@@ -18,6 +18,12 @@ import {
   reviewStatusAfterConfirm
 } from '../utils/videoAiFindings';
 import { formatVideoTimestamp } from '../utils/mediaUrls';
+import {
+  buildSegments,
+  dedupeFindings,
+  MAX_CONSECUTIVE_EMPTY_SEGMENTS,
+  type SegmentedFinding
+} from '../utils/videoAnalysisSegments';
 import type { ClipCategoryOption } from './VideoClipsSection';
 
 interface AiVideoAnalysisPanelProps {
@@ -72,6 +78,10 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
   // Kit colours belong to this analysis run only: they change from match to match and are not stored.
   const [ourKitColour, setOurKitColour] = useState('');
   const [opponentKitColour, setOpponentKitColour] = useState('');
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [failedSegmentIndex, setFailedSegmentIndex] = useState<number | null>(null);
+  // Findings collected across the whole sweep, so a resumed run can dedupe against what is stored.
+  const sweptEntriesRef = useRef<SegmentedFinding[]>([]);
 
   const ownerKey = owner.matchAnalysisId || owner.opponentAnalysisId || owner.trainingAnalysisId || owner.scoutingReportId || '';
 
@@ -99,8 +109,9 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
     // owner is rebuilt on every render; ownerKey is the stable identity.
   }, [ownerKey, ownerReady]);
 
-  const handleAnalyse = async () => {
+  const handleAnalyse = async (fromSegmentIndex = 0) => {
     setError(null);
+    setFailedSegmentIndex(null);
 
     const analysedVideoUrl = videoUrlDraft.trim();
     if (!analysedVideoUrl) {
@@ -108,75 +119,140 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
       return;
     }
 
+    if (fromSegmentIndex === 0) {
+      sweptEntriesRef.current = [];
+      setSummary('');
+      setPatterns([]);
+      setConclusions([]);
+    }
+
+    const segments = buildSegments();
     setIsAnalysing(true);
+
     try {
       const { data: sessionData } = (await supabase?.auth.getSession()) ?? { data: { session: null } };
       const accessToken = sessionData?.session?.access_token;
       if (!accessToken) throw new Error('You must be signed in to analyse video with AI.');
 
-      const response = await fetch('/api/video/analyse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({
-          context,
-          videoUrl: analysedVideoUrl,
-          taxonomy,
-          subject,
-          kits: {
-            ourKitColour: ourKitColour.trim(),
-            opponentKitColour: opponentKitColour.trim()
+      const segmentSummaries: string[] = [];
+      const segmentPatterns: string[] = [];
+      const segmentConclusions: string[] = [];
+      let consecutiveEmpty = 0;
+      let stoppedSegmentIndex: number | null = null;
+      let stoppedMessage = '';
+
+      for (let segmentIndex = fromSegmentIndex; segmentIndex < segments.length; segmentIndex += 1) {
+        const segment = segments[segmentIndex];
+        setProgress({ current: segmentIndex + 1, total: segments.length });
+
+        let data: any;
+        try {
+          const response = await fetch('/api/video/analyse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+            body: JSON.stringify({
+              context,
+              videoUrl: analysedVideoUrl,
+              taxonomy,
+              subject,
+              segment,
+              segmentIndex,
+              kits: {
+                ourKitColour: ourKitColour.trim(),
+                opponentKitColour: opponentKitColour.trim()
+              }
+            })
+          });
+
+          const rawText = await response.text();
+          try {
+            data = rawText ? JSON.parse(rawText) : {};
+          } catch {
+            throw new Error(`Invalid server response (HTTP ${response.status}).`);
           }
-        })
-      });
 
-      const rawText = await response.text();
-      let data: any = {};
-      try {
-        data = rawText ? JSON.parse(rawText) : {};
-      } catch {
-        throw new Error(`Invalid server response (HTTP ${response.status}).`);
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || `The AI analysis failed (HTTP ${response.status}).`);
+          }
+
+          // Defense in depth: nothing is stored unless the server confirms the video was analysed.
+          if (data.videoAnalyzed !== true) {
+            throw new Error('The AI did not confirm it analysed the video. No results are shown.');
+          }
+        } catch (segmentError: any) {
+          // The first window must work; a later one usually just runs past the end of the video.
+          if (segmentIndex === fromSegmentIndex && segmentIndex === 0) throw segmentError;
+          stoppedSegmentIndex = segmentIndex;
+          stoppedMessage = segmentError?.message || 'Unknown error';
+          break;
+        }
+
+        if (typeof data.summary === 'string' && data.summary.trim()) segmentSummaries.push(data.summary.trim());
+        if (Array.isArray(data.patterns)) segmentPatterns.push(...data.patterns);
+        if (Array.isArray(data.conclusions)) segmentConclusions.push(...data.conclusions);
+
+        for (const finding of Array.isArray(data.findings) ? data.findings : []) {
+          sweptEntriesRef.current.push({
+            segmentIndex,
+            finding: {
+              category: finding.category ?? null,
+              title: String(finding.title ?? ''),
+              observation: String(finding.observation ?? ''),
+              suggestedTags: Array.isArray(finding.suggestedTags) ? finding.suggestedTags : [],
+              confidence: typeof finding.confidence === 'number' ? finding.confidence : null,
+              timestampSeconds: typeof finding.timestampSeconds === 'number' ? finding.timestampSeconds : 0,
+              startTime: typeof finding.startTime === 'number' ? finding.startTime : 0,
+              endTime: typeof finding.endTime === 'number' ? finding.endTime : 0
+            }
+          });
+        }
+
+        consecutiveEmpty = data.isEmpty === true ? consecutiveEmpty + 1 : 0;
+        if (consecutiveEmpty >= MAX_CONSECUTIVE_EMPTY_SEGMENTS) break;
       }
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || `The AI analysis failed (HTTP ${response.status}).`);
+      setSummary((previous) => [previous, ...segmentSummaries].filter(Boolean).join('\n\n'));
+      setPatterns((previous) => Array.from(new Set([...previous, ...segmentPatterns])));
+      setConclusions((previous) => Array.from(new Set([...previous, ...segmentConclusions])));
+
+      // Deduplicate across the overlaps, then store only what has not been stored yet.
+      const kept = dedupeFindings(sweptEntriesRef.current);
+      const pendingEntries = kept.filter((entry) => !entry.persisted);
+      sweptEntriesRef.current = kept;
+
+      if (pendingEntries.length > 0) {
+        const created = await createVideoAiFindings(
+          context,
+          owner,
+          pendingEntries.map((entry) => ({
+            category: entry.finding.category,
+            title: entry.finding.title,
+            observation: entry.finding.observation,
+            suggestedTags: entry.finding.suggestedTags,
+            confidence: entry.finding.confidence,
+            videoUrl: analysedVideoUrl,
+            timestampSeconds: entry.finding.timestampSeconds,
+            startTime: entry.finding.startTime,
+            endTime: entry.finding.endTime
+          }))
+        );
+        for (const entry of pendingEntries) entry.persisted = true;
+        setFindings((prev) => [...prev, ...created].sort((a, b) => (a.timestampSeconds ?? 0) - (b.timestampSeconds ?? 0)));
       }
 
-      // Defense in depth: nothing is stored unless the server confirms the video was analysed.
-      if (data.videoAnalyzed !== true) {
-        throw new Error('The AI did not confirm it analysed the video. No results are shown.');
-      }
-
-      setSummary(typeof data.summary === 'string' ? data.summary : '');
-      setPatterns(Array.isArray(data.patterns) ? data.patterns : []);
-      setConclusions(Array.isArray(data.conclusions) ? data.conclusions : []);
-
-      const rawFindings = Array.isArray(data.findings) ? data.findings : [];
-      if (rawFindings.length === 0) {
+      if (stoppedSegmentIndex !== null) {
+        setFailedSegmentIndex(stoppedSegmentIndex);
+        setError(
+          `Segment ${stoppedSegmentIndex + 1} could not be analysed (${stoppedMessage}). Everything found before it has been saved; retry that segment to continue.`
+        );
+      } else if (pendingEntries.length === 0 && sweptEntriesRef.current.length === 0) {
         setError('The AI analysed the video but did not identify any relevant situation.');
-        return;
       }
-
-      const created = await createVideoAiFindings(
-        context,
-        owner,
-        rawFindings.map((finding: any) => ({
-          category: finding.category ?? null,
-          title: String(finding.title ?? ''),
-          observation: String(finding.observation ?? ''),
-          suggestedTags: Array.isArray(finding.suggestedTags) ? finding.suggestedTags : [],
-          confidence: typeof finding.confidence === 'number' ? finding.confidence : null,
-          videoUrl: analysedVideoUrl,
-          timestampSeconds: typeof finding.timestampSeconds === 'number' ? finding.timestampSeconds : 0,
-          startTime: typeof finding.startTime === 'number' ? finding.startTime : 0,
-          endTime: typeof finding.endTime === 'number' ? finding.endTime : null
-        }))
-      );
-
-      setFindings((prev) => [...prev, ...created].sort((a, b) => (a.timestampSeconds ?? 0) - (b.timestampSeconds ?? 0)));
     } catch (analyseError: any) {
       console.error('[AiVideoAnalysisPanel] Analysis failed', analyseError);
       setError(analyseError?.message || 'The video could not be analysed. Please retry.');
     } finally {
+      setProgress(null);
       setIsAnalysing(false);
     }
   };
@@ -242,7 +318,7 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
         </div>
         <button
           type="button"
-          onClick={() => void handleAnalyse()}
+          onClick={() => void handleAnalyse(0)}
           disabled={isAnalysing || !ownerReady}
           className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#002142] to-sky-900 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:opacity-95 disabled:opacity-50"
         >
@@ -280,7 +356,9 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
 
           {isAnalysing && (
             <p className="text-xs font-bold text-slate-500">
-              Analysing video... a full match can take a few minutes.
+              {progress
+                ? `Analysing segment ${progress.current} of ${progress.total}...`
+                : 'Analysing video...'}
             </p>
           )}
 
@@ -292,12 +370,12 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
                 <p className="mt-0.5">{error}</p>
                 <button
                   type="button"
-                  onClick={() => void handleAnalyse()}
+                  onClick={() => void handleAnalyse(failedSegmentIndex ?? 0)}
                   disabled={isAnalysing}
                   className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Retry
+                  {failedSegmentIndex === null ? 'Retry' : `Retry segment ${failedSegmentIndex + 1}`}
                 </button>
               </div>
             </div>

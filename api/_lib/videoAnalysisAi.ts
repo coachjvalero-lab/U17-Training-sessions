@@ -40,6 +40,9 @@ export interface AnalyseVideoRequestBody {
   taxonomy?: VideoAnalysisTaxonomyEntry[];
   /** Kit colours for this analysis run only; never stored as configuration. */
   kits?: VideoAnalysisKits;
+  /** The single window to analyse in this request; the client sweeps the video segment by segment. */
+  segment?: VideoAnalysisSegment;
+  segmentIndex?: number;
   subject?: {
     teamName?: string;
     opponentName?: string;
@@ -77,13 +80,15 @@ export interface AnalyseVideoSuccess {
   /** Always true: this codepath never returns findings that were not derived from the video. */
   videoAnalyzed: true;
   context: VideoAnalysisContext;
+  /** The window that was analysed, echoed back so the client can offset/track it. */
+  segmentIndex: number;
+  segment: VideoAnalysisSegment;
   summary: string;
   patterns: string[];
   conclusions: string[];
   findings: GeneratedVideoFinding[];
-  /** Diagnostics only; never surfaced as controls in the analyst UI. */
-  passes: number;
-  segmented: boolean;
+  /** No findings and no summary: the client uses this to know when the video has run out. */
+  isEmpty: boolean;
 }
 
 export interface AnalyseVideoFailure {
@@ -102,36 +107,25 @@ export function isAnalyseVideoFailure(result: AnalyseVideoResult): result is Ana
 export const DEFAULT_CLIP_MARGIN_BEFORE_SECONDS = 8;
 export const DEFAULT_CLIP_MARGIN_AFTER_SECONDS = 8;
 export const DEFAULT_FINDING_LENGTH_SECONDS = 12;
+/** Fallback window length when the client does not send an explicit segment. */
 export const SEGMENT_LENGTH_SECONDS = 900;
-/** Consecutive segments overlap so an action on a boundary is never cut in half. */
-export const SEGMENT_OVERLAP_SECONDS = 10;
-export const MAX_SEGMENTS = 8;
-/** Stop walking segments once this many consecutive windows come back completely empty. */
-export const MAX_CONSECUTIVE_EMPTY_SEGMENTS = 2;
-/** Slack allowed on top of the overlap when matching a duplicate across two segments. */
-export const DEDUPE_TIME_TOLERANCE_SECONDS = 5;
-export const DEDUPE_SIMILARITY_THRESHOLD = 0.5;
 
 export function isVideoAnalysisContext(value: unknown): value is VideoAnalysisContext {
   return typeof value === 'string' && (VIDEO_ANALYSIS_CONTEXTS as string[]).includes(value);
 }
 
-/**
- * Every video is swept in overlapping windows; the duration is never needed up front because the
- * sweep stops when the windows stop returning anything.
- */
-export function buildSegments(
-  segmentLengthSeconds: number = SEGMENT_LENGTH_SECONDS,
-  overlapSeconds: number = SEGMENT_OVERLAP_SECONDS,
-  maxSegments: number = MAX_SEGMENTS
-): VideoAnalysisSegment[] {
-  const step = Math.max(1, segmentLengthSeconds - overlapSeconds);
-  const segments: VideoAnalysisSegment[] = [];
-  for (let index = 0; index < maxSegments; index += 1) {
-    const startSeconds = index * step;
-    segments.push({ startSeconds, endSeconds: startSeconds + segmentLengthSeconds });
+/** One request analyses one window; the client owns the sweep plan and sends it explicitly. */
+export function resolveSegment(body: AnalyseVideoRequestBody): VideoAnalysisSegment {
+  const requested = body.segment;
+  const start = Number(requested?.startSeconds);
+  const end = Number(requested?.endSeconds);
+  if (Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start) {
+    return { startSeconds: Math.floor(start), endSeconds: Math.floor(end) };
   }
-  return segments;
+
+  const index = Number.isFinite(Number(body.segmentIndex)) ? Math.max(0, Math.floor(Number(body.segmentIndex))) : 0;
+  const startSeconds = index * SEGMENT_LENGTH_SECONDS;
+  return { startSeconds, endSeconds: startSeconds + SEGMENT_LENGTH_SECONDS };
 }
 
 /** Turns a detected moment into a playable clip window (margin before/after, never negative). */
@@ -265,84 +259,6 @@ export function isFindingCategoryAllowed(
 ): boolean {
   if (allowedCategories.length === 0) return true;
   return Boolean(finding.category) && allowedCategories.includes(finding.category as string);
-}
-
-function tokenise(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((token) => token.length > 3)
-  );
-}
-
-/** Jaccard overlap of the meaningful words, used to tell a repeated action from a different one. */
-export function describesSameSituation(
-  a: Pick<GeneratedVideoFinding, 'title' | 'observation' | 'category'>,
-  b: Pick<GeneratedVideoFinding, 'title' | 'observation' | 'category'>,
-  threshold: number = DEDUPE_SIMILARITY_THRESHOLD
-): boolean {
-  if (a.category && b.category && a.category !== b.category) return false;
-
-  const left = tokenise(`${a.title} ${a.observation}`);
-  const right = tokenise(`${b.title} ${b.observation}`);
-  if (left.size === 0 || right.size === 0) return false;
-
-  let shared = 0;
-  for (const token of left) if (right.has(token)) shared += 1;
-  return shared / Math.min(left.size, right.size) >= threshold;
-}
-
-export interface SegmentedFinding {
-  finding: GeneratedVideoFinding;
-  segmentIndex: number;
-  /** Absolute seconds covered by the segment this finding came from. */
-  segment: VideoAnalysisSegment | null;
-}
-
-function findingScore(finding: GeneratedVideoFinding): number {
-  return (finding.confidence ?? 0) * 100 + finding.observation.length / 1000;
-}
-
-/**
- * Drops the second sighting of an action that was seen in the overlap shared by two consecutive
- * segments. Closeness in time alone is never enough: the descriptions must match too.
- */
-export function dedupeFindings(
-  entries: SegmentedFinding[],
-  overlapSeconds: number = SEGMENT_OVERLAP_SECONDS,
-  toleranceSeconds: number = DEDUPE_TIME_TOLERANCE_SECONDS
-): GeneratedVideoFinding[] {
-  const sorted = entries
-    .slice()
-    .sort((a, b) => a.finding.timestampSeconds - b.finding.timestampSeconds);
-  const kept: SegmentedFinding[] = [];
-
-  for (const entry of sorted) {
-    const duplicateIndex = kept.findIndex((candidate) => {
-      if (candidate.segmentIndex === entry.segmentIndex) return false;
-      if (Math.abs(candidate.segmentIndex - entry.segmentIndex) !== 1) return false;
-      if (Math.abs(candidate.finding.timestampSeconds - entry.finding.timestampSeconds) > overlapSeconds + toleranceSeconds) {
-        return false;
-      }
-      return describesSameSituation(candidate.finding, entry.finding);
-    });
-
-    if (duplicateIndex === -1) {
-      kept.push(entry);
-      continue;
-    }
-
-    // Same action seen twice: keep the better evidenced/more confident sighting.
-    if (findingScore(entry.finding) > findingScore(kept[duplicateIndex].finding)) {
-      kept[duplicateIndex] = entry;
-    }
-  }
-
-  return kept
-    .map((entry) => entry.finding)
-    .sort((a, b) => a.timestampSeconds - b.timestampSeconds);
 }
 
 export function buildContextInstructions(context: VideoAnalysisContext, subject: AnalyseVideoRequestBody['subject']): string {
@@ -629,65 +545,23 @@ export async function analyseVideo(
   const allowedCategories = Array.isArray(body.taxonomy) ? body.taxonomy.map((entry) => entry.value) : [];
   const createClient = deps.createClient ?? createGeminiClient;
   const models = deps.models ?? VIDEO_ANALYSIS_MODELS;
+  const segment = resolveSegment(body);
+  const segmentIndex = Number.isFinite(Number(body.segmentIndex)) ? Math.max(0, Math.floor(Number(body.segmentIndex))) : 0;
 
-  const summaries: string[] = [];
-  const patterns: string[] = [];
-  const conclusions: string[] = [];
-  const collected: SegmentedFinding[] = [];
-  let rawFindingCount = 0;
+  const findings: GeneratedVideoFinding[] = [];
+  let response: RawAnalysisResponse;
   let unusableTimestampCount = 0;
-
-  const collect = (response: RawAnalysisResponse, segment: VideoAnalysisSegment, segmentIndex: number) => {
-    if (response.summary.trim()) summaries.push(response.summary.trim());
-    patterns.push(...response.patterns);
-    conclusions.push(...response.conclusions);
-    rawFindingCount += response.findings.length;
-
-    for (const raw of response.findings) {
-      const finding = normaliseFinding(raw, {
-        offsetSeconds: segment.startSeconds,
-        marginBefore: body.clipMarginBeforeSeconds,
-        marginAfter: body.clipMarginAfterSeconds,
-        windowLengthSeconds: segment.endSeconds - segment.startSeconds
-      });
-
-      if (!finding) {
-        unusableTimestampCount += 1;
-        continue;
-      }
-      if (!isFindingCategoryAllowed(finding, allowedCategories)) continue;
-      collected.push({ finding, segmentIndex, segment });
-    }
-  };
-
-  let passes = 0;
 
   try {
     const client = createClient(apiKey);
-    let consecutiveEmpty = 0;
-
-    for (const [segmentIndex, segment] of buildSegments().entries()) {
-      let response: RawAnalysisResponse;
-      try {
-        response = await runAnalysisPass(
-          client,
-          videoUrl,
-          buildPrompt(context, body, segment),
-          segment,
-          allowedCategories,
-          models
-        );
-      } catch (segmentError) {
-        // The first window must work; later ones simply run past the end of the video.
-        if (segmentIndex === 0) throw segmentError;
-        break;
-      }
-
-      passes += 1;
-      collect(response, segment, segmentIndex);
-      consecutiveEmpty = isEmptyResponse(response) ? consecutiveEmpty + 1 : 0;
-      if (consecutiveEmpty >= MAX_CONSECUTIVE_EMPTY_SEGMENTS) break;
-    }
+    response = await runAnalysisPass(
+      client,
+      videoUrl,
+      buildPrompt(context, body, segment),
+      segment,
+      allowedCategories,
+      models
+    );
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
     return {
@@ -702,8 +576,24 @@ export async function analyseVideo(
     };
   }
 
+  for (const raw of response.findings) {
+    const finding = normaliseFinding(raw, {
+      offsetSeconds: segment.startSeconds,
+      marginBefore: body.clipMarginBeforeSeconds,
+      marginAfter: body.clipMarginAfterSeconds,
+      windowLengthSeconds: segment.endSeconds - segment.startSeconds
+    });
+
+    if (!finding) {
+      unusableTimestampCount += 1;
+      continue;
+    }
+    if (!isFindingCategoryAllowed(finding, allowedCategories)) continue;
+    findings.push(finding);
+  }
+
   // Every reported situation was unusable: never store a corrupt result.
-  if (rawFindingCount > 0 && unusableTimestampCount === rawFindingCount) {
+  if (response.findings.length > 0 && unusableTimestampCount === response.findings.length) {
     return {
       success: false,
       errorCode: 'invalid_ai_response',
@@ -715,11 +605,12 @@ export async function analyseVideo(
     success: true,
     videoAnalyzed: true,
     context,
-    summary: summaries.join('\n\n'),
-    patterns: Array.from(new Set(patterns)),
-    conclusions: Array.from(new Set(conclusions)),
-    findings: dedupeFindings(collected),
-    passes,
-    segmented: true
+    segmentIndex,
+    segment,
+    summary: response.summary.trim(),
+    patterns: response.patterns,
+    conclusions: response.conclusions,
+    findings: findings.sort((a, b) => a.timestampSeconds - b.timestampSeconds),
+    isEmpty: isEmptyResponse(response)
   };
 }

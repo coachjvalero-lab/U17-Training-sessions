@@ -4,22 +4,17 @@ import {
   alignTimestampWithEvidence,
   analyseVideo,
   applyClipMargins,
-  buildSegments,
   composeObservation,
-  dedupeFindings,
-  describesSameSituation,
   isAnalyseVideoFailure,
   isFindingCategoryAllowed,
   isVideoAnalysisContext,
   normaliseFinding,
   parseAnalysisResponse,
+  resolveSegment,
   InvalidAiResponseError,
-  MAX_SEGMENTS,
   SEGMENT_LENGTH_SECONDS,
-  SEGMENT_OVERLAP_SECONDS,
   type AnalyseVideoResult,
-  type AnalyseVideoSuccess,
-  type GeneratedVideoFinding
+  type AnalyseVideoSuccess
 } from './videoAnalysisAi.js';
 import type { GeminiClient } from './matchEventsAi.js';
 
@@ -80,20 +75,6 @@ function run(body: Record<string, unknown>, client: GeminiClient) {
   });
 }
 
-function makeFinding(overrides: Partial<GeneratedVideoFinding> = {}): GeneratedVideoFinding {
-  return {
-    category: 'defensive_transition',
-    title: 'Counter-press after loss',
-    observation: 'The white team loses the ball and presses the carrier immediately near the halfway line.',
-    suggestedTags: [],
-    confidence: 0.6,
-    timestampSeconds: 895,
-    startTime: 887,
-    endTime: 915,
-    ...overrides
-  };
-}
-
 test('isVideoAnalysisContext accepts only the three supported contexts', () => {
   assert.equal(isVideoAnalysisContext('my_analysis'), true);
   assert.equal(isVideoAnalysisContext('opponent_analysis'), true);
@@ -107,15 +88,6 @@ test('applyClipMargins adds margins around the action and never goes negative', 
   assert.deepEqual(applyClipMargins(3, null, 8, 8), { startTime: 0, endTime: 23 });
 });
 
-test('buildSegments produces 15 minute windows overlapping by 10 seconds', () => {
-  const segments = buildSegments();
-  assert.equal(segments.length, MAX_SEGMENTS);
-  assert.deepEqual(segments[0], { startSeconds: 0, endSeconds: 900 });
-  assert.deepEqual(segments[1], { startSeconds: 890, endSeconds: 1790 });
-  assert.deepEqual(segments[2], { startSeconds: 1780, endSeconds: 2680 });
-  assert.equal(segments[0].endSeconds - segments[1].startSeconds, SEGMENT_OVERLAP_SECONDS);
-  assert.equal(segments[0].endSeconds - segments[0].startSeconds, SEGMENT_LENGTH_SECONDS);
-});
 
 test('composeObservation merges what, why and evidence into one readable block', () => {
   const text = composeObservation({ observation: 'What', relevance: 'Why', evidence: 'Proof' });
@@ -168,55 +140,10 @@ test('isFindingCategoryAllowed only accepts the existing taxonomy values', () =>
   assert.equal(isFindingCategoryAllowed({ category: null }, []), true);
 });
 
-test('describesSameSituation separates different actions from repeated ones', () => {
-  const a = makeFinding();
-  const sameAction = makeFinding({ title: 'Immediate counter-press', observation: 'White team loses the ball and presses the carrier immediately near the halfway line.' });
-  const otherAction = makeFinding({ title: 'Corner delivered to near post', observation: 'The blue team swings a corner towards the near post and clears the second ball.' });
 
-  assert.equal(describesSameSituation(a, sameAction), true);
-  assert.equal(describesSameSituation(a, otherAction), false);
-  assert.equal(describesSameSituation(a, makeFinding({ category: 'set_piece_against' })), false);
-});
 
-test('dedupeFindings removes the same action seen twice in the overlap and keeps the best copy', () => {
-  const first = { finding: makeFinding({ confidence: 0.5 }), segmentIndex: 0, segment: null };
-  const second = {
-    finding: makeFinding({ confidence: 0.9, timestampSeconds: 897, title: 'Immediate counter-press' }),
-    segmentIndex: 1,
-    segment: null
-  };
 
-  const result = dedupeFindings([first, second]);
-  assert.equal(result.length, 1);
-  assert.equal(result[0].confidence, 0.9);
-});
 
-test('dedupeFindings keeps two different actions that happen close together', () => {
-  const press = { finding: makeFinding(), segmentIndex: 0, segment: null };
-  const corner = {
-    finding: makeFinding({
-      timestampSeconds: 897,
-      title: 'Corner delivered to near post',
-      observation: 'The blue team swings a corner towards the near post and clears the second ball.'
-    }),
-    segmentIndex: 1,
-    segment: null
-  };
-
-  assert.equal(dedupeFindings([press, corner]).length, 2);
-});
-
-test('dedupeFindings never merges two sightings from the same segment', () => {
-  const a = { finding: makeFinding(), segmentIndex: 0, segment: null };
-  const b = { finding: makeFinding({ timestampSeconds: 898 }), segmentIndex: 0, segment: null };
-  assert.equal(dedupeFindings([a, b]).length, 2);
-});
-
-test('dedupeFindings returns findings in chronological order', () => {
-  const later = { finding: makeFinding({ timestampSeconds: 2000, title: 'Late cutback' }), segmentIndex: 2, segment: null };
-  const earlier = { finding: makeFinding({ timestampSeconds: 100, title: 'Early regain' }), segmentIndex: 0, segment: null };
-  assert.deepEqual(dedupeFindings([later, earlier]).map((f) => f.timestampSeconds), [100, 2000]);
-});
 
 test('parseAnalysisResponse rejects empty, invalid and incomplete payloads', () => {
   assert.throws(() => parseAnalysisResponse('', 'm'), InvalidAiResponseError);
@@ -239,46 +166,53 @@ test('analyseVideo validates context, url and api key before calling the model',
   assert.equal((noKey as any).errorCode, 'not_configured');
 });
 
-test('analyseVideo always sweeps in overlapping segments and rebuilds absolute timestamps', async () => {
-  const { client, calls } = makeClient([
-    { text: payload([makeRawFinding({ timestampSeconds: 60 })]) },
-    { text: payload([makeRawFinding({ timestampSeconds: 342, title: 'Second half press', observation: 'Blue team traps the carrier on the touchline after a long ball.' })]) },
-    { text: EMPTY_PAYLOAD },
-    { text: EMPTY_PAYLOAD }
-  ]);
-
-  const result = asSuccess(await run({ context: 'opponent_analysis' }, client));
-
-  assert.equal(result.segmented, true);
-  assert.equal(result.passes, 4);
-  assert.deepEqual(result.findings.map((finding) => finding.timestampSeconds), [60, 890 + 342]);
-  assert.deepEqual(calls[0].contents[0].parts[0].videoMetadata, { startOffset: '0s', endOffset: '900s' });
-  assert.deepEqual(calls[1].contents[0].parts[0].videoMetadata, { startOffset: '890s', endOffset: '1790s' });
+test('resolveSegment honours the requested window and falls back to the first one', () => {
+  assert.deepEqual(resolveSegment({ segment: { startSeconds: 890, endSeconds: 1790 } }), {
+    startSeconds: 890,
+    endSeconds: 1790
+  });
+  assert.deepEqual(resolveSegment({}), { startSeconds: 0, endSeconds: SEGMENT_LENGTH_SECONDS });
+  assert.deepEqual(resolveSegment({ segmentIndex: 2 }), {
+    startSeconds: 2 * SEGMENT_LENGTH_SECONDS,
+    endSeconds: 3 * SEGMENT_LENGTH_SECONDS
+  });
+  assert.deepEqual(resolveSegment({ segment: { startSeconds: 10, endSeconds: 5 } as any }), {
+    startSeconds: 0,
+    endSeconds: SEGMENT_LENGTH_SECONDS
+  });
 });
 
-test('analyseVideo stops sweeping after consecutive empty segments', async () => {
-  const { client, calls } = makeClient([
-    { text: payload([makeRawFinding()]) },
-    { text: EMPTY_PAYLOAD },
-    { text: EMPTY_PAYLOAD },
-    { text: payload([makeRawFinding({ timestampSeconds: 10 })]) }
-  ]);
+test('analyseVideo analyses only the requested segment and rebuilds absolute timestamps', async () => {
+  const { client, calls } = makeClient([{ text: payload([makeRawFinding({ timestampSeconds: 342 })]) }]);
 
-  const result = asSuccess(await run({ context: 'my_analysis' }, client));
-  assert.equal(result.passes, 3);
-  assert.equal(calls.length, 3);
-  assert.equal(result.findings.length, 1);
+  const result = asSuccess(
+    await run(
+      { context: 'opponent_analysis', segment: { startSeconds: 890, endSeconds: 1790 }, segmentIndex: 1 },
+      client
+    )
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(result.segmentIndex, 1);
+  assert.deepEqual(result.segment, { startSeconds: 890, endSeconds: 1790 });
+  assert.deepEqual(result.findings.map((finding) => finding.timestampSeconds), [890 + 342]);
+  assert.deepEqual(calls[0].contents[0].parts[0].videoMetadata, { startOffset: '890s', endOffset: '1790s' });
 });
 
-test('analyseVideo stops sweeping when a later segment runs past the end of the video', async () => {
-  const { client } = makeClient([
-    { text: payload([makeRawFinding()]) },
-    { error: new Error('start offset is beyond the end of the video') }
-  ]);
+test('analyseVideo flags an empty segment so the client can stop sweeping', async () => {
+  const { client } = makeClient([{ text: EMPTY_PAYLOAD }]);
+  const result = asSuccess(await run({ context: 'my_analysis', segmentIndex: 3 }, client));
 
-  const result = asSuccess(await run({ context: 'my_analysis' }, client));
-  assert.equal(result.passes, 1);
-  assert.equal(result.findings.length, 1);
+  assert.equal(result.isEmpty, true);
+  assert.equal(result.findings.length, 0);
+});
+
+test('analyseVideo returns a failure for the requested segment so only it can be retried', async () => {
+  const { client } = makeClient([{ error: new Error('start offset is beyond the end of the video') }]);
+  const result = await run({ context: 'my_analysis', segmentIndex: 5 }, client);
+
+  assert.equal(isAnalyseVideoFailure(result), true);
+  assert.equal((result as any).errorCode, 'analysis_failed');
 });
 
 test('analyseVideo surfaces a real error instead of inventing findings', async () => {
@@ -311,9 +245,7 @@ test('analyseVideo accepts an honest empty analysis', async () => {
 
 test('analyseVideo drops a finding whose category is outside the taxonomy', async () => {
   const { client } = makeClient([
-    { text: payload([makeRawFinding({ category: 'made_up' }), makeRawFinding({ timestampSeconds: 200 })]) },
-    { text: EMPTY_PAYLOAD },
-    { text: EMPTY_PAYLOAD }
+    { text: payload([makeRawFinding({ category: 'made_up' }), makeRawFinding({ timestampSeconds: 200 })]) }
   ]);
 
   const result = asSuccess(await run({ context: 'scouting' }, client));
