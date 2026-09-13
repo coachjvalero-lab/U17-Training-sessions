@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, Film, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Check, Film, RotateCcw, Sparkles, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { MatchEvent, VideoAiFinding, VideoAnalysisAiContext } from '../types';
 import {
@@ -9,7 +9,13 @@ import {
   type VideoAiFindingOwner
 } from '../services/video/videoAiFindingsService';
 import { createVideoClipForOwner } from '../services/video/videoClipsService';
-import { buildVideoUrlAtSecond, findMatchEventForClipWindow, formatConfidence } from '../utils/videoAiFindings';
+import {
+  buildClipFromFinding,
+  buildVideoUrlAtSecond,
+  canConfirmFinding,
+  formatConfidence,
+  reviewStatusAfterConfirm
+} from '../utils/videoAiFindings';
 import { formatVideoTimestamp } from '../utils/mediaUrls';
 import type { ClipCategoryOption } from './VideoClipsSection';
 
@@ -149,12 +155,13 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
           suggestedTags: Array.isArray(finding.suggestedTags) ? finding.suggestedTags : [],
           confidence: typeof finding.confidence === 'number' ? finding.confidence : null,
           videoUrl: analysedVideoUrl,
+          timestampSeconds: typeof finding.timestampSeconds === 'number' ? finding.timestampSeconds : 0,
           startTime: typeof finding.startTime === 'number' ? finding.startTime : 0,
           endTime: typeof finding.endTime === 'number' ? finding.endTime : null
         }))
       );
 
-      setFindings((prev) => [...prev, ...created].sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0)));
+      setFindings((prev) => [...prev, ...created].sort((a, b) => (a.timestampSeconds ?? 0) - (b.timestampSeconds ?? 0)));
     } catch (analyseError: any) {
       console.error('[AiVideoAnalysisPanel] Analysis failed', analyseError);
       setError(analyseError?.message || 'The video could not be analysed. Please retry.');
@@ -167,24 +174,15 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
     setFindings((prev) => prev.map((item) => (item.id === findingId ? { ...item, ...patch } : item)));
   };
 
-  const handleConfirm = async (finding: VideoAiFinding, wasEdited: boolean) => {
+  const handleConfirm = async (finding: VideoAiFinding, wasEdited: boolean): Promise<boolean> => {
+    // A confirmed finding already has its clip; re-confirming must never duplicate it.
+    if (!canConfirmFinding(finding)) return true;
+
     setError(null);
     setBusyFindingId(finding.id);
 
     try {
-      const startTime = finding.startTime ?? 0;
-      const linkedEvent = findMatchEventForClipWindow(matchEvents ?? [], startTime, finding.endTime);
-
-      await createVideoClipForOwner(owner, {
-        videoUrl: finding.videoUrl || videoUrlDraft.trim(),
-        startTime,
-        endTime: finding.endTime ?? null,
-        title: finding.title,
-        notes: finding.observation,
-        category: finding.category ?? null,
-        aiFindingId: finding.id,
-        matchEventId: linkedEvent?.id ?? null
-      });
+      await createVideoClipForOwner(owner, buildClipFromFinding(finding, videoUrlDraft.trim(), matchEvents ?? []));
 
       const updated = await updateVideoAiFinding(finding.id, {
         title: finding.title,
@@ -194,9 +192,11 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
       });
       patchFinding(finding.id, updated);
       onClipsCreated?.();
+      return true;
     } catch (confirmError: any) {
       console.error('[AiVideoAnalysisPanel] Failed confirming finding', confirmError);
       setError(confirmError?.message || 'The finding could not be saved as a clip.');
+      return false;
     } finally {
       setBusyFindingId(null);
     }
@@ -219,7 +219,8 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
 
   const handleConfirmAll = async () => {
     for (const finding of pendingFindings) {
-      await handleConfirm(finding, false);
+      const confirmed = await handleConfirm(finding, false);
+      if (!confirmed) break;
     }
   };
 
@@ -258,12 +259,27 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
           />
 
+          {isAnalysing && (
+            <p className="text-xs font-bold text-slate-500">
+              Analysing video... a full match can take a few minutes.
+            </p>
+          )}
+
           {error && (
             <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
               <div className="text-xs">
                 <p className="font-bold">AI analysis error</p>
                 <p className="mt-0.5">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void handleAnalyse()}
+                  disabled={isAnalysing}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Retry
+                </button>
               </div>
             </div>
           )}
@@ -331,8 +347,7 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-lg bg-slate-900 px-2 py-1 font-mono text-[11px] font-black text-cyan-300">
-                        {formatVideoTimestamp(finding.startTime ?? 0)}
-                        {finding.endTime != null ? ` – ${formatVideoTimestamp(finding.endTime)}` : ''}
+                        {formatVideoTimestamp(finding.timestampSeconds ?? finding.startTime ?? 0)}
                       </span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
                         Confidence {formatConfidence(finding.confidence)}
@@ -350,7 +365,7 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
                       </span>
                       {finding.videoUrl && (
                         <a
-                          href={buildVideoUrlAtSecond(finding.videoUrl, finding.startTime)}
+                          href={buildVideoUrlAtSecond(finding.videoUrl, finding.startTime ?? finding.timestampSeconds)}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700"

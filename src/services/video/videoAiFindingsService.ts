@@ -18,6 +18,7 @@ export interface VideoAiFindingInput {
   suggestedTags?: string[];
   confidence?: number | null;
   videoUrl?: string | null;
+  timestampSeconds?: number | null;
   startTime?: number | null;
   endTime?: number | null;
 }
@@ -36,6 +37,7 @@ type VideoAiFindingRow = {
   confidence: number | string | null;
   review_status: VideoAiFindingStatus;
   video_url: string | null;
+  timestamp_seconds: number | null;
   start_time: number | null;
   end_time: number | null;
   model: string | null;
@@ -63,6 +65,7 @@ function fromRow(row: VideoAiFindingRow): VideoAiFinding {
     confidence: row.confidence == null ? null : Number(row.confidence),
     reviewStatus: row.review_status,
     videoUrl: row.video_url,
+    timestampSeconds: row.timestamp_seconds,
     startTime: row.start_time,
     endTime: row.end_time,
     model: row.model,
@@ -85,7 +88,7 @@ export async function listVideoAiFindings(owner: VideoAiFindingOwner): Promise<V
     .from(VIDEO_AI_FINDINGS_TABLE)
     .select('*')
     .eq(column, value)
-    .order('start_time', { ascending: true });
+    .order('timestamp_seconds', { ascending: true });
 
   if (error) throw error;
   return ((data || []) as VideoAiFindingRow[]).map(fromRow);
@@ -110,6 +113,7 @@ export async function createVideoAiFindings(
     confidence: finding.confidence ?? null,
     review_status: 'pending' as VideoAiFindingStatus,
     video_url: finding.videoUrl ?? null,
+    timestamp_seconds: finding.timestampSeconds ?? null,
     start_time: finding.startTime ?? null,
     end_time: finding.endTime ?? null,
     model: model ?? null

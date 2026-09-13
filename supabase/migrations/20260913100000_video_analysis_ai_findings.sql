@@ -30,6 +30,8 @@ create table if not exists public.video_ai_findings (
     check (review_status in ('pending', 'confirmed', 'rejected', 'edited')),
   -- Evidence window inside the analysed video, before/independently of clip creation.
   video_url text,
+  -- Second where the action actually happens; start/end_time are the clip window around it.
+  timestamp_seconds integer check (timestamp_seconds is null or timestamp_seconds >= 0),
   start_time integer check (start_time is null or start_time >= 0),
   end_time integer check (end_time is null or start_time is null or end_time >= start_time),
   model text,
@@ -75,6 +77,11 @@ alter table public.video_clips add constraint video_clips_single_owner check (
 create index if not exists video_clips_ai_finding_id_idx on public.video_clips (ai_finding_id);
 create index if not exists video_clips_match_event_id_idx on public.video_clips (match_event_id);
 create index if not exists video_clips_opponent_analysis_id_idx on public.video_clips (opponent_analysis_id);
+
+-- A confirmed finding produces exactly one clip; re-confirming can never duplicate it.
+create unique index if not exists video_clips_ai_finding_id_unique
+  on public.video_clips (ai_finding_id)
+  where ai_finding_id is not null;
 
 alter table public.video_ai_findings enable row level security;
 

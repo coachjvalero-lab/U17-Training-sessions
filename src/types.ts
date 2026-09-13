@@ -423,6 +423,8 @@ export interface VideoAiFinding {
   confidence?: number | null;
   reviewStatus: VideoAiFindingStatus;
   videoUrl?: string | null;
+  /** Second where the action happens; startTime/endTime are the clip window around it. */
+  timestampSeconds?: number | null;
   startTime?: number | null;
   endTime?: number | null;
   model?: string | null;

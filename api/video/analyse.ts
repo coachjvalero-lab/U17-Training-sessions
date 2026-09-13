@@ -29,7 +29,7 @@ function readJsonBody(req: any): Promise<AnalyseVideoRequestBody> {
 
 export function statusForAnalyseVideoError(errorCode: string): number {
   if (errorCode === 'not_configured') return 500;
-  if (errorCode === 'analysis_failed') return 502;
+  if (errorCode === 'analysis_failed' || errorCode === 'invalid_ai_response') return 502;
   return 400;
 }
 

@@ -1,4 +1,4 @@
-import type { MatchEvent } from '../types';
+import type { MatchEvent, VideoAiFinding, VideoAiFindingStatus, VideoClip } from '../types';
 
 /**
  * Finds the existing Match Event that corresponds to an AI finding's clip window, so the clip can
@@ -54,4 +54,40 @@ export function buildVideoUrlAtSecond(videoUrl: string, startTime: number | null
   } catch {
     return videoUrl;
   }
+}
+
+/** Only a pending finding may be confirmed; anything else already produced its clip. */
+export function canConfirmFinding(finding: Pick<VideoAiFinding, 'reviewStatus'>): boolean {
+  return finding.reviewStatus === 'pending';
+}
+
+export function reviewStatusAfterConfirm(wasEdited: boolean): VideoAiFindingStatus {
+  return wasEdited ? 'edited' : 'confirmed';
+}
+
+export type ClipFromFindingInput = Pick<VideoClip, 'videoUrl' | 'startTime' | 'endTime' | 'title' | 'notes' | 'category' | 'aiFindingId' | 'matchEventId'>;
+
+/**
+ * Builds the real clip a confirmed finding turns into: category and tags carried over, evidence in
+ * the notes, and a reference to the existing Match Event when one lines up with the clip window.
+ */
+export function buildClipFromFinding(
+  finding: VideoAiFinding,
+  fallbackVideoUrl: string,
+  matchEvents: MatchEvent[] = []
+): ClipFromFindingInput {
+  const startTime = finding.startTime ?? finding.timestampSeconds ?? 0;
+  const linkedEvent = findMatchEventForClipWindow(matchEvents, startTime, finding.endTime);
+  const tags = finding.suggestedTags.length > 0 ? `\nTags: ${finding.suggestedTags.join(', ')}` : '';
+
+  return {
+    videoUrl: finding.videoUrl || fallbackVideoUrl,
+    startTime,
+    endTime: finding.endTime ?? null,
+    title: finding.title,
+    notes: `${finding.observation}${tags}`.trim() || null,
+    category: finding.category ?? null,
+    aiFindingId: finding.id,
+    matchEventId: linkedEvent?.id ?? null
+  };
 }
