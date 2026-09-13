@@ -7,6 +7,7 @@ import { generateMatchEvents, isGenerateMatchEventsFailure } from './api/_lib/ma
 import { analyseVideo, isAnalyseVideoFailure } from './api/_lib/videoAnalysisAi';
 import { statusForAnalyseVideoError } from './api/video/analyse';
 import { requireSupabaseUser } from './api/_lib/supabaseAuth';
+import { fetchOfficialSaffStandings, SAFF_COMPETITION_ID, SAFF_COMPETITION_URL } from './api/_lib/saffStandings';
 
 // Server-only secrets (GEMINI_API_KEY) are not exposed by Vite's env handling,
 // so load them into process.env for the dev API middleware.
@@ -23,6 +24,29 @@ function apiEndpointsPlugin(): Plugin {
         if (url === '/api/health') {
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ status: 'ok', time: new Date().toISOString() }));
+          return;
+        }
+
+        if (url === '/api/competition/saff-standings') {
+          if (req.method !== 'GET') {
+            res.statusCode = 405;
+            res.setHeader('Allow', 'GET');
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Method not allowed' }));
+            return;
+          }
+
+          try {
+            const standings = await fetchOfficialSaffStandings();
+            res.statusCode = 200;
+            res.setHeader('Cache-Control', 'public, max-age=300');
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ competitionId: SAFF_COMPETITION_ID, sourceUrl: SAFF_COMPETITION_URL, standings }));
+          } catch (error) {
+            res.statusCode = 502;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Official SAFF standings are unavailable' }));
+          }
           return;
         }
 

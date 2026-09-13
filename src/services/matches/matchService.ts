@@ -1,6 +1,5 @@
 import { supabase } from '../../supabaseClient';
 import type { Match, MatchCategory } from '../../types';
-import { calculateStandingsFromMatches, type StandingsEntry } from './standingsCalculator';
 
 const MATCHES_TABLE = 'matches';
 
@@ -333,21 +332,6 @@ export async function linkMatchToFixture(matchId: string, fixtureId: string | nu
 
   if (error) throw error;
   return fromRow(data as MatchRow);
-}
-
-export type { StandingsEntry } from './standingsCalculator';
-
-export async function calculateStandings(teamId: string): Promise<StandingsEntry[]> {
-  const { data, error } = await getClient()
-    .from(MATCHES_TABLE)
-    .select('*')
-    .eq('status', 'played')
-    .eq('match_category', 'official');
-
-  if (error) throw error;
-
-  const matches = ((data || []) as MatchRow[]).map(fromRow);
-  return calculateStandingsFromMatches(matches, teamId);
 }
 
 export interface MatchOperationalSummary {

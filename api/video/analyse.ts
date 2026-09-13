@@ -1,5 +1,7 @@
-import { analyseVideo, isAnalyseVideoFailure, type AnalyseVideoRequestBody } from '../_lib/videoAnalysisAi';
-import { requireSupabaseUser } from '../_lib/supabaseAuth';
+// package.json sets "type": "module", so the compiled function runs as native ESM on Vercel:
+// relative imports must carry an explicit extension or Node cannot resolve them at runtime.
+import { analyseVideo, isAnalyseVideoFailure, type AnalyseVideoRequestBody } from '../_lib/videoAnalysisAi.js';
+import { requireSupabaseUser } from '../_lib/supabaseAuth.js';
 
 function readJsonBody(req: any): Promise<AnalyseVideoRequestBody> {
   if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);

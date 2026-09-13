@@ -24,11 +24,22 @@ import {
   createMatch,
   updateMatch,
   deleteMatch,
-  calculateStandings,
   matchToDisplay,
-  type StandingsEntry,
   type MatchWithScore
 } from '../services/matches/matchService';
+
+interface SaffStanding {
+  position: number;
+  team: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
 
 interface CompetitionSectionProps {
   session?: TrainingSession;
@@ -54,10 +65,11 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
 }) => {
   const { selectedTeamId } = useTeamContext();
   const [matches, setMatches] = useState<Match[]>([]);
-  const [standings, setStandings] = useState<StandingsEntry[]>([]);
+  const [standings, setStandings] = useState<SaffStanding[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [matchLoadError, setMatchLoadError] = useState<string | null>(null);
   const [isLoadingStandings, setIsLoadingStandings] = useState(false);
+  const [standingsLoadError, setStandingsLoadError] = useState<string | null>(null);
 
   const contextStorageKey = 'competition_section';
   const restoredContext = readWorkspaceRestoreState(contextStorageKey, {
@@ -99,21 +111,25 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
   }, [selectedTeamId]);
 
   useEffect(() => {
-    if (!selectedTeamId || activeTab !== 'standings') return;
+    if (activeTab !== 'standings') return;
 
     void (async () => {
       try {
         setIsLoadingStandings(true);
-        const standingsList = await calculateStandings(selectedTeamId);
-        setStandings(standingsList);
+        setStandingsLoadError(null);
+        const response = await fetch('/api/competition/saff-standings');
+        const payload = await response.json() as { standings?: SaffStanding[]; error?: string };
+        if (!response.ok || !payload.standings) throw new Error(payload.error || 'Official SAFF standings are unavailable.');
+        setStandings(payload.standings);
       } catch (error) {
         console.error('[CompetitionSection] Failed loading standings', error);
         setStandings([]);
+        setStandingsLoadError(error instanceof Error ? error.message : 'Official SAFF standings are unavailable.');
       } finally {
         setIsLoadingStandings(false);
       }
     })();
-  }, [selectedTeamId, activeTab, matches]);
+  }, [activeTab]);
 
   // Score Modal State
   const [scoreModalMatch, setScoreModalMatch] = useState<Match | null>(null);
@@ -524,14 +540,14 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <h2 className="text-base font-black text-[#002142] font-display">
-                Saudi U17 Premier League Standings
+                Women's Premier League U-17 Standings
               </h2>
               <p className="text-xs text-slate-500 font-medium">
                 Official ranking table and recent form guide.
               </p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-              {standings.length > 0 && standings[0].isUs ? `${standings[0].rank}st Place • Champions Rank` : 'League Standings'}
+              Official SAFF competition
             </span>
           </div>
 
@@ -539,9 +555,13 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
             <div className="py-12 text-center text-slate-400 text-sm">
               Loading standings...
             </div>
+          ) : standingsLoadError ? (
+            <div role="alert" className="py-12 text-center text-rose-600 text-sm">
+              Official SAFF standings unavailable: {standingsLoadError}
+            </div>
           ) : standings.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-sm">
-              No standings data available yet. Play matches to generate standings.
+              Official SAFF standings are not available yet.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -558,22 +578,18 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                     <th className="py-3 px-2 text-center">GA</th>
                     <th className="py-3 px-2 text-center">GD</th>
                     <th className="py-3 px-3 text-center">PTS</th>
-                    <th className="py-3 px-3 text-center">Form</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {standings.map((st) => (
                     <tr 
                       key={st.team}
-                      className={`transition-colors ${
-                        st.isUs ? 'bg-amber-50/80 font-black text-[#002142]' : 'hover:bg-slate-50/80 text-slate-700'
-                      }`}
+                      className="transition-colors hover:bg-slate-50/80 text-slate-700"
                     >
-                      <td className="py-3 px-3 font-mono font-bold">{st.rank}</td>
+                      <td className="py-3 px-3 font-mono font-bold">{st.position}</td>
                       <td className="py-3 px-3">
                         <div className="flex items-center space-x-2">
-                          {st.isUs && <TeamCrest name="Al Ula FC" logoUrl={currentLogo} isAlula className="h-5 w-5" />}
-                          <span className={st.isUs ? 'text-[#002142] font-extrabold' : 'text-slate-800'}>
+                          <span className="text-slate-800">
                             {st.team}
                           </span>
                         </div>
@@ -582,25 +598,11 @@ export const CompetitionSection: React.FC<CompetitionSectionProps> = ({
                       <td className="py-3 px-2 text-center font-mono text-emerald-700 font-bold">{st.won}</td>
                       <td className="py-3 px-2 text-center font-mono text-slate-500">{st.drawn}</td>
                       <td className="py-3 px-2 text-center font-mono text-rose-600">{st.lost}</td>
-                      <td className="py-3 px-2 text-center font-mono">{st.gf}</td>
-                      <td className="py-3 px-2 text-center font-mono">{st.ga}</td>
-                      <td className="py-3 px-2 text-center font-mono">{st.gf - st.ga > 0 ? `+${st.gf - st.ga}` : st.gf - st.ga}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.goalsFor}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.goalsAgainst}</td>
+                      <td className="py-3 px-2 text-center font-mono">{st.goalDifference > 0 ? `+${st.goalDifference}` : st.goalDifference}</td>
                       <td className="py-3 px-3 text-center font-mono font-black text-sm text-[#002142]">
-                        {st.pts}
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center justify-center space-x-1">
-                          {st.form.map((f, i) => (
-                            <span
-                              key={i}
-                              className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center text-white ${
-                                f === 'W' ? 'bg-emerald-600' : f === 'D' ? 'bg-slate-400' : 'bg-rose-500'
-                              }`}
-                            >
-                              {f}
-                            </span>
-                          ))}
-                        </div>
+                        {st.points}
                       </td>
                     </tr>
                   ))}

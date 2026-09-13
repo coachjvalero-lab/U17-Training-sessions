@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { statusForAnalyseVideoError } from './analyse';
+import { statusForAnalyseVideoError } from '../video/analyse.js';
 
 test('statusForAnalyseVideoError maps server, upstream and client errors', () => {
   assert.equal(statusForAnalyseVideoError('not_configured'), 500);

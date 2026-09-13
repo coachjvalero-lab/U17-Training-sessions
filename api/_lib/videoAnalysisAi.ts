@@ -4,7 +4,7 @@ import {
   createGeminiClient,
   isYoutubeUrl,
   type GeminiClient
-} from './matchEventsAi';
+} from './matchEventsAi.js';
 
 export type VideoAnalysisContext = 'my_analysis' | 'opponent_analysis' | 'scouting';
 
