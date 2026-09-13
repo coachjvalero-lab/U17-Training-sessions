@@ -1,10 +1,16 @@
 import { MediaResolution, Type } from '@google/genai';
 import {
-  CANDIDATE_MODELS,
   createGeminiClient,
   isYoutubeUrl,
   type GeminiClient
 } from './matchEventsAi.js';
+
+/**
+ * Verified against the live API key: gemini-2.5-pro and gemini-2.5-flash return 404 (retired for
+ * new users) and gemini-pro-latest / gemini-3.8-flash return 429 (quota), so calling them only
+ * wastes a round-trip. These two both analysed a real YouTube match successfully.
+ */
+export const VIDEO_ANALYSIS_MODELS = ['gemini-flash-latest', 'gemini-3.6-flash'] as const;
 
 export type VideoAnalysisContext = 'my_analysis' | 'opponent_analysis' | 'scouting';
 
@@ -384,7 +390,7 @@ export async function runAnalysisPass(
   videoUrl: string,
   prompt: string,
   segment: VideoAnalysisSegment | null,
-  models: readonly string[] = CANDIDATE_MODELS
+  models: readonly string[] = VIDEO_ANALYSIS_MODELS
 ): Promise<RawAnalysisResponse> {
   const videoPart: Record<string, unknown> = { fileData: { fileUri: videoUrl } };
   if (segment) {
@@ -458,7 +464,7 @@ export async function analyseVideo(
   const context = body.context;
   const allowedCategories = Array.isArray(body.taxonomy) ? body.taxonomy.map((entry) => entry.value) : [];
   const createClient = deps.createClient ?? createGeminiClient;
-  const models = deps.models ?? CANDIDATE_MODELS;
+  const models = deps.models ?? VIDEO_ANALYSIS_MODELS;
 
   const summaries: string[] = [];
   const patterns: string[] = [];
