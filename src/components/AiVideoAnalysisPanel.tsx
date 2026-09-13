@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, Film, RotateCcw, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Check, FileText, Film, RotateCcw, Sparkles, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import type { MatchEvent, VideoAiFinding, VideoAnalysisAiContext } from '../types';
 import {
@@ -13,6 +13,7 @@ import {
   buildClipFromFinding,
   buildVideoUrlAtSecond,
   canConfirmFinding,
+  formatAiAnalysisBlock,
   formatConfidence,
   reviewStatusAfterConfirm
 } from '../utils/videoAiFindings';
@@ -37,6 +38,8 @@ interface AiVideoAnalysisPanelProps {
   /** Existing Match Events, used only to LINK a clip to its event (never to duplicate it). */
   matchEvents?: MatchEvent[];
   onClipsCreated?: () => void;
+  /** When provided, offers to insert the AI narrative into the analysis report draft. */
+  onAddNarrativeToReport?: (block: string) => void;
 }
 
 const CONTEXT_LABELS: Record<VideoAnalysisAiContext, string> = {
@@ -54,7 +57,8 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
   subject,
   taxonomy,
   matchEvents,
-  onClipsCreated
+  onClipsCreated,
+  onAddNarrativeToReport
 }) => {
   const [findings, setFindings] = useState<VideoAiFinding[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +69,9 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
   const [patterns, setPatterns] = useState<string[]>([]);
   const [conclusions, setConclusions] = useState<string[]>([]);
   const [videoUrlDraft, setVideoUrlDraft] = useState<string>(videoUrl ?? '');
+  // Kit colours belong to this analysis run only: they change from match to match and are not stored.
+  const [ourKitColour, setOurKitColour] = useState('');
+  const [opponentKitColour, setOpponentKitColour] = useState('');
 
   const ownerKey = owner.matchAnalysisId || owner.opponentAnalysisId || owner.trainingAnalysisId || owner.scoutingReportId || '';
 
@@ -114,7 +121,11 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
           context,
           videoUrl: analysedVideoUrl,
           taxonomy,
-          subject
+          subject,
+          kits: {
+            ourKitColour: ourKitColour.trim(),
+            opponentKitColour: opponentKitColour.trim()
+          }
         })
       });
 
@@ -217,13 +228,6 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
 
   const pendingFindings = findings.filter((finding) => finding.reviewStatus === 'pending');
 
-  const handleConfirmAll = async () => {
-    for (const finding of pendingFindings) {
-      const confirmed = await handleConfirm(finding, false);
-      if (!confirmed) break;
-    }
-  };
-
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -258,6 +262,21 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
             placeholder="YouTube video URL to analyse"
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
           />
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              value={ourKitColour}
+              onChange={(event) => setOurKitColour(event.target.value)}
+              placeholder="Our kit colour (optional)"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+            />
+            <input
+              value={opponentKitColour}
+              onChange={(event) => setOpponentKitColour(event.target.value)}
+              placeholder="Opponent kit colour (optional)"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:border-sky-500"
+            />
+          </div>
 
           {isAnalysing && (
             <p className="text-xs font-bold text-slate-500">
@@ -306,6 +325,23 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
                   </ul>
                 </>
               )}
+              {onAddNarrativeToReport && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAddNarrativeToReport(
+                      formatAiAnalysisBlock(
+                        { summary, patterns, conclusions },
+                        new Date().toISOString().slice(0, 10)
+                      )
+                    )
+                  }
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-white px-3 py-2 text-xs font-bold text-cyan-800 hover:bg-cyan-50"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Add AI analysis to Match Report
+                </button>
+              )}
             </div>
           )}
 
@@ -319,15 +355,6 @@ export const AiVideoAnalysisPanel: React.FC<AiVideoAnalysisPanelProps> = ({
                 <p className="text-xs font-bold text-slate-700">
                   {findings.length} findings · {pendingFindings.length} pending review
                 </p>
-                {pendingFindings.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => void handleConfirmAll()}
-                    className="text-xs font-bold text-emerald-700 hover:underline"
-                  >
-                    Confirm all pending
-                  </button>
-                )}
               </div>
 
               {findings.map((finding) => {

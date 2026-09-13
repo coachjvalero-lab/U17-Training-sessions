@@ -26,12 +26,20 @@ export interface VideoAnalysisTaxonomyEntry {
   label: string;
 }
 
+export interface VideoAnalysisKits {
+  /** Free text describing the shirt colour, e.g. "white shirts, black shorts". */
+  ourKitColour?: string;
+  opponentKitColour?: string;
+}
+
 export interface AnalyseVideoRequestBody {
   context?: string;
   videoUrl?: string;
   additionalNotes?: string;
   /** Existing Video Analysis taxonomy (clip categories). The model may not invent new values. */
   taxonomy?: VideoAnalysisTaxonomyEntry[];
+  /** Kit colours for this analysis run only; never stored as configuration. */
+  kits?: VideoAnalysisKits;
   subject?: {
     teamName?: string;
     opponentName?: string;
@@ -49,7 +57,7 @@ export interface GeneratedVideoFinding {
   observation: string;
   suggestedTags: string[];
   confidence: number | null;
-  /** Absolute second in the full video where the action happens. */
+  /** Absolute second in the full video where the decisive action happens. */
   timestampSeconds: number;
   /** Clip window around the action (margins already applied), absolute seconds. */
   startTime: number;
@@ -94,34 +102,34 @@ export function isAnalyseVideoFailure(result: AnalyseVideoResult): result is Ana
 export const DEFAULT_CLIP_MARGIN_BEFORE_SECONDS = 8;
 export const DEFAULT_CLIP_MARGIN_AFTER_SECONDS = 8;
 export const DEFAULT_FINDING_LENGTH_SECONDS = 12;
-/** Fallback window size when a whole-video pass is rejected as too long. */
-export const SEGMENT_LENGTH_SECONDS = 1800;
+export const SEGMENT_LENGTH_SECONDS = 900;
+/** Consecutive segments overlap so an action on a boundary is never cut in half. */
+export const SEGMENT_OVERLAP_SECONDS = 10;
 export const MAX_SEGMENTS = 8;
 /** Stop walking segments once this many consecutive windows come back completely empty. */
 export const MAX_CONSECUTIVE_EMPTY_SEGMENTS = 2;
+/** Slack allowed on top of the overlap when matching a duplicate across two segments. */
+export const DEDUPE_TIME_TOLERANCE_SECONDS = 5;
+export const DEDUPE_SIMILARITY_THRESHOLD = 0.5;
 
 export function isVideoAnalysisContext(value: unknown): value is VideoAnalysisContext {
   return typeof value === 'string' && (VIDEO_ANALYSIS_CONTEXTS as string[]).includes(value);
 }
 
 /**
- * A whole-video pass is preferred (Gemini handles long footage at low media resolution). Only when
- * the API rejects the video for length/size do we fall back to sequential windows.
+ * Every video is swept in overlapping windows; the duration is never needed up front because the
+ * sweep stops when the windows stop returning anything.
  */
-export function isVideoTooLongError(message: string): boolean {
-  return /too long|too large|exceeds|token count|context length|payload size|request entity|duration/i.test(message);
-}
-
-export function buildFallbackSegments(
+export function buildSegments(
   segmentLengthSeconds: number = SEGMENT_LENGTH_SECONDS,
+  overlapSeconds: number = SEGMENT_OVERLAP_SECONDS,
   maxSegments: number = MAX_SEGMENTS
 ): VideoAnalysisSegment[] {
+  const step = Math.max(1, segmentLengthSeconds - overlapSeconds);
   const segments: VideoAnalysisSegment[] = [];
   for (let index = 0; index < maxSegments; index += 1) {
-    segments.push({
-      startSeconds: index * segmentLengthSeconds,
-      endSeconds: (index + 1) * segmentLengthSeconds
-    });
+    const startSeconds = index * step;
+    segments.push({ startSeconds, endSeconds: startSeconds + segmentLengthSeconds });
   }
   return segments;
 }
@@ -162,6 +170,29 @@ function readTimestamp(raw: Record<string, unknown>): number | null {
   return null;
 }
 
+/**
+ * The evidence sentence is the model's own statement of when the decisive action happens, so when
+ * it quotes an explicit `mm:ss` inside the analysed window it wins over a drifted timestamp field.
+ */
+export function alignTimestampWithEvidence(
+  timestampSeconds: number,
+  evidence: string | undefined,
+  windowLengthSeconds: number = SEGMENT_LENGTH_SECONDS
+): number {
+  if (!evidence) return timestampSeconds;
+
+  const match = /(?:^|[^\d])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?/.exec(evidence);
+  if (!match) return timestampSeconds;
+
+  const quoted = match[3]
+    ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+    : Number(match[1]) * 60 + Number(match[2]);
+
+  // Ignore quotes that cannot belong to this window (e.g. a match minute, not a video second).
+  if (!Number.isFinite(quoted) || quoted < 0 || quoted > windowLengthSeconds) return timestampSeconds;
+  return quoted;
+}
+
 /** Composes the model's what / why / evidence answers into one analyst-readable observation. */
 export function composeObservation(raw: Record<string, unknown>): string {
   const read = (key: string): string => (typeof raw[key] === 'string' ? (raw[key] as string).trim() : '');
@@ -177,9 +208,9 @@ export function normaliseFinding(
   raw: Record<string, unknown>,
   options: {
     offsetSeconds?: number;
-    allowedCategories?: string[];
     marginBefore?: number;
     marginAfter?: number;
+    windowLengthSeconds?: number;
   } = {}
 ): GeneratedVideoFinding | null {
   const title = typeof raw.title === 'string' ? raw.title.trim() : '';
@@ -191,20 +222,19 @@ export function normaliseFinding(
   if (!title && !observation) return null;
 
   const offset = options.offsetSeconds ?? 0;
-  const timestampSeconds = rawTimestamp + offset;
+  const alignedTimestamp = alignTimestampWithEvidence(
+    rawTimestamp,
+    typeof raw.evidence === 'string' ? raw.evidence : undefined,
+    options.windowLengthSeconds
+  );
+  const timestampSeconds = alignedTimestamp + offset;
   const rawEnd = Number(raw.endTimeSeconds);
   const { startTime, endTime } = applyClipMargins(
     timestampSeconds,
-    Number.isFinite(rawEnd) ? rawEnd + offset : null,
+    Number.isFinite(rawEnd) && rawEnd + offset > timestampSeconds ? rawEnd + offset : null,
     options.marginBefore,
     options.marginAfter
   );
-
-  const rawCategory = typeof raw.category === 'string' ? raw.category.trim() : '';
-  const allowed = options.allowedCategories;
-  const category = rawCategory && (!allowed || allowed.length === 0 || allowed.includes(rawCategory))
-    ? rawCategory
-    : null;
 
   const suggestedTags = Array.isArray(raw.suggestedTags)
     ? raw.suggestedTags
@@ -214,7 +244,7 @@ export function normaliseFinding(
     : [];
 
   return {
-    category,
+    category: typeof raw.category === 'string' && raw.category.trim() ? raw.category.trim() : null,
     title: title || observation.split('\n')[0].slice(0, 80),
     observation,
     suggestedTags,
@@ -225,6 +255,96 @@ export function normaliseFinding(
   };
 }
 
+/**
+ * The response schema constrains `category` to an enum, so anything else means the model ignored
+ * the schema: the finding is dropped rather than remapped onto an existing category.
+ */
+export function isFindingCategoryAllowed(
+  finding: Pick<GeneratedVideoFinding, 'category'>,
+  allowedCategories: string[]
+): boolean {
+  if (allowedCategories.length === 0) return true;
+  return Boolean(finding.category) && allowedCategories.includes(finding.category as string);
+}
+
+function tokenise(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 3)
+  );
+}
+
+/** Jaccard overlap of the meaningful words, used to tell a repeated action from a different one. */
+export function describesSameSituation(
+  a: Pick<GeneratedVideoFinding, 'title' | 'observation' | 'category'>,
+  b: Pick<GeneratedVideoFinding, 'title' | 'observation' | 'category'>,
+  threshold: number = DEDUPE_SIMILARITY_THRESHOLD
+): boolean {
+  if (a.category && b.category && a.category !== b.category) return false;
+
+  const left = tokenise(`${a.title} ${a.observation}`);
+  const right = tokenise(`${b.title} ${b.observation}`);
+  if (left.size === 0 || right.size === 0) return false;
+
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / Math.min(left.size, right.size) >= threshold;
+}
+
+export interface SegmentedFinding {
+  finding: GeneratedVideoFinding;
+  segmentIndex: number;
+  /** Absolute seconds covered by the segment this finding came from. */
+  segment: VideoAnalysisSegment | null;
+}
+
+function findingScore(finding: GeneratedVideoFinding): number {
+  return (finding.confidence ?? 0) * 100 + finding.observation.length / 1000;
+}
+
+/**
+ * Drops the second sighting of an action that was seen in the overlap shared by two consecutive
+ * segments. Closeness in time alone is never enough: the descriptions must match too.
+ */
+export function dedupeFindings(
+  entries: SegmentedFinding[],
+  overlapSeconds: number = SEGMENT_OVERLAP_SECONDS,
+  toleranceSeconds: number = DEDUPE_TIME_TOLERANCE_SECONDS
+): GeneratedVideoFinding[] {
+  const sorted = entries
+    .slice()
+    .sort((a, b) => a.finding.timestampSeconds - b.finding.timestampSeconds);
+  const kept: SegmentedFinding[] = [];
+
+  for (const entry of sorted) {
+    const duplicateIndex = kept.findIndex((candidate) => {
+      if (candidate.segmentIndex === entry.segmentIndex) return false;
+      if (Math.abs(candidate.segmentIndex - entry.segmentIndex) !== 1) return false;
+      if (Math.abs(candidate.finding.timestampSeconds - entry.finding.timestampSeconds) > overlapSeconds + toleranceSeconds) {
+        return false;
+      }
+      return describesSameSituation(candidate.finding, entry.finding);
+    });
+
+    if (duplicateIndex === -1) {
+      kept.push(entry);
+      continue;
+    }
+
+    // Same action seen twice: keep the better evidenced/more confident sighting.
+    if (findingScore(entry.finding) > findingScore(kept[duplicateIndex].finding)) {
+      kept[duplicateIndex] = entry;
+    }
+  }
+
+  return kept
+    .map((entry) => entry.finding)
+    .sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+}
+
 export function buildContextInstructions(context: VideoAnalysisContext, subject: AnalyseVideoRequestBody['subject']): string {
   const team = subject?.teamName || 'our team';
   const opponent = subject?.opponentName || 'the opponent';
@@ -233,42 +353,59 @@ export function buildContextInstructions(context: VideoAnalysisContext, subject:
   switch (context) {
     case 'opponent_analysis':
       return [
-        `TARGET: ${opponent}.`,
-        'Prioritise situations that change how we prepare this match: build-up routines and their triggers, pressing traps and the cues that start them, defensive block behaviour and the spaces it concedes, transition reactions, and set-piece structures.',
-        'Every finding must be something a coach could brief to the squad ("when X happens they do Y, which leaves Z open").'
+        `PRIORITY: findings useful to prepare the match against ${opponent} (build-up routines and their triggers, pressing traps, block behaviour and the spaces it concedes, transition reactions, set-piece structures).`,
+        'This priority orders the findings; it does not restrict the sweep. Keep reporting every observable situation covered by the allowed categories, including ours.'
       ].join(' ');
     case 'scouting':
       return [
-        `TARGET: ${player}.`,
-        'Prioritise individual actions that support or contradict a recruitment decision: technical execution under pressure, decision-making with and without the ball, body orientation and scanning, physical duels, and reactions after mistakes.',
-        'Every finding must be one showable action a scout could present as evidence.'
+        `PRIORITY: evidence useful to evaluate ${player} (technical execution under pressure, decisions with and without the ball, body orientation and scanning, duels, reactions after mistakes).`,
+        'This priority orders the findings; it does not restrict the sweep. Keep reporting every observable situation covered by the allowed categories.'
       ].join(' ');
     case 'my_analysis':
     default:
       return [
-        `TARGET: ${team} (our own team).`,
-        'Prioritise situations worth reviewing with the squad: well-executed team actions worth reinforcing and concrete errors worth correcting, identifying the collective cause (positioning, timing, decision, communication).',
-        'Every finding must be usable in a video session with the players.'
+        `PRIORITY: findings useful to analyse and coach ${team} (our own team): actions worth reinforcing and concrete errors worth correcting, with the collective cause identified.`,
+        'This priority orders the findings; it does not restrict the sweep. Keep reporting every observable situation covered by the allowed categories, including the opponent\'s.'
       ].join(' ');
   }
+}
+
+function buildTeamIdentificationRules(kits: VideoAnalysisKits | undefined): string {
+  const ours = kits?.ourKitColour?.trim();
+  const theirs = kits?.opponentKitColour?.trim();
+
+  if (!ours && !theirs) {
+    return [
+      'TEAM IDENTIFICATION: no kit colours were provided. Describe each team by its visible shirt colour and do not claim which one is "our team" or "the opponent".',
+      'This is team identification only: never identify individual players by name, squad identity or shirt number.'
+    ].join('\n');
+  }
+
+  return [
+    'TEAM IDENTIFICATION (required whenever the two teams can be told apart visually):',
+    ours ? `- "our team" wears: ${ours}` : '- our team kit was not provided; infer it as the team that is not wearing the opponent kit.',
+    theirs ? `- "the opponent" wears: ${theirs}` : '- the opponent kit was not provided; infer it as the team that is not wearing our kit.',
+    '- Use the shirt/kit colour to decide which team is involved and attribute EVERY finding to the correct team, stating it explicitly in the observation.',
+    '- If the colours cannot be reliably distinguished in a situation (lighting, distance, similar kits), say so and lower the confidence instead of guessing.',
+    '- This is team identification only: never identify individual players by name, squad identity or shirt number.'
+  ].join('\n');
 }
 
 function buildPrompt(
   context: VideoAnalysisContext,
   body: AnalyseVideoRequestBody,
-  segment: VideoAnalysisSegment | null
+  segment: VideoAnalysisSegment
 ): string {
-  const taxonomy = Array.isArray(body.taxonomy) && body.taxonomy.length > 0
-    ? body.taxonomy.map((entry) => `"${entry.value}" (${entry.label})`).join(', ')
+  const taxonomyEntries = Array.isArray(body.taxonomy) ? body.taxonomy : [];
+  const taxonomy = taxonomyEntries.length > 0
+    ? taxonomyEntries.map((entry) => `"${entry.value}" (${entry.label})`).join(', ')
     : 'no predefined categories available: leave "category" empty';
 
-  const timestampRule = segment
-    ? `You are watching ONLY the portion of a longer video between ${segment.startSeconds}s and ${segment.endSeconds}s. Report "timestampSeconds" and "endTimeSeconds" RELATIVE TO THE FIRST FRAME YOU SEE (that first frame is second 0).`
-    : 'Report "timestampSeconds" and "endTimeSeconds" as absolute seconds counted from the very first frame of the video.';
-
-  return `You are a professional football video analyst preparing material for a coaching staff. Analyse the attached video and report ONLY concrete situations you actually see.
+  return `You are a professional football video analyst preparing material for a coaching staff. Analyse the attached video segment and report ONLY concrete situations you actually see.
 
 ${buildContextInstructions(context, body.subject)}
+
+${buildTeamIdentificationRules(body.kits)}
 
 Context data (may be incomplete; never treat it as something you observed):
 - Team: ${body.subject?.teamName || 'unknown'}
@@ -277,55 +414,81 @@ Context data (may be incomplete; never treat it as something you observed):
 - Competition: ${body.subject?.competition || 'unknown'} | Date: ${body.subject?.date || 'unknown'}
 - Analyst notes: ${body.additionalNotes?.trim() || 'none'}
 
-For EVERY finding answer these four questions:
-1. WHAT happened -> "observation": the concrete action described factually (who does what, in which zone, against which structure). Refer to players by role, position or shirt colour, never by name.
-2. WHEN it happened -> "timestampSeconds": the exact second the action starts; "endTimeSeconds": the second it ends.
-3. WHY it is relevant -> "relevance": the tactical consequence for the coaching staff, in one sentence.
-4. WHAT proves it -> "evidence": the visible detail that supports the claim (body position, distances, number of players involved, sequence of passes...).
+WORK IN TWO STEPS INSIDE THIS SINGLE ANSWER.
 
-Hard rules:
-- NEVER invent player names, shirt numbers, positions, scorelines, statistics or events you cannot see.
-- NEVER report a generic conclusion such as "the team plays down the wings". Every finding must be anchored to one visible moment with its timestamp.
-- Only put a behaviour in "patterns" if at least two of your reported findings support it.
-- If something cannot be determined with sufficient confidence, lower "confidence" or omit the finding.
-- If you cannot identify any concrete situation, return an empty "findings" array. An empty result is better than an invented one.
-- "confidence" is a number between 0 and 1 reflecting how sure you are of what you saw.
-- "category" MUST be exactly one of these values, or empty: ${taxonomy}.
+STEP 1 - SYSTEMATIC SWEEP (do this before writing any finding)
+Watch the whole segment from start to end and list every observable situation that belongs to the allowed categories. Do not jump to the spectacular moments: goals and shots are only a small part of the work.
+Sweep explicitly for, where applicable: build-up, possession progression, pressing, opposition pressing, defensive organisation, defensive transition, attacking transition, regains, losses of possession, progression, wide attacks, crosses, cutbacks, entries into the final third, box defending, set pieces, corners, free kicks, throw-ins, and any other situation represented by the allowed categories.
+Minor but clearly observable instances must be included. At this stage over-detecting is better than under-detecting: the goal is high recall across the whole segment, not a highlight reel.
+
+STEP 2 - STRUCTURED FINDINGS
+Turn each situation from step 1 into one finding with: timestampSeconds, category, title, observation, relevance, evidence, suggestedTags, confidence.
+Each finding answers:
+1. WHAT happened -> "observation": the concrete action described factually (which team by kit colour, in which zone, against which structure), by role/position, never by player name.
+2. WHEN it happened -> "timestampSeconds" (see the timestamp rules below).
+3. WHY it is relevant -> "relevance": the consequence for the coaching staff, in one sentence.
+4. WHAT proves it -> "evidence": the visible detail that supports the claim.
+
+TIMESTAMP RULES (critical):
+- Times are RELATIVE TO THE FIRST FRAME OF THIS SEGMENT: the first frame you see is second 0, and this segment lasts ${segment.endSeconds - segment.startSeconds} seconds.
+- "timestampSeconds" MUST be the exact second of the DECISIVE action described in the evidence: the loss of possession, the regain, the pass that breaks the line, the cross, the contact, the delivery of the set piece.
+- It must NOT be an approximation, the start of the build-up, the start of the possession, an earlier setup moment, or a second chosen to make a nicer clip.
+- If your evidence text quotes a specific time, "timestampSeconds" MUST be that exact second.
+- "endTimeSeconds" is when the situation ends.
+- If you cannot establish the decisive moment reliably, lower "confidence" or omit the finding.
+
+HARD RULES:
+- NEVER invent player names, shirt numbers, formations, scorelines, statistics or events you cannot see.
+- NEVER report a generic football statement. Every finding is anchored to one visible moment with its timestamp.
+- Every finding must be a DISTINCT observable situation. Do not emit several findings for the same action just because it can be read in different ways.
+- "category" MUST be exactly one of: ${taxonomy}. If a situation does not fit any allowed category, omit the finding instead of inventing a category.
 - "title" is a short label (max 8 words). "suggestedTags" are up to 4 short free tags.
-- "conclusions" are preliminary takeaways the analyst still has to validate.
-${timestampRule}`;
+- "patterns" may only contain behaviours supported by at least two of the findings you reported, referencing their timestamps. "conclusions" are preliminary takeaways the analyst still has to validate, based only on what you observed in this segment.
+- If you genuinely cannot identify any situation, return an empty "findings" array. An empty result is better than an invented one.`;
 }
 
-function buildConfig() {
+function buildConfig(allowedCategories: string[]) {
+  const categoryProperty = allowedCategories.length > 0
+    ? {
+        type: Type.STRING,
+        // Strict enum: the model cannot return a category outside the existing taxonomy.
+        enum: allowedCategories,
+        description: 'Exactly one of the allowed taxonomy values.'
+      }
+    : { type: Type.STRING, description: 'Leave empty: no taxonomy was provided.' };
+
+  const requiredFindingFields = ['title', 'observation', 'relevance', 'evidence', 'timestampSeconds'];
+  if (allowedCategories.length > 0) requiredFindingFields.push('category');
+
   return {
     systemInstruction:
-      'You are a professional football video analyst. You return a structured JSON object with summary, patterns, conclusions and findings, based exclusively on what is visible in the attached video. You never fabricate names, numbers or events.',
-    // Low media resolution keeps long full-match footage inside the model's context window.
-    mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW,
+      'You are a professional football video analyst. You sweep the whole segment systematically for every observable situation covered by the allowed categories, then return a structured JSON object with summary, patterns, conclusions and findings, based exclusively on what is visible in the attached video. You never fabricate names, numbers or events.',
+    // Shorter segments make a higher media resolution affordable.
+    mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
     responseMimeType: 'application/json',
     responseSchema: {
       type: Type.OBJECT,
       properties: {
-        summary: { type: Type.STRING, description: 'Short analytical summary of what was observed.' },
-        patterns: { type: Type.ARRAY, description: 'Repeated behaviours, each supported by at least two findings.', items: { type: Type.STRING } },
+        summary: { type: Type.STRING, description: 'Short analytical summary of what was observed in this segment.' },
+        patterns: { type: Type.ARRAY, description: 'Repeated behaviours, each supported by at least two reported findings.', items: { type: Type.STRING } },
         conclusions: { type: Type.ARRAY, description: 'Preliminary conclusions pending analyst validation.', items: { type: Type.STRING } },
         findings: {
           type: Type.ARRAY,
-          description: 'Concrete situations observed in the video, each anchored to a timestamp.',
+          description: 'Every distinct situation observed in the segment, anchored to its exact timestamp.',
           items: {
             type: Type.OBJECT,
             properties: {
-              category: { type: Type.STRING, description: 'One of the provided category values, or empty.' },
+              category: categoryProperty,
               title: { type: Type.STRING, description: 'Short label for the situation.' },
-              observation: { type: Type.STRING, description: 'What happened, factually.' },
+              observation: { type: Type.STRING, description: 'What happened, factually, including which team by kit colour.' },
               relevance: { type: Type.STRING, description: 'Why it matters for the coaching staff.' },
               evidence: { type: Type.STRING, description: 'The visible detail that proves it.' },
               suggestedTags: { type: Type.ARRAY, description: 'Up to 4 short free tags.', items: { type: Type.STRING } },
               confidence: { type: Type.NUMBER, description: 'Confidence between 0 and 1.' },
-              timestampSeconds: { type: Type.INTEGER, description: 'Second the action starts.' },
-              endTimeSeconds: { type: Type.INTEGER, description: 'Second the action ends.' }
+              timestampSeconds: { type: Type.INTEGER, description: 'Exact second of the decisive action, relative to this segment.' },
+              endTimeSeconds: { type: Type.INTEGER, description: 'Second the situation ends, relative to this segment.' }
             },
-            required: ['title', 'observation', 'relevance', 'evidence', 'timestampSeconds']
+            required: requiredFindingFields
           }
         }
       },
@@ -382,26 +545,27 @@ export function parseAnalysisResponse(text: string | undefined, model: string): 
 }
 
 /**
- * Runs one analysis pass, always with the video attached. Never falls back to a text-only prompt:
+ * Runs one segment pass, always with the video attached. Never falls back to a text-only prompt:
  * a video analysis failure must surface as an error, not as fabricated findings.
  */
 export async function runAnalysisPass(
   client: GeminiClient,
   videoUrl: string,
   prompt: string,
-  segment: VideoAnalysisSegment | null,
+  segment: VideoAnalysisSegment,
+  allowedCategories: string[] = [],
   models: readonly string[] = VIDEO_ANALYSIS_MODELS
 ): Promise<RawAnalysisResponse> {
-  const videoPart: Record<string, unknown> = { fileData: { fileUri: videoUrl } };
-  if (segment) {
-    videoPart.videoMetadata = {
+  const videoPart: Record<string, unknown> = {
+    fileData: { fileUri: videoUrl },
+    videoMetadata: {
       startOffset: `${Math.max(0, Math.floor(segment.startSeconds))}s`,
       endOffset: `${Math.max(1, Math.floor(segment.endSeconds))}s`
-    };
-  }
+    }
+  };
 
   const contents = [{ role: 'user', parts: [videoPart, { text: prompt }] }];
-  const config = buildConfig();
+  const config = buildConfig(allowedCategories);
 
   let lastError: unknown = null;
 
@@ -469,10 +633,11 @@ export async function analyseVideo(
   const summaries: string[] = [];
   const patterns: string[] = [];
   const conclusions: string[] = [];
-  const findings: GeneratedVideoFinding[] = [];
+  const collected: SegmentedFinding[] = [];
   let rawFindingCount = 0;
+  let unusableTimestampCount = 0;
 
-  const collect = (response: RawAnalysisResponse, segment: VideoAnalysisSegment | null) => {
+  const collect = (response: RawAnalysisResponse, segment: VideoAnalysisSegment, segmentIndex: number) => {
     if (response.summary.trim()) summaries.push(response.summary.trim());
     patterns.push(...response.patterns);
     conclusions.push(...response.conclusions);
@@ -480,50 +645,48 @@ export async function analyseVideo(
 
     for (const raw of response.findings) {
       const finding = normaliseFinding(raw, {
-        offsetSeconds: segment ? segment.startSeconds : 0,
-        allowedCategories,
+        offsetSeconds: segment.startSeconds,
         marginBefore: body.clipMarginBeforeSeconds,
-        marginAfter: body.clipMarginAfterSeconds
+        marginAfter: body.clipMarginAfterSeconds,
+        windowLengthSeconds: segment.endSeconds - segment.startSeconds
       });
-      if (finding) findings.push(finding);
+
+      if (!finding) {
+        unusableTimestampCount += 1;
+        continue;
+      }
+      if (!isFindingCategoryAllowed(finding, allowedCategories)) continue;
+      collected.push({ finding, segmentIndex, segment });
     }
   };
 
   let passes = 0;
-  let segmented = false;
 
   try {
     const client = createClient(apiKey);
+    let consecutiveEmpty = 0;
 
-    try {
-      // Preferred path: the whole video in one request, so segmentation never reaches the user.
-      passes = 1;
-      collect(await runAnalysisPass(client, videoUrl, buildPrompt(context, body, null), null, models), null);
-    } catch (fullPassError) {
-      const message = fullPassError instanceof Error ? fullPassError.message : String(fullPassError);
-      if (!isVideoTooLongError(message)) throw fullPassError;
-
-      // Too long for one request: walk it in windows until the video runs out.
-      segmented = true;
-      passes = 0;
-      let consecutiveEmpty = 0;
-
-      for (const segment of buildFallbackSegments()) {
-        let response: RawAnalysisResponse;
-        try {
-          response = await runAnalysisPass(client, videoUrl, buildPrompt(context, body, segment), segment, models);
-        } catch {
-          // Past the end of the video (or a transient window failure): stop walking forward.
-          break;
-        }
-
-        passes += 1;
-        collect(response, segment);
-        consecutiveEmpty = isEmptyResponse(response) ? consecutiveEmpty + 1 : 0;
-        if (consecutiveEmpty >= MAX_CONSECUTIVE_EMPTY_SEGMENTS) break;
+    for (const [segmentIndex, segment] of buildSegments().entries()) {
+      let response: RawAnalysisResponse;
+      try {
+        response = await runAnalysisPass(
+          client,
+          videoUrl,
+          buildPrompt(context, body, segment),
+          segment,
+          allowedCategories,
+          models
+        );
+      } catch (segmentError) {
+        // The first window must work; later ones simply run past the end of the video.
+        if (segmentIndex === 0) throw segmentError;
+        break;
       }
 
-      if (passes === 0) throw fullPassError;
+      passes += 1;
+      collect(response, segment, segmentIndex);
+      consecutiveEmpty = isEmptyResponse(response) ? consecutiveEmpty + 1 : 0;
+      if (consecutiveEmpty >= MAX_CONSECUTIVE_EMPTY_SEGMENTS) break;
     }
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
@@ -539,16 +702,14 @@ export async function analyseVideo(
     };
   }
 
-  // The model reported situations but none were usable: never store a corrupt result.
-  if (rawFindingCount > 0 && findings.length === 0) {
+  // Every reported situation was unusable: never store a corrupt result.
+  if (rawFindingCount > 0 && unusableTimestampCount === rawFindingCount) {
     return {
       success: false,
       errorCode: 'invalid_ai_response',
       error: 'The AI returned situations without usable timestamps, so nothing was saved. Please retry.'
     };
   }
-
-  findings.sort((a, b) => a.timestampSeconds - b.timestampSeconds);
 
   return {
     success: true,
@@ -557,8 +718,8 @@ export async function analyseVideo(
     summary: summaries.join('\n\n'),
     patterns: Array.from(new Set(patterns)),
     conclusions: Array.from(new Set(conclusions)),
-    findings,
+    findings: dedupeFindings(collected),
     passes,
-    segmented
+    segmented: true
   };
 }

@@ -6,7 +6,9 @@ import {
   buildVideoUrlAtSecond,
   canConfirmFinding,
   findMatchEventForClipWindow,
+  formatAiAnalysisBlock,
   formatConfidence,
+  mergeAiAnalysisBlock,
   reviewStatusAfterConfirm
 } from './videoAiFindings';
 
@@ -113,4 +115,51 @@ test('buildClipFromFinding falls back to the analysis video url and the action t
   assert.equal(clip.startTime, 3810);
   assert.equal(clip.endTime, null);
   assert.equal(clip.notes, 'Two blockers screen the keeper.\nWhy it matters: recurring routine.');
+});
+
+const NARRATIVE = {
+  summary: 'The opponent defends corners with a deep zonal line.',
+  patterns: ['Zonal six-yard line on every corner (23:28, 33:00)'],
+  conclusions: ['Cutbacks to the edge of the box look available.']
+};
+
+test('formatAiAnalysisBlock renders a delimited, dated block', () => {
+  const block = formatAiAnalysisBlock(NARRATIVE, '2026-09-14');
+
+  assert.ok(block.startsWith('--- AI analysis (2026-09-14) ---'));
+  assert.ok(block.endsWith('--- End of AI analysis ---'));
+  assert.match(block, /Patterns:\n- Zonal six-yard line/);
+  assert.match(block, /Preliminary conclusions \(not validated\):\n- Cutbacks/);
+});
+
+test('formatAiAnalysisBlock omits empty sections', () => {
+  const block = formatAiAnalysisBlock({ summary: 'Only a summary.', patterns: [], conclusions: [] }, '2026-09-14');
+  assert.equal(block, '--- AI analysis (2026-09-14) ---\nOnly a summary.\n--- End of AI analysis ---');
+});
+
+test('mergeAiAnalysisBlock appends below analyst text without touching it', () => {
+  const block = formatAiAnalysisBlock(NARRATIVE, '2026-09-14');
+  const merged = mergeAiAnalysisBlock('Analyst notes written by hand.', block);
+
+  assert.ok(merged.startsWith('Analyst notes written by hand.'));
+  assert.ok(merged.endsWith(block));
+});
+
+test('mergeAiAnalysisBlock replaces a previous AI block instead of stacking', () => {
+  const first = formatAiAnalysisBlock(NARRATIVE, '2026-09-14');
+  const second = formatAiAnalysisBlock({ ...NARRATIVE, summary: 'A newer analysis.' }, '2026-09-20');
+
+  const afterFirst = mergeAiAnalysisBlock('Analyst notes.', first);
+  const afterSecond = mergeAiAnalysisBlock(afterFirst, second);
+
+  assert.equal(afterSecond.match(/--- AI analysis \(/g)?.length, 1);
+  assert.ok(afterSecond.startsWith('Analyst notes.'));
+  assert.match(afterSecond, /A newer analysis\./);
+  assert.doesNotMatch(afterSecond, /deep zonal line/);
+});
+
+test('mergeAiAnalysisBlock returns just the block when the draft is empty', () => {
+  const block = formatAiAnalysisBlock(NARRATIVE, '2026-09-14');
+  assert.equal(mergeAiAnalysisBlock('', block), block);
+  assert.equal(mergeAiAnalysisBlock('   ', block), block);
 });

@@ -41,6 +41,7 @@ import { getMatchEvents } from '../services/matches/matchEventsService';
 import { AiVideoAnalysisPanel } from './AiVideoAnalysisPanel';
 import { Match, MatchAnalysis, MatchEvent, OpponentAnalysis, OpponentAnalysisTag, TrainingAnalysis, VideoClip } from '../types';
 import { formatVideoTimestamp, toSlideEmbedUrl, toVideoEmbedUrl } from '../utils/mediaUrls';
+import { mergeAiAnalysisBlock } from '../utils/videoAiFindings';
 import { clearWorkspaceRestoreState, readWorkspaceRestoreState } from '../utils/workspaceRestore';
 
 type VideoAnalysisArea = 'matches' | 'opponent-analysis' | 'training-sessions' | 'scouting';
@@ -659,6 +660,9 @@ export const VideoAnalysisSection: React.FC = () => {
               taxonomy={MATCH_CLIP_CATEGORIES}
               matchEvents={matchEvents}
               onClipsCreated={() => setClipsRefreshToken((token) => token + 1)}
+              onAddNarrativeToReport={(block) =>
+                setMatchAnalysisSummaryDraft((current) => mergeAiAnalysisBlock(current, block))
+              }
             />
 
             <VideoClipsSection

@@ -61,6 +61,48 @@ export function canConfirmFinding(finding: Pick<VideoAiFinding, 'reviewStatus'>)
   return finding.reviewStatus === 'pending';
 }
 
+export const AI_ANALYSIS_BLOCK_END = '--- End of AI analysis ---';
+
+// Matches any previously inserted block regardless of its date, so re-running replaces it.
+const AI_ANALYSIS_BLOCK_PATTERN = /--- AI analysis \([^)]*\) ---[\s\S]*?--- End of AI analysis ---/g;
+
+export interface AiAnalysisNarrative {
+  summary: string;
+  patterns: string[];
+  conclusions: string[];
+}
+
+/** Renders the AI narrative as a delimited block that can be recognised and replaced later. */
+export function formatAiAnalysisBlock(narrative: AiAnalysisNarrative, date: string): string {
+  const lines = [`--- AI analysis (${date}) ---`];
+
+  if (narrative.summary.trim()) lines.push(narrative.summary.trim());
+  if (narrative.patterns.length > 0) {
+    lines.push('', 'Patterns:', ...narrative.patterns.map((pattern) => `- ${pattern}`));
+  }
+  if (narrative.conclusions.length > 0) {
+    lines.push('', 'Preliminary conclusions (not validated):', ...narrative.conclusions.map((item) => `- ${item}`));
+  }
+
+  lines.push(AI_ANALYSIS_BLOCK_END);
+  return lines.join('\n');
+}
+
+/**
+ * Inserts the AI block into the analyst's draft text, replacing a previous AI block instead of
+ * stacking a new one. Analyst-written text outside the delimiters is never touched.
+ */
+export function mergeAiAnalysisBlock(existingText: string, block: string): string {
+  const current = existingText ?? '';
+  if (AI_ANALYSIS_BLOCK_PATTERN.test(current)) {
+    AI_ANALYSIS_BLOCK_PATTERN.lastIndex = 0;
+    return current.replace(AI_ANALYSIS_BLOCK_PATTERN, block);
+  }
+
+  AI_ANALYSIS_BLOCK_PATTERN.lastIndex = 0;
+  return current.trim() ? `${current.trimEnd()}\n\n${block}` : block;
+}
+
 export function reviewStatusAfterConfirm(wasEdited: boolean): VideoAiFindingStatus {
   return wasEdited ? 'edited' : 'confirmed';
 }
